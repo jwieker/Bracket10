@@ -1,0 +1,37 @@
+name: npm audit
+
+on:
+  schedule:
+    # Mondays at 14:00 UTC.
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.14.0"
+
+      - name: Run npm audit (root)
+        id: audit-root
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+      - name: Run npm audit (jobs)
+        id: audit-jobs
+        working-directory: jobs
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+      - name: Fail if either audit found issues
+        if: steps.audit-root.outcome == 'failure' || steps.audit-jobs.outcome == 'failure'
+        run: |
+          echo "::error::npm audit found high-severity vulnerabilities. Review the logs above."
+          exit 1

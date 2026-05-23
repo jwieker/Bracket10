@@ -1,0 +1,17 @@
+{
+  "name": "espn-poll-job",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@google-cloud/firestore": "^8.5.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "overrides": {
+    "minimatch": "^10.2.1",
+    "glob": "^11.0.2",
+    "@tootallnate/once": "3.0.1",
+    "ip-address": "^10.2.0"
+  }
+}

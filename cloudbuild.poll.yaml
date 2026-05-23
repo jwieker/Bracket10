@@ -1,0 +1,38 @@
+steps:
+  # 1. Build the poll image with the commit SHA
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Build
+    args:
+      - build
+      - '-f'
+      - Dockerfile.poll
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA'
+      - .
+
+  # 2. Push the image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Push
+    args:
+      - push
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA'
+
+  # 3. Deploy the Job update
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: Deploy
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "jobs"
+      - "deploy"
+      - "espn-poll"
+      - "--image"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA"
+      - "--region"
+      - "us-central1"
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

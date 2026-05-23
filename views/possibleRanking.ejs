@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+        <title>Possible Rankings</title>
+</head>
+
+<body>
+    <div class="container-l pt-2" id="regcont">
+        <div class="row" id="row1">
+            <!-- <div class="col" id="col1"></div> -->
+
+            <div class="col-10 offset-1 col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-6 offset-lg-3 col-xl-6 offset-xl-3 pl-1 pr-1  border border-dark border-2 align-self-center"
+                id="col2">
+                <h1>Possible Highest Rankings</h1>
+                <ul>
+                    <% rankingResults.forEach(result=> { %>
+                        <li>
+                            <%= result %>
+                        </li>
+                        <% }); %>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <%- include('partials/scripts') %>
+</body>
+
+</html>

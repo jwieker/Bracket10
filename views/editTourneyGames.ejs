@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+
+<body>
+    <div>
+        <% // 1. Prepare the Game Data // Group round 1 games by their region ID for easier rendering. const
+            gamesByRegion={}; if (typeof existingGames !=='undefined' && existingGames) { regions.forEach(regionId=> {
+            gamesByRegion[regionId] = existingGames
+            .filter(g => g.regionID == regionId && g.round == 1)
+            .sort((a, b) => a.gameID - b.gameID); // Sort to ensure consistent order
+            });
+            }
+            %>
+    </div>
+    <div class="container-lg mt-2 pl-1 pr-1 border border-dark border-2 align-self-center" id="col2">
+        <div class="row" id="row1">
+            <div class="row">
+                <div class="display-2 fw-bold text-center">
+                    Edit All the Games <%= year %>
+                </div>
+            </div>
+            <!-- this is meant to fail -->
+            <form action="/tournamentGamesUpdate" method="post">
+                <input type="hidden" name="year" value="<%= year %>" />
+                <input type="hidden" name="region" value="<%= regions %>" />
+                <% regions.forEach((regionId, regIndex)=> { %>
+                    <h2>Region: <%= regionNames[regIndex] %>
+                    </h2>
+
+                    <% const gamesForRegion=gamesByRegion[regionId] || []; %>
+                        <% gamesForRegion.forEach((game, gameIndex)=> { %>
+                            <div class="row">
+                                <div class="col-2">
+                                    <h4>Game #<%= game.gameID %>
+                                    </h4>
+                                </div>
+                            </div>
+
+                            <% for (let j=1; j <=2; j++) { %>
+                                <div class="row">
+
+                                    <div class="col-2">
+                                        Seed <%= seeds[(gameIndex * 2) + j - 1] %>
+                                    </div>
+                                    <div class="col-10">
+                                        <div class="search-dropdown">
+                                            <input type="text" class="search-input" placeholder="Search..."
+                                                aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                            <select class="form-selector" required
+                                                id="gameSelect-<%= regIndex %>-<%= game.gameID %>-<%= j %>"
+                                                name="games">
+                                                <option value="" disabled hidden>Select a Team
+                                                </option>
+                                                <!-- Option is regionID-gameID-seed-teamID -->
+                                                <% allTeams.forEach(team=> { %>
+                                                    <% const teamIdToMatch=(j===1) ? game.team1ID : game.team2ID; %>
+                                                        <option
+                                                            value="<%= regionId %>-<%= game.gameID %>-<%= seeds[(gameIndex * 2) + j - 1] %>-<%= team.sid %>"
+                                                            <%- team.sid==teamIdToMatch ? 'selected' : '' %>>
+                                                            <%= team.name %>
+                                                                <%= team.mascot %> sID: <%= team.sid %>
+                                                        </option>
+                                                        <% }); %>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <% } %>
+                                    <% }); %>
+                                        <% }); %>
+
+                                            <div class="container pb-5" id="innercont">
+                                                <button type="submit" class="btn btn-primary">Submit Games</button>
+                                            </div>
+            </form>
+
+            <form action="/deleteTournament" method="post" id="deleteTournamentForm" onsubmit="return confirmDelete()">
+                <input type="hidden" name="year" value="<%= year %>" />
+                <div class="container pb-5">
+                    <button type="submit" class="btn btn-danger">
+                        🗑️ Delete Tournament <%= year %>
+                    </button>
+                    <small class="text-muted ms-2">Deletes all games &amp; school records for this year. Entries are
+                        kept.</small>
+                </div>
+            </form>
+
+        </div>
+        <!-- </div> -->
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+            <%- include('partials/scripts') %>
+    </div>
+
+
+    <script>
+        const selectedTeams = new Set(); // Track selected teams
+        const selectedTeams2 = new Set(); // Track selected teams
+
+        function confirmDelete() {
+            const year = document.querySelector('#deleteTournamentForm input[name="year"]').value;
+            return confirm(`⚠️ Are you sure you want to delete the entire ${year} tournament?\n\nThis will permanently delete all games and school records for ${year}.\nEntries will NOT be deleted.\n\nThis cannot be undone.`);
+        }
+
+        function filterDropdown(input) {
+            const filter = input.value.toUpperCase();
+            const select = input.parentElement.querySelector('select');
+            const options = select.getElementsByTagName('option');
+
+            for (let i = 0; i < options.length; i++) {
+                const txtValue = options[i].textContent || options[i].innerText;
+                const valueParts = options[i].value.split('-');
+                const teamId = valueParts[3];
+
+                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                    if (selectedTeams.has(teamId) && !options[i].selected) {
+                        options[i].classList.add('disabled-option');
+                    } else {
+                        options[i].classList.remove('disabled-option');
+                    }
+                    options[i].style.display = ""; // Show all filtered options
+                } else {
+                    options[i].style.display = "none";
+                }
+            }
+        }
+
+        // Add event listeners to all select elements
+        const selectElements = document.querySelectorAll('.form-selector');
+        selectElements.forEach(select => {
+            select.addEventListener('change', () => {
+                const selectedOption = select.value;
+                const selectedTeamId = selectedOption.split('-')[3]; // Extract teamID
+
+                // Add to the selectedTeams Set if not already present
+                if (!selectedTeams.has(selectedTeamId)) {
+                    selectedTeams.add(selectedTeamId);
+                } else {
+                    // Team already selected, show an alert
+                    alert("You have already selected this team. Please choose a different one.");
+                    // Reset the dropdown to the default value
+                    select.value = "";
+                    // Remove the team from the selectedTeams set
+                    selectedTeams.delete(selectedTeamId);
+                }
+                // Update other dropdowns to hide the selected team
+                selectElements.forEach(otherSelect => {
+                    if (otherSelect !== select) {
+                        const otherOptions = otherSelect.getElementsByTagName('option');
+                        for (let i = 0; i < otherOptions.length; i++) {
+                            if (otherOptions[i].value.includes(selectedTeamId)) {
+                                if (selectedTeams2.has(selectedTeamId)) {
+                                    otherOptions[i].classList.add('disabled-option');
+                                } else {
+                                    otherOptions[i].classList.remove('disabled-option');
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        });
+
+    </script>
+</body>
+
+
+</html>

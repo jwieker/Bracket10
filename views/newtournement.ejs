@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<body>
+    <div class="container-l" id="regcont">
+        <div class="row" id="row1">
+            <!-- <div class="col" id="col1"></div> -->
+
+            <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
+                id="col2">
+
+
+
+                <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#adminNavbar">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="adminNavbar">
+                        <div class="navbar-nav mx-auto d-flex flex-column flex-lg-row flex-wrap justify-content-center gap-2 mt-3 mt-lg-0">
+                            <button class="btn btn-outline-secondary mb-2 text-start" type="button"
+                                id="toggleManageTeamsBtn">Manage Teams</button>
+                        </div>
+                    </div>
+                </nav>
+
+                <form action="/viewTeam" method="get" id="reviewTeamForm" style="display: none;">
+                    <div class="container pt-1 pb-1" id="innercontReviewTeam">
+                        <div class="row">
+                            <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                <div class="input-group mb-2">
+                                    <input type="text" name="teamId" class="form-control form-control-lg" style="min-height: 48px; font-size: 16px;"
+                                        placeholder="Enter School ID to Review">
+                                    <div class="input-group-append">
+                                        <button class="button btn btn-outline-secondary ms-2"
+                                            type="submit">Review</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <form id="findTeamForm" style="display: none;">
+                    <div class="container pt-1 pb-1" id="innercontFindTeam">
+                        <div class="row">
+                            <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                <div class="input-group mb-2">
+                                    <input type="text" name="teamName" class="form-control form-control-lg" style="min-height: 48px; font-size: 16px;" placeholder="Lookup School">
+                                    <div class="input-group-append">
+                                        <button class="button btn btn-outline-secondary ms-2" id="findTeamBtn"
+                                            type="button">Find</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <form action="/addTeamPage" method="get" id="addTeamForm" style="display: none;">
+                    <div class="container pt-1 pb-1" id="innercontAddTeam">
+                        <div class="row">
+                            <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                <div class="input-group mb-2">
+                                    <div class="input-group-append">
+                                        <button class="button btn btn-outline-secondary ms-2" type="submit"
+                                            id="addTeamBtn">Add
+                                            New Team</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="display-2 fw-bold text-center pt-5">
+                    Adding a new Tourney for <%= year %>
+                </div>
+                <div class="display-5 fw-bold text-center pt-5">
+                    Region #1 plays Region #2 and Region #3 plays Region #4 in the final 4
+                </div>
+
+                <!-- create a for loop that goes for 4 times that shows the input regions in a dropdown -->
+                <form action="/regionVerify" method="post">
+                    <input type="hidden" name="year" value="<%= year %>" />
+                    <% for( let i=0; i < 4; i++ ) { %>
+                        <div class="container pb-3">
+
+                            <label for="region<%= i %>">Region #<%= i + 1 %></label>
+                            <select class="form-selector" required id="region<%= i %>" name="region<%= i %>">
+                                <option value="" disabled selected hidden>Choose Your #<%= i +1 %> Region
+                                </option>
+
+                                <% regions.forEach(element=> { %>
+
+                                    <option value="<%= element.regionID %>">
+                                        <%= element.regionName %>
+                                    </option>
+
+                                    <% }) %>
+                            </select>
+                        </div>
+
+                        <% } %>
+
+                            <div class="container pb-5" id="innercont">
+                                <button type="submit" class="btn btn-primary">Submit Regions</button>
+                            </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Find Team Modal -->
+    <div class="modal fade" id="findTeamModal" tabindex="-1" aria-labelledby="findTeamModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="findTeamModalLabel">School Search Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="findTeamModalBody">
+                    <!-- Results will be injected here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
+    </div>
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggleManageTeamsBtn = document.getElementById('toggleManageTeamsBtn');
+            const reviewTeamForm = document.getElementById('reviewTeamForm');
+            const findTeamForm = document.getElementById('findTeamForm');
+            const addTeamForm = document.getElementById('addTeamForm');
+
+            const manageTeamsForms = [reviewTeamForm, findTeamForm, addTeamForm];
+
+            // Helper to hide a form or an array of forms
+            const hideFormGroup = (group) => {
+                if (Array.isArray(group)) {
+                    group.forEach(form => { if (form) form.style.display = 'none'; });
+                } else if (group) {
+                    group.style.display = 'none';
+                }
+            };
+
+            // Initially hide forms
+            hideFormGroup(manageTeamsForms);
+
+            if (toggleManageTeamsBtn) {
+                toggleManageTeamsBtn.addEventListener('click', () => {
+                    const isHidden = manageTeamsForms[0].style.display === 'none';
+                    const newDisplay = isHidden ? 'block' : 'none';
+                    manageTeamsForms.forEach(form => form.style.display = newDisplay);
+                });
+            }
+
+            const findTeamBtn = document.getElementById('findTeamBtn');
+            if (findTeamBtn) {
+                findTeamBtn.addEventListener('click', async () => {
+                    const form = document.getElementById('findTeamForm');
+                    const teamName = form.querySelector('input[name="teamName"]').value;
+
+                    if (!teamName) {
+                        alert('Please enter a school name to search for.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/find-team?name=${encodeURIComponent(teamName)}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch school data.');
+                        }
+                        const teams = await response.json();
+
+                        const modalBody = document.getElementById('findTeamModalBody');
+                        modalBody.innerHTML = ''; // Clear previous results
+
+                        if (teams.length === 0) {
+                            modalBody.innerHTML = '<p>No schools found matching that name.</p>';
+                        } else {
+                            teams.forEach(team => {
+                                const teamDiv = document.createElement('div');
+                                teamDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewTeam?teamId=${esc(String(team.sid))}">${esc(String(team.sid))}</a><br>
+                                    <strong>Name:</strong> ${esc(team.name)}<br>
+                                    <strong>Mascot:</strong> ${esc(team.mascot)}<br>
+                                    <strong>Short Name:</strong> ${esc(team.nameNick)}<br>
+                                    <strong>Conference ID:</strong> ${esc(String(team.confID))}
+                                </p><hr>`;
+                                modalBody.appendChild(teamDiv);
+                            });
+                        }
+
+                        const findTeamModal = new bootstrap.Modal(document.getElementById('findTeamModal'));
+                        findTeamModal.show();
+
+                    } catch (error) {
+                        console.error('Error finding team:', error);
+                        alert('An error occurred while searching for the school.');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

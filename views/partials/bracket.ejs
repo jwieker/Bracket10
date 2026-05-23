@@ -1,0 +1,337 @@
+<%# Bracket styles live in /public/bracket.css (loaded via partials/header.ejs). %>
+<div class="container-fluid bracket-wrapper">
+
+    <div class="bracket-container-html">
+
+
+        <div class="row bracket-body">
+
+            <div class="col-5 bracket-half left-half">
+                <div class="round r1">
+                    <div class="region">
+                        <% const teamOrder=[1, 16, 8, 9, 5, 12, 4, 13, 6, 11, 3, 14, 7, 10, 2, 15]; %>
+                            <% for (let i=0; i < 8; i++) { %>
+                                <% const gameNum=i + 1; %>
+                                    <% const seed1=teamOrder[i * 2]; %>
+                                        <% const seed2=teamOrder[i * 2 + 1]; %>
+                                            <div class="matchup">
+                                                <div class="team" id="reg1-r1-g<%= gameNum %>-s<%= seed1 %>"
+                                                    data-round="1" data-region="1" data-game="<%= gameNum %>"
+                                                    data-seed="<%= seed1 %>"><span class="name">
+                                                        <%= seed1 %>
+                                                    </span></div>
+                                                <div class="team" id="reg1-r1-g<%= gameNum %>-s<%= seed2 %>"
+                                                    data-round="1" data-region="1" data-game="<%= gameNum %>"
+                                                    data-seed="<%= seed2 %>"><span class="name">
+                                                        <%= seed2 %>
+                                                    </span></div>
+                                            </div>
+                                            <% } %>
+                    </div>
+
+                    <div class="region">
+                        <% for (let i=0; i < 8; i++) { %>
+                            <% const gameNum=i + 1; %>
+                                <% const seed1=teamOrder[i * 2]; %>
+                                    <% const seed2=teamOrder[i * 2 + 1]; %>
+                                        <div class="matchup">
+                                            <div class="team" id="reg2-r1-g<%= gameNum %>-s<%= seed1 %>" data-round="1"
+                                                data-region="2" data-game="<%= gameNum %>" data-seed="<%= seed1 %>">
+                                                <span class="name">
+                                                    <%= seed1 %>
+                                                </span>
+                                            </div>
+                                            <div class="team" id="reg2-r1-g<%= gameNum %>-s<%= seed2 %>" data-round="1"
+                                                data-region="2" data-game="<%= gameNum %>" data-seed="<%= seed2 %>">
+                                                <span class="name">
+                                                    <%= seed2 %>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <% } %>
+                    </div>
+                </div>
+
+
+                <div class="round r2">
+                    <% for (let i=0; i < 4; i++) { %>
+                        <% const gameNum=i + 1; %>
+                            <% const teamOrderR2=[[1, 16], [8, 9], [5, 12], [4, 13], [6, 11], [3, 14], [7, 10], [2,
+                                15]]; %>
+                                <% const teamNum1=i % 2; %>
+                                    <% const teamNum2=(i+1) % 2; %>
+                                        <% const seedCombo1=teamOrderR2[i * 2]; %>
+                                            <% const seedCombo2=teamOrderR2[i * 2 + 1]; %>
+                                                <div class="matchup">
+                                                    <div class="team" id="reg1-r2-g<%= gameNum %>-t<%= teamNum1 %>"
+                                                        data-round="2" data-region="1"
+                                                        data-possible-seeds="<%= seedCombo1 %>">
+                                                    </div>
+                                                    <span class="name"></span>
+
+                                                    <div class="team" id="reg1-r2-g<%= gameNum %>-t<%= teamNum2 %>"
+                                                        data-round="2" data-region="1"
+                                                        data-possible-seeds="<%= seedCombo2 %>">
+                                                    </div>
+                                                    <span class="name"></span>
+                                                </div>
+                                                <% } %>
+                                                    <% for (let i=0; i < 4; i++) { %>
+                                                        <% const gameNum=i + 1; %>
+                                                            <% const teamOrderR2=[[1, 16], [8, 9], [5, 12], [4, 13], [6,
+                                                                11], [3, 14], [7, 10], [2, 15]]; %>
+                                                                <% const teamNum1=i % 2; %>
+                                                                    <% const teamNum2=(i+1) % 2; %>
+                                                                        <% const seedCombo1=teamOrderR2[i * 2]; %>
+                                                                            <% const seedCombo2=teamOrderR2[i * 2 + 1];
+                                                                                %>
+                                                                                <div class="matchup">
+                                                                                    <div class="team"
+                                                                                        id="reg2-r2-g<%= gameNum %>-t<%= teamNum1 %>"
+                                                                                        data-round="2" data-region="2"
+                                                                                        data-possible-seeds="<%= seedCombo1 %>">
+                                                                                    </div>
+                                                                                    <span class="name"></span>
+
+                                                                                    <div class="team"
+                                                                                        id="reg2-r2-g<%= gameNum %>-t<%= teamNum2 %>"
+                                                                                        data-round="2" data-region="2"
+                                                                                        data-possible-seeds="<%= seedCombo2 %>">
+                                                                                    </div>
+                                                                                    <span class="name"></span>
+                                                                                </div>
+                                                                                <% } %>
+                </div>
+
+                <div class="round r3">
+
+                    <div class="matchup">
+                        <div class="team" id="reg1-r3-g1-t1" data-round="3" data-region="1"
+                            data-possible-seeds="1, 16, 8, 9"><span class="name"></span></div>
+                        <div class="team" id="reg1-r3-g1-t2" data-round="3" data-region="1"
+                            data-possible-seeds="5, 12, 4, 13"><span class="name"></span></div>
+                    </div>
+                    <div class="region-label2">
+                        <div class="region-label-text" id="regionTopLeft">R1</div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg1-r3-g2-t1" data-round="3" data-region="1"
+                            data-possible-seeds="6, 11, 3, 14"><span class="name"></span></div>
+                        <div class="team" id="reg1-r3-g2-t2" data-round="3" data-region="1"
+                            data-possible-seeds="7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg2-r3-g1-t1" data-round="3" data-region="2"
+                            data-possible-seeds="1, 16, 8, 9"><span class="name"></span></div>
+                        <div class="team" id="reg2-r3-g1-t2" data-round="3" data-region="2"
+                            data-possible-seeds="5, 12, 4, 13"><span class="name"></span></div>
+                    </div>
+                    <div class="region-label2">
+                        <div class="region-label-text" id="regionBottomLeft">R2</div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg2-r3-g2-t1" data-round="3" data-region="2"
+                            data-possible-seeds="6, 11, 3, 14"><span class="name"></span></div>
+                        <div class="team" id="reg2-r3-g2-t2" data-round="3" data-region="2"
+                            data-possible-seeds="7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+
+
+                </div>
+                <div class="round r4">
+                    <div class="matchup">
+                        <div class="team" id="reg1-r4-g1-t1" data-round="4" data-region="1"
+                            data-possible-seeds="1, 16, 8, 9, 5, 12, 4, 13"><span class="name"></span></div>
+                        <div class="team" id="reg1-r4-g1-t2" data-round="4" data-region="1"
+                            data-possible-seeds="6, 11, 3, 14, 7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                    <div class="matchup r5-finalist-matchup">
+                        <div class="team" id="reg1-r5-g1-t1" data-round="5" data-region="1"><span class="name"></span>
+                        </div>
+                        <div class="team" id="reg2-r5-g1-t2" data-round="5" data-region="2"><span class="name"></span>
+                        </div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg2-r4-g1-t1" data-round="4" data-region="2"
+                            data-possible-seeds="1, 16, 8, 9, 5, 12, 4, 13"><span class="name"></span></div>
+                        <div class="team" id="reg2-r4-g1-t2" data-round="4" data-region="2"
+                            data-possible-seeds="6, 11, 3, 14, 7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                </div> <!-- This is the closing div for round r4 -->
+            </div>
+
+            <div class="col-2 championship-column round  justify-content-center ">
+                <div class="champion-area mb-3">
+                    <div class="team champion-slot" data-round="7" id="champion-1"><span class="name"></span></div>
+                </div>
+
+                <div class="matchup final-matchup">
+
+                    <div class="team final-L-slot" id="final-L-1" data-round="6" data-region="1, 2"><span
+                            class="name"></span></div>
+                    <div class="team final-R-slot" id="final-R-1" data-round="6" data-region="3, 4"><span
+                            class="name"></span> </div>
+                </div>
+
+
+            </div>
+
+            <div class="col-5 bracket-half right-half flex-row-reverse">
+                <div class="round r1">
+
+                    <div class="region">
+                        <% for (let i=0; i < 8; i++) { %>
+                            <% const gameNum=i + 1; %>
+                                <% const seed1=teamOrder[i * 2]; %>
+                                    <% const seed2=teamOrder[i * 2 + 1]; %>
+                                        <div class="matchup">
+                                            <div class="team" id="reg3-r1-g<%= gameNum %>-s<%= seed1 %>" data-round="1"
+                                                data-region="3" data-game="<%= gameNum %>" data-seed="<%= seed1 %>">
+                                                <span class="name">
+                                                    <%= seed1 %>
+                                                </span>
+                                            </div>
+                                            <div class="team" id="reg3-r1-g<%= gameNum %>-s<%= seed2 %>" data-round="1"
+                                                data-region="3" data-game="<%= gameNum %>" data-seed="<%= seed2 %>">
+                                                <span class="name">
+                                                    <%= seed2 %>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <% } %>
+                    </div>
+                    <div class="region">
+                        <% for (let i=0; i < 8; i++) { %>
+                            <% const gameNum=i + 1; %>
+                                <% const seed1=teamOrder[i * 2]; %>
+                                    <% const seed2=teamOrder[i * 2 + 1]; %>
+                                        <div class="matchup">
+                                            <div class="team" id="reg4-r1-g<%= gameNum %>-s<%= seed1 %>" data-round="1"
+                                                data-region="4" data-game="<%= gameNum %>" data-seed="<%= seed1 %>">
+                                                <span class="name">
+                                                    <%= seed1 %>
+                                                </span>
+                                            </div>
+                                            <div class="team" id="reg4-r1-g<%= gameNum %>-s<%= seed2 %>" data-round="1"
+                                                data-region="4" data-game="<%= gameNum %>" data-seed="<%= seed2 %>">
+                                                <span class="name">
+                                                    <%= seed2 %>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <% } %>
+                    </div>
+                </div>
+                <div class="round r2">
+                    <% for (let i=0; i < 4; i++) { %>
+                        <% const gameNum=i + 1; %>
+                            <% const teamOrderR2=[[1, 16], [8, 9], [5, 12], [4, 13], [6, 11], [3, 14], [7, 10], [2,
+                                15]]; %>
+                                <% const teamNum1=i % 2; %>
+                                    <% const teamNum2=(i+1) % 2; %>
+                                        <% const seedCombo1=teamOrderR2[i * 2]; %>
+                                            <% const seedCombo2=teamOrderR2[i * 2 + 1]; %>
+                                                <div class="matchup">
+                                                    <div class="team" id="reg3-r2-g<%= gameNum %>-t<%= teamNum1 %>"
+                                                        data-round="2" data-region="3"
+                                                        data-possible-seeds="<%= seedCombo1 %>">
+                                                    </div>
+                                                    <span class="name"></span>
+
+                                                    <div class="team" id="reg3-r2-g<%= gameNum %>-t<%= teamNum2 %>"
+                                                        data-round="2" data-region="3"
+                                                        data-possible-seeds="<%= seedCombo2 %>">
+                                                    </div>
+                                                    <span class="name"></span>
+                                                </div>
+                                                <% } %>
+                                                    <% for (let i=0; i < 4; i++) { %>
+                                                        <% const gameNum=i + 1; %>
+                                                            <% const teamOrderR2=[[1, 16], [8, 9], [5, 12], [4, 13], [6,
+                                                                11], [3, 14], [7, 10], [2, 15]]; %>
+                                                                <% const teamNum1=i % 2; %>
+                                                                    <% const teamNum2=(i+1) % 2; %>
+                                                                        <% const seedCombo1=teamOrderR2[i * 2]; %>
+                                                                            <% const seedCombo2=teamOrderR2[i * 2 + 1];
+                                                                                %>
+                                                                                <div class="matchup">
+                                                                                    <div class="team"
+                                                                                        id="reg4-r2-g<%= gameNum %>-t<%= teamNum1 %>"
+                                                                                        data-round="2" data-region="4"
+                                                                                        data-possible-seeds="<%= seedCombo1 %>">
+                                                                                    </div>
+                                                                                    <span class="name"></span>
+
+                                                                                    <div class="team"
+                                                                                        id="reg4-r2-g<%= gameNum %>-t<%= teamNum2 %>"
+                                                                                        data-round="2" data-region="4"
+                                                                                        data-possible-seeds="<%= seedCombo2 %>">
+                                                                                    </div>
+                                                                                    <span class="name"></span>
+                                                                                </div>
+                                                                                <% } %>
+                </div>
+                <div class="round r3">
+
+                    <div class="matchup">
+                        <div class="team" id="reg3-r3-g1-t1" data-round="3" data-region="3"
+                            data-possible-seeds="1, 16, 8, 9"><span class="name"></span></div>
+                        <div class="team" id="reg3-r3-g1-t2" data-round="3" data-region="3"
+                            data-possible-seeds="5, 12, 4, 13"><span class="name"></span></div>
+                    </div>
+                    <div class="region-label2">
+                        <div class="region-label-text" id="regionTopRight">R3</div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg3-r3-g2-t1" data-round="3" data-region="3"
+                            data-possible-seeds="6, 11, 3, 14"><span class="name"></span></div>
+                        <div class="team" id="reg3-r3-g2-t2" data-round="3" data-region="3"
+                            data-possible-seeds="7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg4-r3-g1-t1" data-round="3" data-region="4"
+                            data-possible-seeds="1, 16, 8, 9"><span class="name"></span></div>
+                        <div class="team" id="reg4-r3-g1-t2" data-round="3" data-region="4"
+                            data-possible-seeds="5, 12, 4, 13"><span class="name"></span></div>
+                    </div>
+                    <div class="region-label2">
+                        <div class="region-label-text" id="regionBottomRight">R4</div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg4-r3-g2-t1" data-round="3" data-region="4"
+                            data-possible-seeds="6, 11, 3, 14"><span class="name"></span></div>
+                        <div class="team" id="reg4-r3-g2-t2" data-round="3" data-region="4"
+                            data-possible-seeds="7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                </div>
+                <div class="round r4">
+                    <div class="matchup">
+                        <div class="team" id="reg3-r4-g1-t1" data-round="4" data-region="3"
+                            data-possible-seeds="1, 16, 8, 9, 5, 12, 4, 13"><span class="name"></span></div>
+                        <div class="team" id="reg3-r4-g1-t2" data-round="4" data-region="3"
+                            data-possible-seeds="6, 11, 3, 14, 7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                    <!-- R5 matchup content moved here -->
+                    <div class="matchup r5-finalist-matchup">
+                        <div class="team" id="reg3-r5-g1-t1" data-round="5" data-region="3"><span class="name"></span>
+                        </div>
+                        <div class="team" id="reg4-r5-g1-t2" data-round="5" data-region="4"><span class="name"></span>
+                        </div>
+                    </div>
+                    <div class="matchup">
+                        <div class="team" id="reg4-r4-g1-t1" data-round="4" data-region="4"
+                            data-possible-seeds="1, 16, 8, 9, 5, 12, 4, 13"><span class="name"></span></div>
+                        <div class="team" id="reg4-r4-g1-t2" data-round="4" data-region="4"
+                            data-possible-seeds="6, 11, 3, 14, 7, 10, 2, 15"><span class="name"></span></div>
+                    </div>
+                </div> <!-- This is the closing div for round r4 -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--
+Bootstrap JS should be loaded by the main page (results.ejs or its layout) and not by this partial.
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+-->
+<!-- <script></script> --> <!-- Empty script tag removed -->

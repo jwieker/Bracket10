@@ -1,0 +1,33 @@
+{"_id":"a-10","name":"Atlantic 10 Conference","shortName":"A-10","division":"I","active":true,"legacyNumericID":12}
+{"_id":"acc","name":"Atlantic Coast Conference","shortName":"ACC","division":"I","active":true,"legacyNumericID":3}
+{"_id":"america-east","name":"America East Conference","shortName":"AE","division":"I","active":true,"legacyNumericID":26}
+{"_id":"american","name":"American Athletic Conference","shortName":"American","division":"I","active":true,"legacyNumericID":7}
+{"_id":"asun","name":"ASUN Conference","shortName":"ASUN","division":"I","active":true,"legacyNumericID":29}
+{"_id":"big-12","name":"Big 12 Conference","shortName":"Big 12","division":"I","active":true,"legacyNumericID":6}
+{"_id":"big-east","name":"Big East Conference","shortName":"Big East","division":"I","active":true,"legacyNumericID":1}
+{"_id":"big-sky","name":"Big Sky Conference","shortName":"Big Sky","division":"I","active":true,"legacyNumericID":30}
+{"_id":"big-south","name":"Big South Conference","shortName":"Big South","division":"I","active":true,"legacyNumericID":31}
+{"_id":"big-ten","name":"Big Ten Conference","shortName":"Big Ten","division":"I","active":true,"legacyNumericID":2}
+{"_id":"big-west","name":"Big West Conference","shortName":"Big West","division":"I","active":true,"legacyNumericID":27}
+{"_id":"caa","name":"Coastal Athletic Association","shortName":"CAA","division":"I","active":true,"legacyNumericID":16}
+{"_id":"cusa","name":"Conference USA","shortName":"CUSA","division":"I","active":true,"legacyNumericID":8}
+{"_id":"first-four","name":"First Four","shortName":"First Four","division":"I","active":true,"legacyNumericID":0}
+{"_id":"horizon","name":"Horizon League","shortName":"Horizon","division":"I","active":true,"legacyNumericID":17}
+{"_id":"ivy","name":"Ivy League","shortName":"Ivy","division":"I","active":true,"legacyNumericID":18}
+{"_id":"maac","name":"Metro Atlantic Athletic Conference","shortName":"MAAC","division":"I","active":true,"legacyNumericID":19}
+{"_id":"mac","name":"Mid-American Conference","shortName":"MAC","division":"I","active":true,"legacyNumericID":9}
+{"_id":"meac","name":"Mid-Eastern Athletic Conference","shortName":"MEAC","division":"I","active":true,"legacyNumericID":28}
+{"_id":"mvc","name":"Missouri Valley Conference","shortName":"MVC","division":"I","active":true,"legacyNumericID":13}
+{"_id":"mwc","name":"Mountain West Conference","shortName":"MWC","division":"I","active":true,"legacyNumericID":11}
+{"_id":"nec","name":"Northeast Conference","shortName":"NEC","division":"I","active":true,"legacyNumericID":20}
+{"_id":"ovc","name":"Ohio Valley Conference","shortName":"OVC","division":"I","active":true,"legacyNumericID":14}
+{"_id":"pac-12","name":"Pac-12 Conference","shortName":"Pac-12","division":"I","legacyNumericID":5,"active":true}
+{"_id":"patriot","name":"Patriot League","shortName":"Patriot","division":"I","active":true,"legacyNumericID":21}
+{"_id":"sec","name":"Southeastern Conference","shortName":"SEC","division":"I","active":true,"legacyNumericID":4}
+{"_id":"southern","name":"Southern Conference","shortName":"SoCon","division":"I","active":true,"legacyNumericID":22}
+{"_id":"southland","name":"Southland Conference","shortName":"Southland","division":"I","active":true,"legacyNumericID":23}
+{"_id":"summit","name":"Summit League","shortName":"Summit","division":"I","active":true,"legacyNumericID":25}
+{"_id":"sun-belt","name":"Sun Belt Conference","shortName":"Sun Belt","division":"I","active":true,"legacyNumericID":15}
+{"_id":"swac","name":"Southwestern Athletic Conference","shortName":"SWAC","division":"I","active":true,"legacyNumericID":24}
+{"_id":"wac","name":"Western Athletic Conference","shortName":"WAC","division":"I","active":true,"legacyNumericID":32}
+{"_id":"wcc","name":"West Coast Conference","shortName":"WCC","division":"I","active":true,"legacyNumericID":10}

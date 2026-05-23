@@ -1,0 +1,28 @@
+# Build stage: install deps and bundle into a single file
+FROM node:24.14.0-alpine AS builder
+
+WORKDIR /usr/src/app
+
+COPY jobs/package.json ./package.json
+COPY jobs/package-lock.json ./package-lock.json
+RUN npm ci && npm cache clean --force
+
+COPY jobs/espn-poll.js ./jobs/
+COPY src/ ./src/
+
+RUN node_modules/.bin/esbuild jobs/espn-poll.js \
+  --bundle \
+  --platform=node \
+  --target=node24 \
+  --format=esm \
+  --banner:js="import {createRequire as __cjsRequire} from 'module'; import {fileURLToPath as __toPath} from 'url'; import {dirname as __dirnameFn} from 'path'; const require = __cjsRequire(import.meta.url); const __filename = __toPath(import.meta.url); const __dirname = __dirnameFn(__filename);" \
+  --outfile=dist/poll.mjs
+
+# Production stage: only the bundle, no node_modules
+FROM gcr.io/distroless/nodejs24-debian12:latest AS production
+
+WORKDIR /usr/src/app
+
+COPY --from=builder /usr/src/app/dist/poll.mjs ./poll.mjs
+
+CMD ["poll.mjs"]

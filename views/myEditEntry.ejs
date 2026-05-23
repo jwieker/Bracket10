@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<style>
+    .bracket-wrapper .final-matchup .team {
+        flex-grow: 1;
+    }
+
+    #bracketRow .bracket-wrapper .bracket-half>.round.r1 {
+        flex-grow: 5;
+        max-width: 100%;
+    }
+
+    #bracketRow .championship-column {
+        flex: 0 0 auto;
+        width: 8.33333333%;
+    }
+
+    #bracketRow .bracket-half {
+        flex: 0 0 auto;
+        width: 45.83333333%;
+    }
+</style>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
+        crossorigin="anonymous"></script>
+    <div class="container-lg pt-3" id="regcont">
+        <div class="row" id="row1">
+            <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
+                id="col2">
+                <div class="mb-2 pt-3 fs-3 fw-bold text-center">
+                    Edit Entry<br>
+                    ID: <%= entryData.id %>
+                </div>
+                <div class="alert alert-info py-2 mb-3 text-center">
+                    Editing your <strong><%= year %></strong> entry
+                </div>
+                <form action="/my-entry/update" method="post">
+                    <div class="container pb-3">
+                        <label for="inputName">Your Name</label>
+                        <input type="text" name="name" class="form-control" onfocus="this.placeholder = ''"
+                            id="inputName" placeholder="John Doe" value="<%= entryData.person %>" required>
+                    </div>
+                    <div class="container pb-3">
+                        <label for="inputTeam">Team Name</label>
+                        <input type="text" name="team" class="form-control" maxlength="25"
+                            onfocus="this.placeholder = ''" id="inputTeam" placeholder="Winning team!"
+                            value="<%= entryData.teamName %>" required>
+                    </div>
+
+                    <!-- Preserve existing groups as hidden fields (not editable by public users) -->
+                    <% (entryData.groups || []).forEach(function(g) { %>
+                        <input type="hidden" name="groups" value="<%= g %>">
+                    <% }); %>
+
+                    <input type="hidden" name="entryId" value="<%= entryData.id %>" />
+                    <input type="hidden" name="year" value="<%= year %>" />
+                    <input type="hidden" name="maxPoints" id="maxPointsHidden" value="0" />
+
+                    <div class="container pb-3" id="innercont">
+                        <label for="exampleInputEmail1">Email address</label>
+                        <input type="email" class="form-control" name="email" onfocus="this.placeholder = ''"
+                            id="exampleInputEmail1" aria-describedby="emailHelp"
+                            placeholder="john.doe@gmail.com" value="<%= entryData.email %>" required>
+                    </div>
+
+                    <h3 class="text-center pb-1">
+                        Pick your teams
+                    </h3>
+
+                    <% for (let i = 1; i <= 10; i++) { %>
+                        <div class="container pb-3">
+                            <label for="teamSelect<%= i %>">#<%= i %> Pick</label>
+                            <select class="form-selector" required id="teamSelect<%= i %>"
+                                name="teamSelect<%= i %>">
+                                <option value="" disabled selected hidden>Choose Your #<%= i %> Team</option>
+                                <% teamData.forEach(team => { %>
+                                    <% if (team.seed >= i) { %>
+                                        <option
+                                            value="<%= team.sID %>, <%= team.nameNick %> <%= team.mascot %> (<%= team.regionName %>) "
+                                            data-seed="<%= team.seed %>" data-region="<%= team.regionName %>">
+                                            <%= team.seed %>. <%= team.nameNick %>
+                                            <%= team.mascot %> (<%= team.regionName %>)
+                                        </option>
+                                    <% } %>
+                                <% }); %>
+                            </select>
+                        </div>
+                    <% } %>
+
+                    <div class="container pb-2" id="innercont">
+                        <button type="submit" class="btn btn-primary">Update Entry</button>
+                    </div>
+                </form>
+
+                <!-- Bracket Visualization Area -->
+                <h4 class="text-center pb-1">
+                    Your Picks Max Possible Points: <span id="maxPoints">--</span>
+                </h4>
+                <h3 class="text-center pb-1">
+                    Visualization of Your Picks
+                </h3>
+                <div class="row" id="bracketRow">
+                    <div class="col-12">
+                        <%- include('partials/bracket.ejs') %>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+
+    <script type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="entryPicksFromServerJson"><%- JSON.stringify(entryData.picks || []).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+
+    <script>
+        const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
+        const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);
+        const entryPicksFromServer = JSON.parse(document.getElementById('entryPicksFromServerJson').textContent);
+        const teamData = JSON.parse(document.getElementById('teamDataJson').textContent);
+
+        document.getElementById('regionTopLeft').textContent = regionData[0];
+        document.getElementById('regionBottomLeft').textContent = regionData[1];
+        document.getElementById('regionTopRight').textContent = regionData[2];
+        document.getElementById('regionBottomRight').textContent = regionData[3];
+    </script>
+    <script src="/js/editEntry.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,465 @@
+import {
+  viewRepository as _viewRepository,
+  gameRepository as _gameRepository,
+  entryRepository as _entryRepository,
+  tourneyRepository as _tourneyRepository,
+} from "../repositories/index.js";
+
+import {
+  calculateEntryPointsAndPaths,
+  enrichEntriesWithPotentialRankings,
+} from "./pointsService.js";
+
+import { thisYear, TOURNAMENT_ROUNDS } from "../config/app.js";
+import { cacheGet, cacheSet } from "../utils/cacheUtils.js";
+import Logger from "../utils/logger.js";
+
+
+export {
+  getGroupTeamDetails,
+  addTeamProgressforGroup,
+  verifyGroupExists,
+  getGroupRegistrationData,
+  createNewEntry,
+  addPickCount,
+  calculateMaxPossiblePoints,
+  getAllYearsforGroup,
+  getRegionsForYear,
+  findEntriesByName,
+  addNewGroup,
+  getRegionIDForYear,
+  setRepositories,
+  buildFullGridData,
+  buildGameViewData,
+};
+
+let viewRepository = _viewRepository;
+let gameRepository = _gameRepository;
+let entryRepository = _entryRepository;
+let tourneyRepository = _tourneyRepository;
+
+async function getGroupTeamDetails(groupName, year = thisYear, prefetchedTeams = null) {
+  const [groupTeams, resultsSoFar] = await Promise.all([
+    viewRepository.getGroupTeams(groupName, year),
+    // Skip DB fetch if the caller already has the tournament details
+    prefetchedTeams ? Promise.resolve(prefetchedTeams) : gameRepository.getAllTournamentDetails(year).then(d => d.teams),
+  ]);
+
+  if (!groupTeams) {
+    return [[], resultsSoFar];
+  }
+
+  const teamMap = new Map(resultsSoFar.map((t) => [t.sID, t]));
+  const mappedGroupTeams = groupTeams.map((team) => ({
+    ...team,
+    pickNames: team.picks.map((pickId) => teamMap.get(pickId)).filter(Boolean),
+  }));
+
+  return [mappedGroupTeams, resultsSoFar];
+}
+
+//Adds the progress of each team in a Group to the groupTeams array
+//does not take in a year it just needs output of getAllGroupDetails
+async function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
+  const pointsPerRound = Object.entries(TOURNAMENT_ROUNDS)
+    .filter(([round]) => Number(round) > 0)
+    .map(([, r]) => r.roundPoints);
+
+  // Determine the global tournament round state using ALL teams (not just one person's picks).
+  // This way, everyone shows as "advanced" until the first game of the next round has started.
+  let globalMinActiveLen = Infinity;
+  let globalMaxActiveLen = 0;
+  if (allTournamentTeams) {
+    for (const team of allTournamentTeams) {
+      const gs = team.gameStatus;
+      if (gs == null || gs.length === 0) {
+        globalMinActiveLen = Math.min(globalMinActiveLen, 0);
+      } else if (gs[gs.length - 1] !== 'L') {
+        globalMinActiveLen = Math.min(globalMinActiveLen, gs.length);
+        globalMaxActiveLen = Math.max(globalMaxActiveLen, gs.length);
+      }
+    }
+  }
+  const globalRoundInProgress = globalMaxActiveLen > globalMinActiveLen;
+
+  for (const team of groupTeams) {
+    const pickNames = team.pickNames || [];
+    // Per-round counters: [wins, losses, toPlay, roundPoints] indexed by round (0..5).
+    const picksProgress = Array.from({ length: 6 }, () => [0, 0, 0, 0]);
+    let teamsRemaining = 10; //counts down from 10 when it finds a loss
+
+    for (let j = 0; j < pickNames.length; j++) {
+      const pick = pickNames[j];
+      const gs = pick?.gameStatus;
+      if (gs == null) {
+        picksProgress[j][2]++;
+        continue;
+      }
+      let pickPoints = 0;
+      for (let t = 0; t < gs.length; t++) {
+        if (gs[t] === "W") {
+          picksProgress[t][0]++;
+          pickPoints += pointsPerRound[t];
+          picksProgress[t][3] += pointsPerRound[t];
+          // After a win, the pick advances to the next round's "toPlay" tally,
+          // unless this was the championship win (t === 5, no t+1 round exists).
+          if (t + 1 === gs.length && t !== 5) {
+            picksProgress[t + 1][2]++;
+          }
+        } else if (gs[t] === "L") {
+          picksProgress[t][1]++;
+          teamsRemaining--;
+        }
+      }
+      pick.pickPoints = pickPoints;
+    }
+
+    // Determine teamsAdvanced using the GLOBAL tournament round state.
+    // If the global round is in progress (some teams in the tournament have played more games
+    // than others), count this person's picks that have won in the current round.
+    // If the global round is NOT in progress (all alive teams tournament-wide have the same
+    // gameStatus length), then everyone's remaining teams count as "advanced" — they all
+    // made it through the completed round and the next round hasn't started yet.
+    let teamsAdvanced = 0;
+    if (globalRoundInProgress) {
+      for (const pick of pickNames) {
+        const gs = pick?.gameStatus;
+        if (gs != null && gs.length === globalMaxActiveLen && gs[gs.length - 1] === 'W') {
+          teamsAdvanced++;
+        }
+      }
+    }
+
+    team.picksProgress = picksProgress;
+    team.teamsRemaining = teamsRemaining;
+    team.teamsAdvanced = teamsAdvanced;
+  }
+  return groupTeams;
+}
+
+async function verifyGroupExists(groupName) {
+  return await viewRepository.findGroupByName(groupName);
+}
+
+async function getGroupRegistrationData(groupName, year = thisYear) {
+  // Single consolidated fetch — replaces separate getTournamentTeams + getActiveAndFutureGames calls
+  const [{ teams: allTeams, allGames, regions }, groupTeams] = await Promise.all([
+    gameRepository.getAllTournamentDetails(year),
+    viewRepository.getGroupTeams(groupName, year),
+  ]);
+
+  // Build combined FF display: remove individual FF teams, add combined or resolved options
+  const ffGames = allGames.filter(g => g.round === 0);
+  const ffTeamSIDs = new Set();
+  const ffWinnerSIDs = new Set();
+  const combinedFFOptions = [];
+
+  for (const ffGame of ffGames) {
+    ffTeamSIDs.add(ffGame.team1ID);
+    ffTeamSIDs.add(ffGame.team2ID);
+
+    if (!ffGame.winner) {
+      // Unresolved FF: create combined option using team1's sID as the pick value
+      const team1 = allTeams.find(t => t.sID === ffGame.team1ID);
+      const team2 = allTeams.find(t => t.sID === ffGame.team2ID);
+      if (team1 && team2) {
+        combinedFFOptions.push({
+          sID: team1.sID,
+          nameNick: `${team1.nameNick} / ${team2.nameNick}`,
+          mascot: "First Four",
+          seed: team1.seed,
+          regionName: team1.regionName,
+          isFirstFour: true,
+          ffPartnerSID: team2.sID,
+        });
+      }
+    } else {
+      // Resolved FF: track winner so their canonical doc passes through the filter below
+      ffWinnerSIDs.add(ffGame.winner);
+    }
+  }
+
+  // After FF resolution, allTeams contains two docs for the winner: the ff_ doc and the
+  // canonical {regionID}_{seed} doc. Keep only the canonical doc (isFFDoc === false).
+  // Exclude all other FF team docs (losers).
+  const seenSIDs = new Map(); // sID -> best team entry
+  for (const t of allTeams) {
+    if (!ffTeamSIDs.has(t.sID)) {
+      // Normal team — always include
+      seenSIDs.set(t.sID, t);
+    } else if (ffWinnerSIDs.has(t.sID) && !t.isFFDoc) {
+      // Resolved FF winner's canonical doc — include, skip the ff_ doc
+      seenSIDs.set(t.sID, t);
+    }
+    // FF losers and ff_ docs for winners: skip
+  }
+
+  // Add combined options for unresolved FF games, then re-sort to keep seed order intact.
+  const teamData = [
+    ...seenSIDs.values(),
+    ...combinedFFOptions,
+  ].sort((a, b) => {
+    if (a.seed !== b.seed) return a.seed - b.seed;
+    return (a.regionName || '').localeCompare(b.regionName || '');
+  });
+
+  return {
+    name: groupName,
+    teamData,
+    gameData: allGames,
+    regions,
+    groupTeams,
+  };
+}
+
+async function createNewEntry(email, teamName, personName, groupName, picks, year = thisYear, maxPoints = 0) {
+  // Use a timestamp + random suffix instead of a DB read-then-write.
+  // This eliminates the cross-year Firestore scan and reduces collision risk
+  // from 1-in-10 (old) to ~1-in-1,000,000 (same-millisecond + same random).
+  const newId = Date.now() + Math.floor(Math.random() * 1000);
+  const nowEST = new Date().toISOString();
+
+  await entryRepository.createEntry(
+    newId,
+    email,
+    teamName,
+    picks,
+    groupName,
+    personName,
+    nowEST,
+    year,
+    maxPoints
+  );
+}
+
+async function addPickCount(allTeams, groupData) {
+  const pickCounts = new Map();
+  for (const entry of groupData) {
+    for (const sID of entry.picks) {
+      pickCounts.set(sID, (pickCounts.get(sID) ?? 0) + 1);
+    }
+  }
+  for (const team of allTeams) {
+    team.pickCount = pickCounts.get(team.sID) ?? 0;
+  }
+  return allTeams;
+}
+
+/**
+ * Calculates the maximum possible points for a given set of team picks (for registration).
+ */
+async function calculateMaxPossiblePoints(teamSIDs, inputYear = thisYear) {
+  try {
+    // Single consolidated fetch replaces separate getActiveAndFutureGames + getTournamentTeams calls
+    const { allGames, teams: allTeams } = await gameRepository.getAllTournamentDetails(inputYear);
+
+    const picks = teamSIDs.map((sid) => Number(sid)).filter((id) => !isNaN(id));
+
+    if (picks.length !== teamSIDs.length) {
+      Logger.warn("Some invalid SIDs were provided and filtered out.");
+    }
+    if (picks.length === 0) {
+      Logger.warn("No valid SIDs provided.");
+      return 0;
+    }
+
+    const { maxPoints } = calculateEntryPointsAndPaths(picks, allTeams, allGames);
+
+    return maxPoints;
+  } catch (error) {
+    Logger.error("Error in calculateMaxPossiblePoints service:", error);
+    throw new Error("Failed to calculate maximum possible points.");
+  }
+}
+
+async function getAllYearsforGroup(groupName) {
+  const allYears = await gameRepository.getAllYearsForGroup(groupName);
+  return allYears.map((year) => year.year);
+}
+
+/**
+ * Returns the 4 bracket region IDs for a given year.
+ * Reads directly from the regions subcollection.
+ */
+async function getRegionIDForYear(year) {
+  const allRegions = await tourneyRepository.getAllRegions(year);
+  return allRegions.map((r) => r.regionID);
+}
+
+/**
+ * Returns the 4 bracket region names for a given year.
+ * Now a local derivation from getAllTournamentDetails — no extra DB read.
+ */
+async function getRegionsForYear(year) {
+  const { regions } = await gameRepository.getAllTournamentDetails(year);
+  // regions is already an array of 4 { regionID, regionName } objects
+  return regions.map((r) => r.regionName);
+}
+
+async function findEntriesByName(name, year = thisYear) {
+  const entries = await entryRepository.findEntriesByName(name, year);
+  return entries;
+}
+
+async function addNewGroup(groupName) {
+  const maxId = await viewRepository.getMaxGroupId();
+  const newId = (maxId || 0) + 1;
+  await viewRepository.addGroup(newId, groupName);
+}
+
+function setRepositories(newViewRepository, newGameRepository, newEntryRepository, newTourneyRepository) {
+  viewRepository = newViewRepository;
+  gameRepository = newGameRepository;
+  entryRepository = newEntryRepository;
+  if (newTourneyRepository) tourneyRepository = newTourneyRepository;
+}
+
+/**
+ * Builds all the necessary data for the full grid view.
+ */
+async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) {
+  const [{ allGames: activeGamesForYear, teams: allTeamsRawFull }, groupTeamsRaw] = await Promise.all([
+    prefetchedDetails
+      ? Promise.resolve(prefetchedDetails)
+      : gameRepository.getAllTournamentDetails(gameYear),
+    viewRepository.getGroupTeams(groupName, gameYear),
+  ]);
+
+  // Exclude FF losers and ff_ docs (duplicate entries for FF winners) from grid columns.
+  // For unresolved FF games, build a combined "Team A / Team B" entry to use as the column.
+  const ffLoserSIDs = new Set();
+  const combinedFFOptions = [];
+  for (const g of activeGamesForYear) {
+    if (g.round === 0) {
+      if (g.winner) {
+        ffLoserSIDs.add(g.winner === g.team1ID ? g.team2ID : g.team1ID);
+      } else {
+        const team1 = allTeamsRawFull.find(t => t.sID === g.team1ID);
+        const team2 = allTeamsRawFull.find(t => t.sID === g.team2ID);
+        if (team1 && team2) {
+          combinedFFOptions.push({
+            ...team1,
+            nameNick: `${team1.nameNick} / ${team2.nameNick}`,
+            mascot: 'First Four',
+            isFirstFour: true,
+            ffPartnerSID: team2.sID,
+          });
+        }
+      }
+    }
+  }
+  const allTeamsRaw = [
+    ...allTeamsRawFull.filter(t => !ffLoserSIDs.has(t.sID) && !t.isFFDoc),
+    ...combinedFFOptions,
+  ].sort((a, b) => {
+    if (a.seed !== b.seed) return a.seed - b.seed;
+    return (a.regionName || '').localeCompare(b.regionName || '');
+  });
+
+  const teamMapFull = new Map(allTeamsRaw.map((t) => [t.sID, t]));
+
+  // Map the FF partner sID to the same combined object so picks for either team resolve correctly.
+  combinedFFOptions.forEach(opt => teamMapFull.set(opt.ffPartnerSID, opt));
+  const allGroupDetails = (groupTeamsRaw || []).map((team) => ({
+    ...team,
+    pickNames: team.picks.map((pickId) => teamMapFull.get(pickId)).filter(Boolean),
+  }));
+
+  let groupData = await addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
+  const allTeamsWithPickCounts = await addPickCount(allTeamsRaw, groupData);
+
+  groupData = await enrichEntriesWithPotentialRankings(
+    groupData,
+    allTeamsRaw,
+    activeGamesForYear
+  );
+
+  groupData.sort((a, b) => {
+    if (a.totalPoints !== b.totalPoints) return b.totalPoints - a.totalPoints;
+    if (a.teamsRemaining !== b.teamsRemaining) return b.teamsRemaining - a.teamsRemaining;
+    return b.possPoints - a.possPoints;
+  });
+
+  let currentRank = 0;
+  let previousTotalPoints = -1;
+  let previousRank = 0;
+  let sameRankCount = 0;
+
+  groupData.forEach((group) => {
+    if (group.totalPoints === previousTotalPoints) {
+      sameRankCount++;
+      group.rank = previousRank;
+    } else {
+      currentRank += sameRankCount + 1;
+      sameRankCount = 0;
+      group.rank = currentRank;
+      previousRank = currentRank;
+    }
+    previousTotalPoints = group.totalPoints;
+  });
+
+  return { groupData, allTeamsWithPickCounts };
+}
+
+/**
+ * Builds all the necessary data for the game view.
+ *
+ * Service-level cache (5-min TTL, matching tournamentDetails) skips all join
+ * work on warm hits. Invalidated by GameRepository.updateWinner/updateNextGameTeam
+ * and EntryRepository.createEntry/deleteEntry.
+ *
+ * ESPN/conference fields (espnID, logoUrl, primaryColor, conferenceName) are now
+ * denormalized into schoolRecords, so no separate allSchools or allConferences
+ * fetch is needed here.
+ */
+async function buildGameViewData(verifiedGroupName, requestedYear) {
+  const cacheKey = `gameViewData_${requestedYear}_${verifiedGroupName}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const [{ activeGames: activeGamesForYear, regions, teams: allTeamsRaw }, groupTeamsRaw, allYears] =
+    await Promise.all([
+      gameRepository.getAllTournamentDetails(requestedYear),
+      viewRepository.getGroupTeams(verifiedGroupName, requestedYear),
+      getAllYearsforGroup(verifiedGroupName),
+    ]);
+
+  const teamMapGame = new Map(allTeamsRaw.map((t) => [t.sID, t]));
+  const allGroupDetails = (groupTeamsRaw || []).map((team) => ({
+    ...team,
+    pickNames: team.picks.map((pickId) => teamMapGame.get(pickId)).filter(Boolean),
+  }));
+
+  const enrichedActiveGames = activeGamesForYear.map((game) => {
+    if (game.winner) {
+      const winnerName = game.winner === game.team1ID ? game.team1Name : game.team2Name;
+      return { ...game, winnerName };
+    }
+    return game;
+  });
+
+  // conferenceName is now on each team directly from schoolRecords
+  const conferenceStats = {};
+  allTeamsRaw.forEach(t => {
+    if (t.conferenceName) {
+      if (!conferenceStats[t.conferenceName]) conferenceStats[t.conferenceName] = 0;
+      conferenceStats[t.conferenceName]++;
+    }
+  });
+
+  const groupData = await addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
+  const regionNames = regions.map((r) => r.regionName);
+
+  const result = {
+    groupData,
+    enrichedActiveGames,
+    allTeamsRaw,
+    allYears,
+    regionNames,
+    conferenceStats,
+  };
+
+  // Cache for 5 min — same TTL as tournamentDetails (the shortest-lived input)
+  cacheSet(cacheKey, result, 300);
+  return result;
+}

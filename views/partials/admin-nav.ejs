@@ -1,0 +1,32 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom mb-3">
+    <div class="container-fluid px-3">
+        <a class="navbar-brand fw-semibold" href="/admin/tournament">Admin Console <span class="text-muted fw-normal fs-6"><%= year %></span></a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminSectionNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="adminSectionNav">
+            <ul class="navbar-nav ms-auto gap-1">
+                <li class="nav-item">
+                    <a class="nav-link btn btn-sm btn-outline-secondary px-2 <%= locals.adminSection === 'tournament' ? 'active fw-semibold' : '' %>" href="/admin/tournament">Game Results</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link btn btn-sm btn-outline-secondary px-2 <%= locals.adminSection === 'entries' ? 'active fw-semibold' : '' %>" href="/admin/entries?year=<%= year %>">Entries</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link btn btn-sm btn-outline-secondary px-2 <%= locals.adminSection === 'teams' ? 'active fw-semibold' : '' %>" href="/admin/teams">Teams & Conferences</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link btn btn-sm btn-outline-secondary px-2 <%= locals.adminSection === 'system' ? 'active fw-semibold' : '' %>" href="/admin/system?year=<%= year %>">System</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link btn btn-sm btn-outline-secondary px-2 <%= locals.adminSection === 'cloud' ? 'active fw-semibold' : '' %>" href="/admin/cloud?year=<%= year %>">Cloud</a>
+                </li>
+                <li class="nav-item">
+                    <form action="/admin/logout" method="POST" class="d-inline">
+                        <button type="submit" class="nav-link btn btn-sm btn-outline-danger px-2">Logout</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>

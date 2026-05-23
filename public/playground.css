@@ -1,0 +1,63 @@
+/* ──────────────────────────────────────────────────────────────────
+   Playground page — hypothetical-results simulator.
+   All colors come from tokens.css so the page is dark-safe.
+   ────────────────────────────────────────────────────────────────── */
+
+.playground-banner {
+  background: var(--alert-warn-bg);
+  border-bottom: 2px solid var(--warning-color);
+}
+
+.game-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg-card);
+}
+
+.standings-panel {
+  position: sticky;
+  top: 70px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  .standings-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+.delta-pos {
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+.delta-neg {
+  color: var(--danger-color);
+  font-weight: 600;
+}
+
+.row-up td {
+  background-color: var(--badge-success-bg) !important;
+}
+
+.row-down td {
+  background-color: var(--badge-danger-bg) !important;
+}
+
+.rank-up { color: var(--success-color); }
+.rank-down { color: var(--danger-color); }
+
+.card-up {
+  background-color: var(--badge-success-bg) !important;
+  border-color: var(--success-color) !important;
+}
+
+.card-down {
+  background-color: var(--badge-danger-bg) !important;
+  border-color: var(--danger-color) !important;
+}

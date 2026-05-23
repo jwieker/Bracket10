@@ -1,0 +1,58 @@
+{
+    "name": "Bracket 10 Admin",
+    "short_name": "Bracket10 Admin",
+    "description": "Admin console for Bracket 10 tournament management.",
+    "id": "/updates?source=admin-pwa",
+    "start_url": "/updates",
+    "scope": "/updates",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#ff8c00",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/admin/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/admin/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/admin/icon-16.png",
+            "sizes": "16x16",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/admin/icon-24.png",
+            "sizes": "24x24",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/admin/icon-32.png",
+            "sizes": "32x32",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "/blank-bracket.jpg",
+            "sizes": "1186x829",
+            "type": "image/jpeg",
+            "form_factor": "wide"
+        },
+        {
+            "src": "/screenshot-mobile.png",
+            "sizes": "1024x1024",
+            "type": "image/jpeg",
+            "form_factor": "narrow"
+        }
+    ]
+}

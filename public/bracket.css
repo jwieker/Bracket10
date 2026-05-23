@@ -1,0 +1,183 @@
+/* ──────────────────────────────────────────────────────────────────
+   Bracket component — tokens-only, dark-safe.
+   Used by views/partials/bracket.ejs (results, editEntry, myEditEntry,
+   registration). All colors come from tokens.css; no hex literals here.
+   ────────────────────────────────────────────────────────────────── */
+
+.bracket-wrapper {
+  container-type: inline-size;
+  --matchup-base-height: clamp(10px, 3.5cqw, 18px);
+  border: 1px solid var(--border-strong);
+  background-color: var(--bg-soft);
+  margin: 0.5rem auto;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+}
+
+.bracket-wrapper .bracket-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.bracket-wrapper .bracket-body {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.bracket-wrapper .bracket-half { display: flex; }
+
+.bracket-wrapper .round {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 0 2px;
+}
+
+.bracket-wrapper .bracket-half > .round {
+  flex-basis: 0;
+  flex-grow: 1;
+}
+
+.bracket-wrapper .bracket-half > .round.r1 {
+  flex-grow: 2;
+  max-width: 25cqw;
+}
+
+.bracket-wrapper .round-title {
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+  font-size: clamp(5px, 1.4cqw, 12px);
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.bracket-wrapper .region-label2 { max-width: 20px; }
+
+.bracket-wrapper .region-label-text {
+  color: var(--text-main);
+  font-size: clamp(5px, 1.4cqw, 12px);
+  font-weight: 800;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+.bracket-wrapper #regionTopLeft,
+.bracket-wrapper #regionBottomLeft {
+  text-align: left;
+  position: relative;
+  left: -10px;
+}
+
+.bracket-wrapper #regionTopRight,
+.bracket-wrapper #regionBottomRight { margin-left: 10px; }
+
+.bracket-wrapper .matchup {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  margin: 2px 0;
+}
+
+.bracket-wrapper .team {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 0 clamp(1px, 0.5cqw, 3px);
+  min-width: 0;
+  height: var(--matchup-base-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 2px;
+  font-size: clamp(5px, 1.8cqw, 13px);
+  font-weight: 500;
+  color: var(--text-main);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  transition: border-color 0.1s ease-in-out, background-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+  overflow: hidden;
+  text-align: center;
+}
+
+.bracket-wrapper .team:hover {
+  border-color: var(--text-muted);
+  box-shadow: var(--shadow-md);
+}
+
+/* User has selected this team but the game hasn't been played yet. */
+.bracket-wrapper .team.picked {
+  background-color: var(--bg-softer);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.bracket-wrapper .team.picked:hover {
+  border-color: var(--text-main);
+  box-shadow: var(--shadow-md);
+}
+.bracket-wrapper .team.picked span.name { color: var(--text-main); }
+
+/* Pick correct: outcome confirmed as a win. */
+.bracket-wrapper .team.picked-win {
+  background-color: var(--green-bg);
+  border-color: var(--success-color);
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+/* Pick wrong: outcome confirmed as a loss. */
+.bracket-wrapper .team.picked-loss {
+  background-color: var(--badge-danger-bg);
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+}
+
+.bracket-wrapper .right-half .team {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.bracket-wrapper .matchup .team:first-of-type { margin-bottom: 1px; }
+
+.bracket-wrapper .championship-column .matchup .team:first-of-type { margin-bottom: 0; }
+
+.bracket-wrapper .championship-column .matchup {
+  min-height: var(--matchup-base-height);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.bracket-wrapper .final-matchup { margin-bottom: 45px; }
+.bracket-wrapper .final-matchup .team {
+  flex-grow: 2;
+  height: var(--matchup-base-height);
+}
+
+.bracket-wrapper .champion-area {
+  margin-top: 0.5rem;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bracket-wrapper .champion-slot {
+  height: var(--matchup-base-height);
+  flex-grow: 3;
+  padding: 0 clamp(1px, 0.5cqw, 3px);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  background-color: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  border-radius: 2px;
+  justify-content: center;
+  min-width: 0;
+  width: auto;
+}

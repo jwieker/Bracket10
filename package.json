@@ -1,0 +1,54 @@
+{
+  "name": "bracket10",
+  "version": "1.1.0",
+  "description": "Bracket 10 — a self-hostable basketball bracket pool web app, built on Node.js, Express, and Google Cloud Firestore.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --watch --env-file-if-exists=.env server.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:live-e2e": "LIVE_E2E=true vitest run tests/e2e-2020.live.test.js",
+    "test:live-e2e-v2": "LIVE_E2E=true vitest run tests/e2e-v2.live.test.js",
+    "test:targeted-updates": "LIVE_E2E=true vitest run tests/targeted-updates.live.test.js",
+    "preview-public": "git archive HEAD | tar -t --exclude=docs/private --exclude=scripts/private --exclude=ai_private --exclude=docs/plans --exclude=product-backlog --exclude=.claude --exclude=.skills --exclude=scripts/sync-public.sh | sort",
+    "preview-public-branch": "bash scripts/private/preview-public-branch.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jwieker/bracket10.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jwieker/bracket10/issues"
+  },
+  "homepage": "https://github.com/jwieker/bracket10#readme",
+  "keywords": [
+    "march-madness",
+    "bracket-pool",
+    "ncaa",
+    "express",
+    "firestore",
+    "pwa"
+  ],
+  "author": "Jeff Wieker",
+  "license": "ISC",
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.6",
+    "vitest": "^4.1.3"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^8.5.0",
+    "compression": "^1.8.0",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "express-session": "^1.19.0",
+    "google-auth-library": "^10.6.2"
+  },
+  "overrides": {
+    "minimatch": "^10.2.1",
+    "glob": "^11.0.2",
+    "@tootallnate/once": "3.0.1",
+    "ip-address": "^10.2.0"
+  }
+}

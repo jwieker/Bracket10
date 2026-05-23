@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/jwieker/bracket10/security/advisories/new
+    about: Report security issues privately via GitHub Security Advisories. Do not file public issues for security.
+  - name: Question or discussion
+    url: https://github.com/jwieker/bracket10/discussions
+    about: Ask questions or share ideas in Discussions instead of filing an issue.

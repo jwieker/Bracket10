@@ -1,0 +1,160 @@
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS — single source of truth for all
+   theme colors, typography, spacing, and shadows.
+   To restyle the app, edit only this file.
+   ═══════════════════════════════════════════════ */
+
+/* ── Light theme (default) ── */
+:root {
+  --primary-color:   #ea7b40;
+  --primary-dark:    #d96a30;
+  --primary-soft:    rgba(234, 123, 64, 0.12);
+  --secondary-color: #212529;
+  --accent-color:    #3b82f6;
+  --blue-link:       #1a6bbf;
+  --success-color:   #10b981;
+  --danger-color:    #ef4444;
+  --warning-color:   #f59e0b;
+  --gold:            #f59e0b;
+  --silver:          #9ca3af;
+  --bronze:          #b45309;
+  --green-bg:        rgba(16, 185, 129, 0.12);
+
+  --bg-body:    #edeff3;
+  --bg-card:    #ffffff;
+  --bg-header:  #ffffff;
+  --bg-soft:    #f5f6f9;
+  --bg-softer:  #eef0f4;
+  --bg-hover:   rgba(234, 123, 64, 0.06);
+  --bg-overlay: rgba(237, 239, 243, 0.85);
+
+  --border-color:  #e2e5eb;
+  --border-strong: #cfd3dc;
+
+  --text-main:   #111827;
+  --text-muted:  #6b7280;
+  --text-xmuted: #9ca3af;
+  --text-light:  #f9fafb;
+
+  /* Alert / status surface pairs (background + foreground) */
+  --alert-info-bg:     #eff6ff;
+  --alert-info-fg:     #1e3a8a;
+  --alert-info-border: #dbeafe;
+  --alert-success-bg:     #ecfdf5;
+  --alert-success-fg:     #065f46;
+  --alert-success-border: #a7f3d0;
+  --alert-warn-bg:     #fffbeb;
+  --alert-warn-fg:     #92400e;
+  --alert-warn-border: #fde68a;
+  --alert-danger-bg:     #fef2f2;
+  --alert-danger-fg:     #991b1b;
+  --alert-danger-border: #fecaca;
+
+  /* Badge tints */
+  --badge-bg:        #f3f4f6;
+  --badge-fg:        #4b5563;
+  --badge-success-bg: rgba(16, 185, 129, 0.12);
+  --badge-success-fg: #0e7a5a;
+  --badge-warn-bg:    rgba(245, 158, 11, 0.14);
+  --badge-warn-fg:    #92400e;
+  --badge-danger-bg:  rgba(239, 68, 68, 0.12);
+  --badge-danger-fg:  #991b1b;
+  --badge-info-bg:    rgba(59, 130, 246, 0.12);
+  --badge-info-fg:    #1d4ed8;
+
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Bootstrap 5.3 variable overrides — remap Bootstrap's color system to our tokens
+     so built-in utilities (text-body, text-muted, table-light, cards, modals, etc.)
+     stay theme-aware instead of falling back to Bootstrap's hard-coded grays. */
+  --bs-body-color:       var(--text-main);
+  --bs-body-bg:          var(--bg-body);
+  --bs-secondary-color:  var(--text-muted);
+  --bs-secondary-bg:     var(--bg-soft);
+  --bs-tertiary-color:   var(--text-xmuted);
+  --bs-tertiary-bg:      var(--bg-softer);
+  --bs-emphasis-color:   var(--text-main);
+  --bs-border-color:     var(--border-color);
+  --bs-border-color-translucent: var(--border-color);
+  --bs-heading-color:    var(--text-main);
+  --bs-link-color:       var(--primary-color);
+  --bs-link-hover-color: var(--primary-dark);
+}
+
+/* ── Dark theme (toggled via data-theme="dark" on <html>) ── */
+[data-theme="dark"] {
+  --primary-color:   #f79563;
+  --primary-dark:    #d96a30;
+  --primary-soft:    rgba(240, 138, 83, 0.15);
+  --secondary-color: #0b0d10;
+  --accent-color:    #60a5fa;
+  --blue-link:       #7fb2e8;
+  --success-color:   #34d399;
+  --danger-color:    #f87171;
+  --warning-color:   #fbbf24;
+  --gold:            #eab308;
+  --silver:          #94a3b8;
+  --bronze:          #b45309;
+  --green-bg:        rgba(52, 211, 153, 0.15);
+
+  --bg-body:    #242830;
+  --bg-card:    #323841;
+  --bg-header:  #2c323b;
+  --bg-soft:    #3b424c;
+  --bg-softer:  #464d58;
+  --bg-hover:   #3e4550;
+  --bg-overlay: rgba(36, 40, 48, 0.96);
+
+  --border-color:  #4a5260;
+  --border-strong: #5a6270;
+
+  --text-main:   #f3f4f6;
+  --text-muted:  #c4ccd8;
+  --text-xmuted: #8b94a3;
+  --text-light:  #f9fafb;
+
+  /* Alert / status surface pairs — tinted dark surfaces with high-contrast text */
+  --alert-info-bg:     rgba(96, 165, 250, 0.14);
+  --alert-info-fg:     #bfdbfe;
+  --alert-info-border: rgba(96, 165, 250, 0.30);
+  --alert-success-bg:     rgba(52, 211, 153, 0.14);
+  --alert-success-fg:     #a7f3d0;
+  --alert-success-border: rgba(52, 211, 153, 0.30);
+  --alert-warn-bg:     rgba(251, 191, 36, 0.14);
+  --alert-warn-fg:     #fde68a;
+  --alert-warn-border: rgba(251, 191, 36, 0.30);
+  --alert-danger-bg:     rgba(248, 113, 113, 0.14);
+  --alert-danger-fg:     #fecaca;
+  --alert-danger-border: rgba(248, 113, 113, 0.30);
+
+  /* Badge tints */
+  --badge-bg:        #3b424c;
+  --badge-fg:        #cbd5e1;
+  --badge-success-bg: rgba(52, 211, 153, 0.18);
+  --badge-success-fg: #6ee7b7;
+  --badge-warn-bg:    rgba(251, 191, 36, 0.18);
+  --badge-warn-fg:    #fcd34d;
+  --badge-danger-bg:  rgba(248, 113, 113, 0.18);
+  --badge-danger-fg:  #fca5a5;
+  --badge-info-bg:    rgba(96, 165, 250, 0.18);
+  --badge-info-fg:    #93c5fd;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 10px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 32px -6px rgba(0, 0, 0, 0.6), 0 4px 10px -2px rgba(0, 0, 0, 0.4);
+}

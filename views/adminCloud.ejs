@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+    <title>Cloud — Admin</title>
+</head>
+
+<% const adminSection = 'cloud'; %>
+
+<body>
+    <%- include('partials/admin-nav', { year, adminSection }) %>
+
+    <div class="container-lg pb-5">
+        <div class="row g-4">
+
+            <!-- GCP Budget -->
+            <div class="col-12 col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">GCP Budget</span>
+                        <button id="refreshBudgetBtn" type="button" class="btn btn-sm btn-outline-secondary">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="budgetContent">
+                            <% if (!budget.configured) { %>
+                                <p class="text-muted small mb-2">Budget lookup is not configured.</p>
+                                <p class="small mb-0">
+                                    Set the <code>GCP_BILLING_ACCOUNT_ID</code> environment variable on the Cloud Run
+                                    service and grant the runtime service account
+                                    <code>roles/billing.viewer</code> on the billing account.
+                                </p>
+                            <% } else if (budget.error) { %>
+                                <p class="text-danger small mb-2">Could not load budgets.</p>
+                                <pre class="small text-muted mb-0"><%= budget.error %></pre>
+                            <% } else if (!budget.budgets || budget.budgets.length === 0) { %>
+                                <p class="text-muted small mb-0">No budgets are defined on this billing account.</p>
+                            <% } else { %>
+                                <ul class="list-unstyled mb-0">
+                                    <% budget.budgets.forEach(function(b) { %>
+                                        <li class="mb-2">
+                                            <div class="fw-semibold"><%= b.displayName %></div>
+                                            <div class="small text-muted">
+                                                Cap: <%= b.currency %> <%= b.amount.toFixed(2) %>
+                                                <% if (b.thresholds && b.thresholds.length) { %>
+                                                    · alerts at
+                                                    <%= b.thresholds.map(function(t){ return t.percent + '%'; }).join(', ') %>
+                                                <% } %>
+                                            </div>
+                                        </li>
+                                    <% }); %>
+                                </ul>
+
+                                <% if (budget.spendConfigured && budget.spent !== null && budget.spent !== undefined) { %>
+                                    <div class="mt-4 p-3 bg-light rounded border">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="fw-semibold small">Month-to-Date Spend</span>
+                                            <span class="fw-bold text-dark">$<%= budget.spent.toFixed(4) %></span>
+                                        </div>
+                                        
+                                        <% 
+                                        const firstBudget = budget.budgets && budget.budgets[0];
+                                        if (firstBudget && firstBudget.amount > 0) {
+                                            const pct = (budget.spent / firstBudget.amount) * 100;
+                                            const pctClamped = Math.min(Math.max(pct, 0), 100);
+                                            let barClass = 'bg-success';
+                                            if (pct >= 80 && pct < 100) barClass = 'bg-warning';
+                                            if (pct >= 100) barClass = 'bg-danger';
+                                        %>
+                                            <div class="progress" style="height: 10px;">
+                                                <div class="progress-bar <%= barClass %>" role="progressbar" style="width: <%= pctClamped %>%" aria-valuenow="<%= pctClamped %>" aria-valuemin="0" aria-valuemax="100"></div>
+                                            </div>
+                                            <div class="d-flex justify-content-between text-muted small mt-1" style="font-size: 0.75rem;">
+                                                <span>0%</span>
+                                                <span><%= pct.toFixed(1) %>% of <%= firstBudget.displayName %></span>
+                                                <span>100%</span>
+                                            </div>
+                                        <% } else { %>
+                                            <div class="text-muted small">No budget cap found to display progress.</div>
+                                        <% } %>
+                                    </div>
+                                <% } %>
+
+                                <% if (budget.spendError) { %>
+                                    <div class="alert alert-warning p-2 small mt-3 mb-0">
+                                        BigQuery spend lookup failed: <%= budget.spendError %>
+                                    </div>
+                                <% } %>
+
+                                <% if (budget.dailySpend && budget.dailySpend.days && budget.dailySpend.days.length > 0) {
+                                       const days = budget.dailySpend.days;
+                                       const rawMax = Math.max(...days.map(d => d.spent), 0);
+                                       // Round max up to a nice tick so the y-axis labels are readable.
+                                       function niceCeil(v) {
+                                           if (v <= 0) return 0.0001;
+                                           const mag = Math.pow(10, Math.floor(Math.log10(v)));
+                                           const n = v / mag;
+                                           let nice;
+                                           if (n <= 1) nice = 1;
+                                           else if (n <= 2) nice = 2;
+                                           else if (n <= 5) nice = 5;
+                                           else nice = 10;
+                                           return nice * mag;
+                                       }
+                                       const chartMax = niceCeil(rawMax);
+                                       const ticks = [chartMax, chartMax * 0.75, chartMax * 0.5, chartMax * 0.25, 0];
+                                       function fmtTick(v) {
+                                           if (v === 0) return '$0';
+                                           if (v >= 0.01) return '$' + v.toFixed(2);
+                                           if (v >= 0.0001) return '$' + v.toFixed(4);
+                                           return '$' + v.toExponential(1);
+                                       }
+                                       const midIdx = Math.floor(days.length / 2);
+                                %>
+                                    <div class="mt-4">
+                                        <div class="fw-semibold small mb-2">Daily Spend</div>
+                                        <div style="display: flex; gap: 6px;">
+                                            <div style="display: flex; flex-direction: column; justify-content: space-between; height: 120px; font-size: 0.65rem; color: #6c757d; text-align: right; min-width: 40px;">
+                                                <% ticks.forEach(function(t) { %>
+                                                    <span style="line-height: 1;"><%= fmtTick(t) %></span>
+                                                <% }); %>
+                                            </div>
+                                            <div style="flex: 1; position: relative;">
+                                                <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none;">
+                                                    <% ticks.forEach(function(t, i) { %>
+                                                        <div style="border-top: 1px <%= i === ticks.length - 1 ? 'solid' : 'dashed' %> #dee2e6; height: 0;"></div>
+                                                    <% }); %>
+                                                </div>
+                                                <div class="daily-spend-chart d-flex align-items-end" style="height: 120px; gap: 2px; position: relative;">
+                                                    <% days.forEach(function(d) {
+                                                           const h = chartMax > 0 ? Math.max((d.spent / chartMax) * 100, d.spent > 0 ? 2 : 0) : 0;
+                                                           const tooltip = d.date + ': $' + d.spent.toFixed(4);
+                                                    %>
+                                                        <div class="flex-fill" style="height: 100%; display: flex; align-items: flex-end;" title="<%= tooltip %>">
+                                                            <div style="width: 100%; height: <%= h %>%; background-color: #0d6efd; border-radius: 1px 1px 0 0;"></div>
+                                                        </div>
+                                                    <% }); %>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 6px; margin-top: 4px;">
+                                            <div style="min-width: 40px;"></div>
+                                            <div class="d-flex justify-content-between text-muted" style="flex: 1; font-size: 0.65rem;">
+                                                <span><%= days[0].date.slice(5) %></span>
+                                                <% if (days.length > 2) { %><span><%= days[midIdx].date.slice(5) %></span><% } %>
+                                                <span><%= days[days.length - 1].date.slice(5) %></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <% } %>
+                            <% } %>
+                        </div>
+                        <hr>
+                        <p class="small mb-0">
+                            <% if (budget.spendConfigured) { %>
+                                Live month-to-date spend is queried programmatically from your BigQuery billing export.
+                            <% } else { %>
+                                Live month-to-date spend is not fetched here (requires BigQuery billing export).
+                            <% } %>
+                            <a href="<%= links.billing %>" target="_blank" rel="noopener">Open the billing dashboard →</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="col-12 col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Quick Links
+                        <span class="text-muted fw-normal small">· <%= links.projectId %></span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row row-cols-1 row-cols-sm-2 g-2">
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.firestore %>">Firestore</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.cloudRun %>">Cloud Run</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.cloudBuild %>">Cloud Build history</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.cloudBuildTriggers %>">Build triggers</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.logs %>">Logs</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.budgets %>">Budgets & alerts</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.artifactRegistry %>">Artifact Registry</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.secrets %>">Secret Manager</a></div>
+                            <div class="col"><a class="btn btn-outline-secondary w-100 btn-sm" target="_blank" rel="noopener" href="<%= links.iam %>">IAM</a></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Launch to Prod -->
+            <div class="col-12">
+                <div class="card border-danger">
+                    <div class="card-header fw-semibold text-danger">Launch to Production</div>
+                    <div class="card-body">
+                        <p class="small text-muted mb-3">
+                            Runs the existing <code>cloudbuild.yaml</code> trigger against
+                            <code id="deployBranch"><%= links.deployBranch %></code>. Cloud Build will rebuild the image
+                            and roll out a new Cloud Run revision.
+                        </p>
+                        <button id="deployBtn" type="button" class="btn btn-danger">
+                            Deploy to Production
+                        </button>
+                        <div id="deployResult" class="mt-3 small"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const refreshBtn = document.getElementById('refreshBudgetBtn');
+            const budgetContent = document.getElementById('budgetContent');
+            const deployBtn = document.getElementById('deployBtn');
+            const deployResult = document.getElementById('deployResult');
+
+            function fmt(amount, currency) {
+                return `${currency} ${Number(amount).toFixed(2)}`;
+            }
+
+            function renderBudget(data) {
+                if (!data) return;
+                if (!data.configured) {
+                    budgetContent.textContent = 'Budget lookup is not configured.';
+                    return;
+                }
+                if (data.error) {
+                    budgetContent.textContent = `Error: ${data.error}`;
+                    return;
+                }
+                if (!data.budgets || data.budgets.length === 0) {
+                    budgetContent.textContent = 'No budgets defined.';
+                    return;
+                }
+                const container = document.createElement('div');
+                const ul = document.createElement('ul');
+                ul.className = 'list-unstyled mb-0';
+                data.budgets.forEach((b) => {
+                    const li = document.createElement('li');
+                    li.className = 'mb-2';
+                    const name = document.createElement('div');
+                    name.className = 'fw-semibold';
+                    name.textContent = b.displayName;
+                    const meta = document.createElement('div');
+                    meta.className = 'small text-muted';
+                    const thresholds = (b.thresholds || []).map((t) => `${t.percent}%`).join(', ');
+                    meta.textContent = `Cap: ${fmt(b.amount, b.currency)}${thresholds ? ' · alerts at ' + thresholds : ''}`;
+                    li.appendChild(name);
+                    li.appendChild(meta);
+                    ul.appendChild(li);
+                });
+                container.appendChild(ul);
+
+                if (data.spendConfigured && data.spent !== null && data.spent !== undefined) {
+                    const spendCard = document.createElement('div');
+                    spendCard.className = 'mt-4 p-3 bg-light rounded border';
+                    
+                    const header = document.createElement('div');
+                    header.className = 'd-flex justify-content-between align-items-center mb-1';
+                    
+                    const label = document.createElement('span');
+                    label.className = 'fw-semibold small';
+                    label.textContent = 'Month-to-Date Spend';
+                    
+                    const val = document.createElement('span');
+                    val.className = 'fw-bold text-dark';
+                    val.textContent = `$${Number(data.spent).toFixed(4)}`;
+                    
+                    header.appendChild(label);
+                    header.appendChild(val);
+                    spendCard.appendChild(header);
+
+                    const firstBudget = data.budgets[0];
+                    if (firstBudget && firstBudget.amount > 0) {
+                        const pct = (data.spent / firstBudget.amount) * 100;
+                        const pctClamped = Math.min(Math.max(pct, 0), 100);
+                        
+                        let barClass = 'bg-success';
+                        if (pct >= 80 && pct < 100) barClass = 'bg-warning';
+                        if (pct >= 100) barClass = 'bg-danger';
+
+                        const progContainer = document.createElement('div');
+                        progContainer.className = 'progress';
+                        progContainer.style.height = '10px';
+
+                        const progBar = document.createElement('div');
+                        progBar.className = `progress-bar ${barClass}`;
+                        progBar.style.width = `${pctClamped}%`;
+                        progBar.setAttribute('role', 'progressbar');
+                        progBar.setAttribute('aria-valuenow', pctClamped);
+                        progBar.setAttribute('aria-valuemin', '0');
+                        progBar.setAttribute('aria-valuemax', '100');
+
+                        progContainer.appendChild(progBar);
+                        spendCard.appendChild(progContainer);
+
+                        const legend = document.createElement('div');
+                        legend.className = 'd-flex justify-content-between text-muted small mt-1';
+                        legend.style.fontSize = '0.75rem';
+
+                        const zero = document.createElement('span');
+                        zero.textContent = '0%';
+                        const pctText = document.createElement('span');
+                        pctText.textContent = `${pct.toFixed(1)}% of ${firstBudget.displayName}`;
+                        const hundred = document.createElement('span');
+                        hundred.textContent = '100%';
+
+                        legend.appendChild(zero);
+                        legend.appendChild(pctText);
+                        legend.appendChild(hundred);
+                        spendCard.appendChild(legend);
+                    } else {
+                        const noCap = document.createElement('div');
+                        noCap.className = 'text-muted small';
+                        noCap.textContent = 'No budget cap found to display progress.';
+                        spendCard.appendChild(noCap);
+                    }
+                    container.appendChild(spendCard);
+                }
+
+                if (data.spendError) {
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'alert alert-warning p-2 small mt-3 mb-0';
+                    errDiv.textContent = `BigQuery spend lookup failed: ${data.spendError}`;
+                    container.appendChild(errDiv);
+                }
+
+                if (data.dailySpend && Array.isArray(data.dailySpend.days) && data.dailySpend.days.length > 0) {
+                    const days = data.dailySpend.days;
+                    const rawMax = Math.max(...days.map(d => d.spent), 0);
+
+                    const niceCeil = (v) => {
+                        if (v <= 0) return 0.0001;
+                        const mag = Math.pow(10, Math.floor(Math.log10(v)));
+                        const n = v / mag;
+                        let nice;
+                        if (n <= 1) nice = 1;
+                        else if (n <= 2) nice = 2;
+                        else if (n <= 5) nice = 5;
+                        else nice = 10;
+                        return nice * mag;
+                    };
+                    const chartMax = niceCeil(rawMax);
+                    const ticks = [chartMax, chartMax * 0.75, chartMax * 0.5, chartMax * 0.25, 0];
+                    const fmtTick = (v) => {
+                        if (v === 0) return '$0';
+                        if (v >= 0.01) return '$' + v.toFixed(2);
+                        if (v >= 0.0001) return '$' + v.toFixed(4);
+                        return '$' + v.toExponential(1);
+                    };
+
+                    const wrap = document.createElement('div');
+                    wrap.className = 'mt-4';
+
+                    const title = document.createElement('div');
+                    title.className = 'fw-semibold small mb-2';
+                    title.textContent = 'Daily Spend';
+                    wrap.appendChild(title);
+
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.gap = '6px';
+
+                    const yAxis = document.createElement('div');
+                    yAxis.style.display = 'flex';
+                    yAxis.style.flexDirection = 'column';
+                    yAxis.style.justifyContent = 'space-between';
+                    yAxis.style.height = '120px';
+                    yAxis.style.fontSize = '0.65rem';
+                    yAxis.style.color = '#6c757d';
+                    yAxis.style.textAlign = 'right';
+                    yAxis.style.minWidth = '40px';
+                    ticks.forEach((t) => {
+                        const lbl = document.createElement('span');
+                        lbl.style.lineHeight = '1';
+                        lbl.textContent = fmtTick(t);
+                        yAxis.appendChild(lbl);
+                    });
+                    row.appendChild(yAxis);
+
+                    const plotArea = document.createElement('div');
+                    plotArea.style.flex = '1';
+                    plotArea.style.position = 'relative';
+
+                    const grid = document.createElement('div');
+                    grid.style.position = 'absolute';
+                    grid.style.inset = '0';
+                    grid.style.display = 'flex';
+                    grid.style.flexDirection = 'column';
+                    grid.style.justifyContent = 'space-between';
+                    grid.style.pointerEvents = 'none';
+                    ticks.forEach((_, i) => {
+                        const line = document.createElement('div');
+                        line.style.borderTop = `1px ${i === ticks.length - 1 ? 'solid' : 'dashed'} #dee2e6`;
+                        line.style.height = '0';
+                        grid.appendChild(line);
+                    });
+                    plotArea.appendChild(grid);
+
+                    const chart = document.createElement('div');
+                    chart.className = 'daily-spend-chart d-flex align-items-end';
+                    chart.style.height = '120px';
+                    chart.style.gap = '2px';
+                    chart.style.position = 'relative';
+
+                    days.forEach((d) => {
+                        const col = document.createElement('div');
+                        col.className = 'flex-fill';
+                        col.style.height = '100%';
+                        col.style.display = 'flex';
+                        col.style.alignItems = 'flex-end';
+                        col.title = `${d.date}: $${Number(d.spent).toFixed(4)}`;
+
+                        const bar = document.createElement('div');
+                        const h = chartMax > 0 ? Math.max((d.spent / chartMax) * 100, d.spent > 0 ? 2 : 0) : 0;
+                        bar.style.width = '100%';
+                        bar.style.height = `${h}%`;
+                        bar.style.backgroundColor = '#0d6efd';
+                        bar.style.borderRadius = '1px 1px 0 0';
+                        col.appendChild(bar);
+                        chart.appendChild(col);
+                    });
+                    plotArea.appendChild(chart);
+                    row.appendChild(plotArea);
+                    wrap.appendChild(row);
+
+                    const xRow = document.createElement('div');
+                    xRow.style.display = 'flex';
+                    xRow.style.gap = '6px';
+                    xRow.style.marginTop = '4px';
+                    const xSpacer = document.createElement('div');
+                    xSpacer.style.minWidth = '40px';
+                    xRow.appendChild(xSpacer);
+                    const xLabels = document.createElement('div');
+                    xLabels.className = 'd-flex justify-content-between text-muted';
+                    xLabels.style.flex = '1';
+                    xLabels.style.fontSize = '0.65rem';
+                    const xStart = document.createElement('span');
+                    xStart.textContent = days[0].date.slice(5);
+                    xLabels.appendChild(xStart);
+                    if (days.length > 2) {
+                        const xMid = document.createElement('span');
+                        xMid.textContent = days[Math.floor(days.length / 2)].date.slice(5);
+                        xLabels.appendChild(xMid);
+                    }
+                    const xEnd = document.createElement('span');
+                    xEnd.textContent = days[days.length - 1].date.slice(5);
+                    xLabels.appendChild(xEnd);
+                    xRow.appendChild(xLabels);
+                    wrap.appendChild(xRow);
+
+                    container.appendChild(wrap);
+                }
+
+                budgetContent.replaceChildren(container);
+            }
+
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', async () => {
+                    refreshBtn.disabled = true;
+                    refreshBtn.textContent = 'Refreshing…';
+                    try {
+                        const res = await fetch('/admin/cloud/budget', { headers: { Accept: 'application/json' } });
+                        const data = await res.json();
+                        renderBudget(data);
+                    } catch (err) {
+                        budgetContent.textContent = `Refresh failed: ${err.message}`;
+                    } finally {
+                        refreshBtn.disabled = false;
+                        refreshBtn.textContent = 'Refresh';
+                    }
+                });
+            }
+
+            if (deployBtn) {
+                deployBtn.addEventListener('click', async () => {
+                    if (!confirm('Trigger a production deploy now?')) return;
+                    deployBtn.disabled = true;
+                    deployBtn.textContent = 'Triggering…';
+                    deployResult.textContent = '';
+                    try {
+                        const res = await fetch('/admin/cloud/deploy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.ok) {
+                            deployResult.className = 'mt-3 small text-danger';
+                            deployResult.textContent = `Deploy failed: ${data.error || res.statusText}`;
+                        } else {
+                            deployResult.className = 'mt-3 small text-success';
+                            const buildId = data.buildId ? ` (build ${data.buildId})` : '';
+                            deployResult.textContent = `Deploy triggered on branch ${data.branch}${buildId}.`;
+                            if (data.logUrl) {
+                                const a = document.createElement('a');
+                                a.href = data.logUrl;
+                                a.target = '_blank';
+                                a.rel = 'noopener';
+                                a.textContent = ' View build logs →';
+                                deployResult.appendChild(a);
+                            }
+                        }
+                    } catch (err) {
+                        deployResult.className = 'mt-3 small text-danger';
+                        deployResult.textContent = `Deploy failed: ${err.message}`;
+                    } finally {
+                        deployBtn.disabled = false;
+                        deployBtn.textContent = 'Deploy to Production';
+                    }
+                });
+            }
+        });
+    </script>
+
+</body>
+
+</html>
