@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+</head>
+
+
+<body>
+    <div class="container-l pt-1" id="regcont">
+        <div class="row" id="row1">
+            <!-- <div class="col" id="col1"></div> -->
+
+            <div class="col-sm-10 offset-sm-1 col-md-10 offset-md-1 col-lg-10 offset-lg-1 col-xl-8 offset-xl-2 pl-1 pr-1 mt-2 mb-2 border border-dark border-2 align-self-center"
+                id="col2">
+
+                <div class="display-5 text-center ">
+                    <span style="text-decoration: none; color: inherit;">Admin Console <%= year %></span>
+                </div>
+
+                <div class="display-6 fw-bold text-center ">
+
+                </div>
+                <div>
+                    <% const hasRound1Winner=activeGames.some(game=> game.round === 1 && game.winner); %>
+                </div>
+                <nav class="navbar navbar-expand-lg navbar-light bg-light">
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#adminNavbar">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="adminNavbar">
+                        <div class="navbar-nav mx-auto d-flex flex-column flex-lg-row flex-wrap justify-content-center gap-2 mt-3 mt-lg-0">
+                            <% if (typeof isNewTournament !=='undefined' && isNewTournament) { %>
+                                <button class="btn btn-outline-primary mb-2 text-start" type="button"
+                                    id="toggleCreateTournamentFormBtn">Create Bracket</button>
+                                <% } %>
+                                    <button class="btn btn-outline-secondary mb-2 text-start" type="button"
+                                        id="toggleEditTournamentFormBtn">Edit Tournament</button>
+                                    <button class="btn btn-outline-secondary mb-2 text-start" type="button"
+                                        id="toggleManageEntryFormsBtn">Manage Entry</button>
+                                    <button class="btn btn-outline-info mb-2 text-start" type="button"
+                                        id="toggleEmailSectionBtn">Bracket Emails</button>
+                                    <button class="btn btn-outline-secondary mb-2 text-start" type="button"
+                                        id="toggleManageTeamsBtn">Manage
+                                        Teams</button>
+                                    <a href="/conferences" class="btn btn-outline-secondary mb-2 text-start">Manage
+                                        Conferences</a>
+                                    <button class="btn btn-outline-secondary mb-2 text-start" type="button"
+                                        id="toggleNewGroupFormBtn">New
+                                        Group</button>
+                                    <form action="/updateTotalPoints" method="post" class="d-inline">
+                                        <input type="hidden" name="year" value="<%= year %>">
+                                        <button class="btn btn-outline-secondary mb-2 text-start" type="submit">Update
+                                            Total
+                                            Points</button>
+                                    </form>
+
+                                    <form id="clearCacheForm" class="d-inline">
+                                        <input type="hidden" name="year" value="<%= year %>">
+                                        <button class="btn btn-outline-danger mb-2 text-start clear-cache-btn"
+                                            type="button" id="clearCacheBtn">Clear Cache</button>
+                                    </form>
+                                    <button class="btn btn-outline-warning mb-2 text-start"
+                                        type="button" id="espnPollBtn">Poll ESPN</button>
+                                    <button id="pwaRefreshBtn" class="btn btn-outline-secondary mb-2 text-start d-none"
+                                        onclick="location.reload()" title="Refresh page">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                                            viewBox="0 0 16 16">
+                                            <path fill-rule="evenodd"
+                                                d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+                                            <path
+                                                d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+                                        </svg>
+                                        Refresh
+                                    </button>
+                                    <script>
+                                        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+                                            document.getElementById('pwaRefreshBtn').classList.remove('d-none');
+                                        }
+                                    </script>
+                        </div>
+                    </div>
+                </nav>
+
+                <div id="espnPollResults" class="container pt-1 pb-1" style="display:none;">
+                    <div class="row">
+                        <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                            <div id="espnPollResultsInner" class="border rounded p-2" style="font-size: 0.9rem;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <form action="/changeYear" method="post" id="updateYearForm">
+                    <div class="container pt-1 pb-1" id="innercontViewYear">
+                        <div class="row">
+                            <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                <div class="input-group mb-2">
+                                    <input type="text" name="year" class="form-control form-control-lg" value="<%= year %>" aria-label="Year">
+                                    <div class="input-group-append" >
+                                        <button class="button btn btn-outline-secondary ms-2"
+                                            type="submit">Update Year</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <form action="/editTournament" method="post" id="editTournamentForm">
+                    <div class="container pt-1 pb-1" id="innercontEditTournament">
+                        <div class="row">
+                            <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                <div class="input-group mb-2">
+                                    <input type="hidden" name="year" value="<%= year %>">
+                                    <div class="input-group-append" >
+                                        <button class="button btn btn-outline-secondary ms-2" type="submit" <%-
+                                            hasRound1Winner ? 'disabled' : '' %>>Edit <%= year %> Tournament</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <% if (typeof isNewTournament !=='undefined' && isNewTournament) { %>
+                    <form action="/setupNewTourney" method="post" id="createTournamentForm" style="display: none;">
+                        <div class="container pt-1 pb-1" id="innercontCreateTournament">
+                            <div class="row">
+                                <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                    <div class="input-group mb-2">
+                                        <input type="hidden" name="year" value="<%= year %>">
+                                        <div class="input-group-append" >
+                                            <button class="button btn btn-outline-primary ms-2" type="submit">Go
+                                                to Add New Tourney for <%= year %></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                    <% } %>
+
+                        <form action="/viewEntry" method="get" id="updateEntryForm">
+                            <div class="container pt-1 pb-1" id="innercontEntryID">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <input type="hidden" name="year" value="<%= year %>">
+                                            <input type="hidden" name="fromAdmin" value="true">
+                                            <input type="text" name="entryId" class="form-control form-control-lg"
+                                                placeholder="Enter Entry ID to Edit" aria-label="Entry ID">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    type="submit">Review</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <form id="findEntryForm"> <!-- Removed action and method -->
+                            <div class="container pt-1 pb-1" id="innercontFindID">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <input type="hidden" name="year" value="<%= year %>">
+                                            <input type="text" name="entryName" class="form-control form-control-lg"
+                                                placeholder="Lookup Entry" aria-label="Entry name">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    id="findEntryBtn" type="button">Find</button>
+                                                <!-- Changed type to button -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div id="unpaidEntriesContainer" style="display: none;">
+                            <div class="container pt-1 pb-1">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="d-grid">
+                                            <input type="hidden" id="unpaidYear" value="<%= year %>">
+                                            <button class="btn btn-outline-warning btn-lg" type="button" id="unpaidEntriesBtn">
+                                                Show Unpaid (Bob)
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="emailSectionContainer" style="display: none;">
+                            <div class="container pt-1 pb-1">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="d-grid">
+                                            <input type="hidden" id="emailYear" value="<%= year %>">
+                                            <button class="btn btn-outline-info btn-lg" type="button" id="loadUnsentEmailsBtn">
+                                                Check Unsent Bracket Emails
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <form action="/newEntry" method="post" id="newEntryForm" style="display: none;">
+                            <div class="container pt-1 pb-1" id="innercontNewEntry">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <input type="text" name="game" class="form-control form-control-lg"
+                                                placeholder="Enter group name for new entry" aria-label="Group name">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    type="submit">Add</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <form action="/newGroup" method="post" id="newGroupForm" style="display: none;">
+                            <div class="container pt-1 pb-1" id="innercontNewGroup">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <input type="hidden" name="year" value="<%= year %>">
+                                            <input type="text" name="groupName" class="form-control form-control-lg"
+                                                placeholder="Enter new group name" aria-label="Group name">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    type="submit">Add</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <form action="/viewTeam" method="get" id="reviewTeamForm" style="display: none;">
+                            <div class="container pt-1 pb-1" id="innercontReviewTeam">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <input type="text" name="teamId" class="form-control form-control-lg"
+                                                placeholder="Enter School ID to Review" aria-label="School ID">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    type="submit">Review</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <form id="findTeamForm" style="display: none;">
+                            <div class="container pt-1 pb-1" id="innercontFindTeam">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <input type="text" name="teamName" class="form-control form-control-lg"
+                                                placeholder="Lookup School" aria-label="School name">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    id="findTeamBtn" type="button">Find</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+
+                        <form action="/addTeamPage" method="get" id="addTeamForm" style="display: none;">
+                            <div class="container pt-1 pb-1" id="innercontAddTeam">
+                                <div class="row">
+                                    <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
+                                        <div class="input-group mb-2">
+                                            <div class="input-group-append" >
+                                                <button class="button btn btn-outline-secondary ms-2"
+                                                    type="submit" id="addTeamBtn">Add
+                                                    New Team</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+            </div>
+
+            <!-- desktop table view  -->
+            <div class="mt-2 mb-3 d-none d-lg-block w-100">
+                <div class="table-responsive table-scroll w-100" data-mdb-perfect-scrollbar="true"
+                                style="position: relative; max-height: 75vh">
+                                <table class="table table-striped mb-0 w-100">
+                                    <thead>
+                                        <tr>
+                                            <th colspan="3" class="text-center border-secondary border-2">Game</th>
+                                            <th colspan="3" class="text-center border-secondary border-2">Team 1</th>
+                                            <th colspan="3" class="text-center border-secondary border-2">Team 2</th>
+                                            <th colspan="2" class="text-center border-secondary border-2">Next Game</th>
+                                            <th colspan="4" class="text-center border-secondary border-2">Update Info
+                                            </th>
+                                        </tr>
+                                        <tr>
+                                            <th class="border-secondary border-2">GameID</th>
+                                            <th class="border-secondary border-2">Round</th>
+                                            <th class="border-secondary border-2">Region</th>
+                                            <th class="border-secondary border-2">Seed</th>
+                                            <th class="border-secondary border-2">Name</th>
+                                            <th class="border-secondary border-2">ID</th>
+                                            <th class="border-secondary border-2">Seed</th>
+                                            <th class="border-secondary border-2">Name</th>
+                                            <th class="border-secondary border-2">ID</th>
+                                            <th class="border-secondary border-2">ID</th>
+                                            <th class="border-secondary border-2">Spot</th>
+                                            <th class="border-secondary border-2">Winner</th>
+                                            <th class="border-secondary border-2">Button</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% activeGames.forEach(group=> { %>
+                                            <tr class="game-row" data-game-id="<%= group.gameID %>"
+                                                data-round="<%= group.round %>" data-region="<%= group.regionName %>"
+                                                data-team1-id="<%= group.team1ID %>"
+                                                data-team1-name="<%= group.team1Name %>"
+                                                data-team2-id="<%= group.team2ID %>"
+                                                data-team2-name="<%= group.team2Name %>"
+                                                data-next-game-id="<%= group.nextGameID %>"
+                                                data-next-game-spot="<%= group.nextGameSpot %>">
+                                                <td>
+                                                    <%= group.gameID %>
+                                                </td>
+                                                <td class="round-display">
+                                                    <%= group.round %>
+                                                </td>
+                                                <td>
+                                                    <%= group.regionName %>
+                                                </td>
+                                                <td>
+                                                    <%= group.team1Seed %>
+                                                </td>
+                                                <td>
+                                                    <%= group.team1Name %>
+                                                </td>
+                                                <td>
+                                                    <%= group.team1ID %>
+                                                </td>
+                                                <td>
+                                                    <%= group.team2Seed %>
+                                                </td>
+                                                <td>
+                                                    <%= group.team2Name %>
+                                                </td>
+                                                <td>
+                                                    <%= group.team2ID %>
+                                                </td>
+                                                <td class="next-game-display">
+                                                    <%= group.nextGameID %>
+                                                </td>
+                                                <td>
+                                                    <%= group.nextGameSpot %>
+                                                </td>
+                                                <td>
+                                                    <span class="winner-name-display">
+                                                        <%= group.winnerName %>
+                                                    </span>
+                                                    <select class="form-select winner-select">
+                                                        <option value="<%= group.team1ID %>">
+                                                            <%= group.team1Name %>
+                                                        </option>
+                                                        <option value="<%= group.team2ID %>">
+                                                            <%= group.team2Name %>
+                                                        </option>
+                                                    </select>
+                                                </td>
+                                                <td><button class="btn btn-primary submit-game-result">Submit</button>
+                                                    <button class="btn btn-primary undo-game-result">Undo</button>
+                                                </td>
+                                            </tr>
+                                            <% }); %>
+                                    </tbody>
+                                </table>
+                </div>
+            </div>
+
+            <!-- mobile card view -->
+            <div class="d-lg-none mt-3 px-2 pb-4">
+                <% activeGames.forEach(group=> { %>
+                    <div class="card mb-3 game-row shadow-sm" data-game-id="<%= group.gameID %>"
+                        data-round="<%= group.round %>" data-region="<%= group.regionName %>"
+                        data-team1-id="<%= group.team1ID %>" data-team1-name="<%= group.team1Name %>"
+                        data-team2-id="<%= group.team2ID %>" data-team2-name="<%= group.team2Name %>"
+                        data-next-game-id="<%= group.nextGameID %>" data-next-game-spot="<%= group.nextGameSpot %>">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                            <span class="fw-bold round-display">Round <%= group.round %></span>
+                            <span class="badge bg-secondary">
+                                <%= group.regionName %>
+                            </span>
+                            <span class="d-none next-game-display">
+                                <%= group.nextGameID %>
+                            </span>
+                        </div>
+                        <div class="card-body py-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="text-center" style="width: 45%;">
+                                    <span class="badge bg-light text-dark mb-1 border">
+                                        <%= group.team1Seed %>
+                                    </span>
+                                    <h6 class="mb-0 text-truncate">
+                                        <%= group.team1Name %>
+                                    </h6>
+                                </div>
+                                <div class="text-muted small fw-bold">VS</div>
+                                <div class="text-center" style="width: 45%;">
+                                    <span class="badge bg-light text-dark mb-1 border">
+                                        <%= group.team2Seed %>
+                                    </span>
+                                    <h6 class="mb-0 text-truncate">
+                                        <%= group.team2Name %>
+                                    </h6>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <div class="mb-2 text-center text-success fw-bold winner-name-display-container">
+                                    <span class="winner-name-display">
+                                        <%= group.winnerName %>
+                                    </span>
+                                </div>
+                                <select class="form-select mb-2 winner-select">
+                                    <option value="<%= group.team1ID %>">
+                                        <%= group.team1Name %>
+                                    </option>
+                                    <option value="<%= group.team2ID %>">
+                                        <%= group.team2Name %>
+                                    </option>
+                                </select>
+                                <div class="d-flex gap-2 justify-content-center mt-2">
+                                    <button class="btn btn-primary w-100 submit-game-result">Submit Winner</button>
+                                    <button class="btn btn-warning w-100 undo-game-result">Undo Winner</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <% }); %>
+            </div>
+        </div>
+        </section>
+    </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
+    </div>
+
+    <!-- Find Entry Modal -->
+    <div class="modal fade" id="findEntryModal" tabindex="-1" aria-labelledby="findEntryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="findEntryModalLabel">Entry Search Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="findEntryModalBody">
+                    <!-- Results will be injected here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unpaid Entries Modal -->
+    <div class="modal fade" id="unpaidEntriesModal" tabindex="-1" aria-labelledby="unpaidEntriesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="unpaidEntriesModalLabel">Unpaid Entries — Bob</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="unpaidEntriesModalBody">
+                    <!-- Results will be injected here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bracket Emails Modal -->
+    <div class="modal fade" id="bracketEmailsModal" tabindex="-1" aria-labelledby="bracketEmailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bracketEmailsModalLabel">Bracket Emails</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="bracketEmailsModalBody">
+                    <!-- Results will be injected here -->
+                </div>
+                <div class="modal-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <button type="button" class="btn btn-outline-secondary me-2" id="copyEmailDataBtn" style="display:none;">
+                            Copy Entry Data
+                        </button>
+                        <button type="button" class="btn btn-success" id="markAllSentBtn" style="display:none;">
+                            Mark All as Sent
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Find Team Modal -->
+    <div class="modal fade" id="findTeamModal" tabindex="-1" aria-labelledby="findTeamModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="findTeamModalLabel">School Search Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="findTeamModalBody">
+                    <!-- Results will be injected here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggleEditTournamentFormBtn = document.getElementById('toggleEditTournamentFormBtn'); // Edit Tournament
+            const toggleManageEntryFormsBtn = document.getElementById('toggleManageEntryFormsBtn'); // Manage Entry
+            const toggleManageTeamsBtn = document.getElementById('toggleManageTeamsBtn'); // Manage Teams
+            const toggleNewGroupFormBtn = document.getElementById('toggleNewGroupFormBtn'); // New Group
+            const toggleCreateTournamentFormBtn = document.getElementById('toggleCreateTournamentFormBtn'); // Create Bracket
+            const updateYearForm = document.getElementById('updateYearForm'); // Update Year Form
+            const editTournamentForm = document.getElementById('editTournamentForm'); // Edit Tournament Form
+            const createTournamentForm = document.getElementById('createTournamentForm'); // Create Tournament Form
+            const updateEntryForm = document.getElementById('updateEntryForm'); // Update Entry Form
+            const findEntryForm = document.getElementById('findEntryForm'); // Find Entry Form
+            const newEntryForm = document.getElementById('newEntryForm'); // New Entry Form
+            const unpaidEntriesContainer = document.getElementById('unpaidEntriesContainer'); // Unpaid Entries Button
+            const emailSectionContainer = document.getElementById('emailSectionContainer'); // Bracket Emails Button
+            const toggleEmailSectionBtn = document.getElementById('toggleEmailSectionBtn'); // Bracket Emails Nav Button
+            const newGroupForm = document.getElementById('newGroupForm'); // New Group Form
+            const reviewTeamForm = document.getElementById('reviewTeamForm');
+            const findTeamForm = document.getElementById('findTeamForm');
+            const addTeamForm = document.getElementById('addTeamForm');
+            const clearCacheBtn = document.querySelector('.clear-cache-btn');
+            const clearCacheForm = document.getElementById('clearCacheForm');
+
+            const editTournamentForms = [updateYearForm, editTournamentForm];
+            const manageEntryForms = [updateEntryForm, findEntryForm, newEntryForm, unpaidEntriesContainer];
+            const manageTeamsForms = [reviewTeamForm, findTeamForm, addTeamForm];
+
+            // Helper to hide a form or an array of forms
+            const hideFormGroup = (group) => {
+                if (Array.isArray(group)) {
+                    group.forEach(form => { if (form) form.style.display = 'none'; });
+                } else if (group) {
+                    group.style.display = 'none';
+                }
+            };
+
+            // Initially hide all toggleable forms
+            hideFormGroup(editTournamentForms);
+            hideFormGroup(manageEntryForms);
+            hideFormGroup(manageTeamsForms);
+            hideFormGroup(newGroupForm);
+
+            // Generic function to create a toggle listener for mutually exclusive sections
+            const createToggleListener = (button, sectionToToggle, otherSections) => {
+                if (!button || (Array.isArray(sectionToToggle) ? !sectionToToggle.every(f => f) : !sectionToToggle)) {
+                    return;
+                }
+                button.addEventListener('click', () => {
+                    // Check the current visibility of the section we want to toggle
+                    const isHidden = Array.isArray(sectionToToggle)
+                        ? sectionToToggle[0].style.display === 'none'
+                        : sectionToToggle.style.display === 'none';
+
+                    // Hide all other sections first
+                    otherSections.forEach(hideFormGroup);
+
+                    // Then, toggle the target section
+                    const newDisplay = isHidden ? 'block' : 'none';
+                    if (Array.isArray(sectionToToggle)) {
+                        sectionToToggle.forEach(form => form.style.display = newDisplay);
+                    } else {
+                        sectionToToggle.style.display = newDisplay;
+                    }
+                });
+            };
+
+            // Setup listeners for each button to make them mutually exclusive
+            createToggleListener(toggleEditTournamentFormBtn, editTournamentForms, [manageEntryForms, manageTeamsForms, newGroupForm, createTournamentForm, emailSectionContainer]);
+            createToggleListener(toggleManageEntryFormsBtn, manageEntryForms, [editTournamentForms, manageTeamsForms, newGroupForm, createTournamentForm, emailSectionContainer]);
+            createToggleListener(toggleManageTeamsBtn, manageTeamsForms, [editTournamentForms, manageEntryForms, newGroupForm, createTournamentForm, emailSectionContainer]);
+            createToggleListener(toggleNewGroupFormBtn, newGroupForm, [editTournamentForms, manageEntryForms, manageTeamsForms, createTournamentForm, emailSectionContainer]);
+            if (toggleCreateTournamentFormBtn) {
+                createToggleListener(toggleCreateTournamentFormBtn, createTournamentForm, [editTournamentForms, manageEntryForms, manageTeamsForms, newGroupForm, emailSectionContainer]);
+            }
+            if (toggleEmailSectionBtn) {
+                createToggleListener(toggleEmailSectionBtn, emailSectionContainer, [editTournamentForms, manageEntryForms, manageTeamsForms, newGroupForm, createTournamentForm]);
+            }
+
+            const findEntryBtn = document.getElementById('findEntryBtn');
+            if (findEntryBtn) {
+                findEntryBtn.addEventListener('click', async () => {
+                    const form = document.getElementById('findEntryForm');
+                    const entryName = form.querySelector('input[name="entryName"]').value;
+                    const year = form.querySelector('input[name="year"]').value;
+
+                    if (!entryName) {
+                        alert('Please enter an entry name to search for.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/find-entry?year=${year}&name=${encodeURIComponent(entryName)}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch entry data.');
+                        }
+                        const entries = await response.json();
+
+                        const modalBody = document.getElementById('findEntryModalBody');
+                        modalBody.innerHTML = ''; // Clear previous results
+
+                        if (entries.length === 0) {
+                            modalBody.innerHTML = '<p>No entries found matching that name.</p>';
+                        } else {
+                            entries.forEach(entry => {
+                                const entryDiv = document.createElement('div');
+                                entryDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
+                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
+                                    <strong>Person:</strong> ${esc(entry.person)}<br>
+                                    <strong>Email:</strong> ${esc(entry.email)}<br>
+                                    <strong>Group:</strong> ${esc((entry.groups || [entry.group]).filter(Boolean).join(', '))}<br>
+                                    <strong>Paid:</strong> ${entry.payByCheck ? 'Paid by Check' : (entry.hasPaid ? 'Yes' : 'No')}${entry.paymentNote ? ' — ' + esc(entry.paymentNote) : ''}<br>
+                                    <strong>Year:</strong> ${esc(String(entry.year ?? year))}
+                                </p><hr>`;
+                                modalBody.appendChild(entryDiv);
+                            });
+                        }
+
+                        const findEntryModal = new bootstrap.Modal(document.getElementById('findEntryModal'));
+                        findEntryModal.show();
+
+                    } catch (error) {
+                        console.error('Error finding entry:', error);
+                        alert('An error occurred while searching for the entry.');
+                    }
+                });
+            }
+
+            const unpaidEntriesBtn = document.getElementById('unpaidEntriesBtn');
+            if (unpaidEntriesBtn) {
+                unpaidEntriesBtn.addEventListener('click', async () => {
+                    const year = document.getElementById('unpaidYear').value;
+
+                    try {
+                        const response = await fetch(`/unpaid-entries?year=${year}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch unpaid entries.');
+                        }
+                        const entries = await response.json();
+
+                        const modalBody = document.getElementById('unpaidEntriesModalBody');
+                        modalBody.innerHTML = '';
+
+                        if (entries.length === 0) {
+                            modalBody.innerHTML = '<p>Everyone in Bob has paid!</p>';
+                        } else {
+                            entries.forEach(entry => {
+                                const entryDiv = document.createElement('div');
+                                entryDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
+                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
+                                    <strong>Person:</strong> ${esc(entry.person)}<br>
+                                    <strong>Group:</strong> ${esc((entry.groups || []).join(', '))}
+                                </p><hr>`;
+                                modalBody.appendChild(entryDiv);
+                            });
+                        }
+
+                        const unpaidEntriesModal = new bootstrap.Modal(document.getElementById('unpaidEntriesModal'));
+                        unpaidEntriesModal.show();
+
+                    } catch (error) {
+                        console.error('Error fetching unpaid entries:', error);
+                        alert('An error occurred while fetching unpaid entries.');
+                    }
+                });
+            }
+
+            if (clearCacheBtn) {
+                clearCacheBtn.addEventListener('click', async () => {
+                    if (confirm("Are you sure you want to clear the cache?")) {
+                        const formData = new FormData(clearCacheForm);
+                        const data = Object.fromEntries(formData.entries());
+                        const jsonData = JSON.stringify(data);
+
+                        try {
+                            const response = await fetch('/clearCache', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                },
+                                body: jsonData
+                            });
+                            if (response.ok) {
+                                const responseData = await response.json();
+                                alert(responseData);
+                                window.location.href = '/updates';
+                            } else {
+                                alert('Failed to clear cache. Server error.');
+                            }
+                        } catch (error) {
+                            console.error("Error clearing cache:", error);
+                            alert('An error occurred while clearing the cache.');
+                        }
+                    }
+                });
+            }
+
+            const espnPollBtn = document.getElementById('espnPollBtn');
+            if (espnPollBtn) {
+                espnPollBtn.addEventListener('click', async () => {
+                    const resultsWrapper = document.getElementById('espnPollResults');
+                    const resultsInner = document.getElementById('espnPollResultsInner');
+                    espnPollBtn.disabled = true;
+                    espnPollBtn.textContent = 'Polling...';
+                    resultsWrapper.style.display = 'none';
+
+                    try {
+                        const response = await fetch('/admin/trigger-espn-poll', { method: 'POST', headers: { 'Accept': 'application/json' } });
+                        const data = await response.json();
+
+                        let html = '';
+                        if (!response.ok) {
+                            html = `<span class="text-danger">Error: ${esc(data.error || 'Unknown error')}</span>`;
+                        } else if (data.games.length === 0) {
+                            html = '<span class="text-muted">No new completed games found.</span>';
+                        } else {
+                            const roundLabel = (r) => ['','R1','R2','Sweet 16','Elite 8','Final Four','Championship'][r] || `R${r}`;
+                            html = '<strong>ESPN says these games are done:</strong><ul class="mb-1 mt-1 list-unstyled">';
+                            data.games.forEach((g, i) => {
+                                html += `<li class="d-flex align-items-center gap-2 mb-1">
+                                    <span>${esc(roundLabel(g.round))} · Game ${esc(g.gameID)}: <strong>${esc(g.winnerDisplayName)}</strong> wins</span>
+                                    <button class="btn btn-sm btn-success espn-submit-btn"
+                                        data-game-id="${esc(g.gameID)}"
+                                        data-round="${esc(g.round)}"
+                                        data-winner-id="${esc(g.winnerSID)}"
+                                        data-winner-name="${esc(g.winnerDisplayName)}"
+                                        data-team1-id="${esc(g.team1ID)}"
+                                        data-team2-id="${esc(g.team2ID)}"
+                                        data-next-game-id="${esc(g.nextGameID ?? '')}"
+                                        data-next-game-spot="${esc(g.nextGameSpot ?? '')}">Submit</button>
+                                </li>`;
+                            });
+                            html += '</ul>';
+                        }
+                        if (data.unmapped && data.unmapped.length > 0) {
+                            html += `<span class="text-warning">Unmapped teams (update espnTeamMap.json): ${data.unmapped.map(esc).join(', ')}</span>`;
+                        }
+
+                        resultsInner.innerHTML = html;
+                        resultsWrapper.style.display = 'block';
+                    } catch (error) {
+                        resultsInner.innerHTML = '<span class="text-danger">Failed to reach server.</span>';
+                        resultsWrapper.style.display = 'block';
+                    } finally {
+                        espnPollBtn.disabled = false;
+                        espnPollBtn.textContent = 'Poll ESPN';
+                    }
+                });
+            }
+
+            // ── Bracket Emails ──────────────────────────────────────────────
+            let unsentEmailData = [];
+
+            const loadUnsentEmailsBtn = document.getElementById('loadUnsentEmailsBtn');
+            if (loadUnsentEmailsBtn) {
+                loadUnsentEmailsBtn.addEventListener('click', async () => {
+                    const year = document.getElementById('emailYear').value;
+                    loadUnsentEmailsBtn.disabled = true;
+                    loadUnsentEmailsBtn.textContent = 'Loading...';
+
+                    try {
+                        const response = await fetch(`/admin/unsent-emails?year=${year}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) throw new Error('Failed to fetch unsent emails.');
+                        const data = await response.json();
+                        unsentEmailData = data.data.entries || [];
+
+                        const modalBody = document.getElementById('bracketEmailsModalBody');
+                        const copyBtn = document.getElementById('copyEmailDataBtn');
+                        const markSentBtn = document.getElementById('markAllSentBtn');
+
+                        if (unsentEmailData.length === 0) {
+                            modalBody.innerHTML = '<p class="text-success mb-0">✓ All entries have been emailed!</p>';
+                            copyBtn.style.display = 'none';
+                            markSentBtn.style.display = 'none';
+                        } else {
+                            let html = `<p class="mb-2"><strong>${unsentEmailData.length}</strong> entr${unsentEmailData.length === 1 ? 'y needs' : 'ies need'} a bracket email:</p>`;
+                            html += '<div class="list-group">';
+                            unsentEmailData.forEach(entry => {
+                                const picks = (entry.pickNames || []).join(', ') || '—';
+                                html += `
+                                    <div class="list-group-item py-2">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <strong>${esc(entry.person)}</strong>
+                                                <span class="text-muted ms-2">${esc(entry.teamName)}</span>
+                                            </div>
+                                            <small class="text-muted ms-2">${esc(entry.email || '—')}</small>
+                                        </div>
+                                        <div class="mt-1 text-muted" style="font-size:0.82rem;">
+                                            Picks: ${esc(picks)}
+                                        </div>
+                                    </div>`;
+                            });
+                            html += '</div>';
+                            modalBody.innerHTML = html;
+                            copyBtn.style.display = 'inline-block';
+                            markSentBtn.style.display = 'inline-block';
+                        }
+
+                        const modal = new bootstrap.Modal(document.getElementById('bracketEmailsModal'));
+                        modal.show();
+
+                    } catch (err) {
+                        alert('Error loading unsent emails: ' + err.message);
+                    } finally {
+                        loadUnsentEmailsBtn.disabled = false;
+                        loadUnsentEmailsBtn.textContent = 'Check Unsent Bracket Emails';
+                    }
+                });
+            }
+
+            const copyEmailDataBtn = document.getElementById('copyEmailDataBtn');
+            if (copyEmailDataBtn) {
+                copyEmailDataBtn.addEventListener('click', () => {
+                    const text = JSON.stringify(unsentEmailData, null, 2);
+                    navigator.clipboard.writeText(text).then(() => {
+                        copyEmailDataBtn.textContent = 'Copied!';
+                        setTimeout(() => { copyEmailDataBtn.textContent = 'Copy Entry Data'; }, 2000);
+                    }).catch(() => {
+                        alert('Copy failed — paste this manually:\n\n' + text);
+                    });
+                });
+            }
+
+            const markAllSentBtn = document.getElementById('markAllSentBtn');
+            if (markAllSentBtn) {
+                markAllSentBtn.addEventListener('click', async () => {
+                    if (!unsentEmailData.length) return;
+                    const year = document.getElementById('emailYear').value;
+                    const entryIds = unsentEmailData.map(e => e.id);
+
+                    markAllSentBtn.disabled = true;
+                    markAllSentBtn.textContent = 'Marking...';
+
+                    try {
+                        const response = await fetch('/admin/mark-emails-sent', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ year: Number(year), entryIds })
+                        });
+                        if (!response.ok) throw new Error('Failed to mark emails sent.');
+                        const result = await response.json();
+
+                        document.getElementById('bracketEmailsModalBody').innerHTML =
+                            `<p class="text-success mb-0">✓ Marked <strong>${result.data.marked}</strong> entr${result.data.marked === 1 ? 'y' : 'ies'} as sent.</p>`;
+                        copyEmailDataBtn.style.display = 'none';
+                        markAllSentBtn.style.display = 'none';
+                        unsentEmailData = [];
+
+                    } catch (err) {
+                        alert('Error marking emails as sent: ' + err.message);
+                        markAllSentBtn.disabled = false;
+                        markAllSentBtn.textContent = 'Mark All as Sent';
+                    }
+                });
+            }
+            // ── End Bracket Emails ──────────────────────────────────────────
+
+            document.getElementById('espnPollResultsInner').addEventListener('click', async (e) => {
+                const btn = e.target.closest('.espn-submit-btn');
+                if (!btn) return;
+
+                btn.disabled = true;
+                btn.textContent = 'Submitting...';
+
+                const gameData = {
+                    gameID: btn.dataset.gameId,
+                    round: btn.dataset.round,
+                    winnerID: btn.dataset.winnerId,
+                    winnerName: btn.dataset.winnerName,
+                    team1ID: btn.dataset.team1Id,
+                    team2ID: btn.dataset.team2Id,
+                    nextGameID: btn.dataset.nextGameId,
+                    nextGameSpot: btn.dataset.nextGameSpot,
+                    year: currentYear
+                };
+
+                try {
+                    const response = await fetch('/updateWinner', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(gameData)
+                    });
+                    if (response.ok) {
+                        btn.textContent = 'Done';
+                        btn.classList.replace('btn-success', 'btn-secondary');
+                    } else {
+                        btn.textContent = 'Error';
+                        btn.classList.replace('btn-success', 'btn-danger');
+                        btn.disabled = false;
+                    }
+                } catch (error) {
+                    btn.textContent = 'Error';
+                    btn.classList.replace('btn-success', 'btn-danger');
+                    btn.disabled = false;
+                }
+            });
+
+            const findTeamBtn = document.getElementById('findTeamBtn');
+            if (findTeamBtn) {
+                findTeamBtn.addEventListener('click', async () => {
+                    const form = document.getElementById('findTeamForm');
+                    const teamName = form.querySelector('input[name="teamName"]').value;
+
+                    if (!teamName) {
+                        alert('Please enter a school name to search for.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/find-team?name=${encodeURIComponent(teamName)}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch school data.');
+                        }
+                        const teams = await response.json();
+
+                        const modalBody = document.getElementById('findTeamModalBody');
+                        modalBody.innerHTML = ''; // Clear previous results
+
+                        if (teams.length === 0) {
+                            modalBody.innerHTML = '<p>No schools found matching that name.</p>';
+                        } else {
+                            teams.forEach(team => {
+                                const teamDiv = document.createElement('div');
+                                teamDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewTeam?teamId=${esc(String(team.sid))}">${esc(String(team.sid))}</a><br>
+                                    <strong>Name:</strong> ${esc(team.name)}<br>
+                                    <strong>Mascot:</strong> ${esc(team.mascot)}<br>
+                                    <strong>Short Name:</strong> ${esc(team.nameNick)}<br>
+                                    <strong>Conference ID:</strong> ${esc(String(team.confID))}
+                                </p><hr>`;
+                                modalBody.appendChild(teamDiv);
+                            });
+                        }
+
+                        const findTeamModal = new bootstrap.Modal(document.getElementById('findTeamModal'));
+                        findTeamModal.show();
+
+                    } catch (error) {
+                        console.error('Error finding team:', error);
+                        alert('An error occurred while searching for the school.');
+                    }
+                });
+            }
+
+            const gameRows = document.querySelectorAll('.game-row'); // Get all game rows (desktop and mobile)
+            const yearInputElement = document.querySelector('input[name="year"]');
+            const currentYear = yearInputElement.value; // Get the current year
+            //console.log('Current Year:', currentYear);
+
+            // Find the maximum round number
+            let maxRound = 0;
+            gameRows.forEach(row => {
+                const roundText = row.querySelector('.round-display').textContent.replace('Round ', '').trim();
+                const round = parseInt(roundText);
+                if (round > maxRound) {
+                    maxRound = round;
+                }
+            });
+
+            const applyStripedStyling = () => {
+                const visibleRows = Array.from(document.querySelectorAll('.table tbody tr'))
+                    .filter(row => row.style.display !== 'none');
+
+                visibleRows.forEach((row, index) => {
+                    if (index % 2 === 0) {
+                        row.classList.add('table-striped');
+                        row.classList.remove('table-secondary');
+                    } else {
+                        row.classList.remove('table-striped');
+                        row.classList.add('table-secondary');
+                    }
+                });
+            };
+            applyStripedStyling();
+
+            // Filter rows to only show the latest and previous rounds
+            // Filter rows based on round and next game winner
+            gameRows.forEach((row, index) => {
+                const roundText = row.querySelector('.round-display').textContent.replace('Round ', '').trim();
+                const round = parseInt(roundText);
+                const nextGameID = row.dataset.nextGameId || '';
+                const winnerNameSpan = row.querySelector('.winner-name-display');
+                const winnerCellName = winnerNameSpan ? winnerNameSpan.textContent.trim() : '';
+
+                let hideRow = false;
+
+                // Hide if not maxRound or maxRound - 1
+                if (round !== maxRound && round !== maxRound - 1) {
+                    hideRow = true;
+                }
+
+                // Additional check for round 1 games
+                // if (maxRound > 1) {
+                // Check if the next game has a winner
+                if (nextGameID !== "") {
+
+                    const nextGameRows = Array.from(gameRows).filter(r => r.dataset.gameId === nextGameID);
+                    if (nextGameRows && nextGameRows.length > 0) {
+                        // Check first instance found
+                        const nextGameRow = nextGameRows[0];
+                        const nextGameWinnerSpan = nextGameRow.querySelector('.winner-name-display');
+                        const nextGameWinnerName = nextGameWinnerSpan ? nextGameWinnerSpan.textContent.trim() : '';
+                        if (nextGameWinnerName !== "") {
+                            hideRow = true;
+                        }
+                    }
+                }
+                //}
+                //hideRow = false; // TO SHOW ALL IN DEBUG MODE
+                if (hideRow) {
+                    if (row.classList.contains('d-flex') || row.classList.contains('card')) { // card view
+                        row.classList.remove('d-flex'); // remove classes that might conflict with 'd-none' below when we use display none
+                        row.style.setProperty('display', 'none', 'important');
+                    } else { // table row
+                        row.style.display = 'none';
+                    }
+                }
+            });
+            applyStripedStyling();
+
+            gameRows.forEach((row, index) => {
+                const submitButton = row.querySelector('.submit-game-result');
+                const undoButton = row.querySelector('.undo-game-result'); // Select the undo button
+                const formSelect = row.querySelector('.winner-select');
+
+                const gameID = row.dataset.gameId;
+                const winnerNameSpan = row.querySelector('.winner-name-display'); // Target the span
+                const winnerCellName = winnerNameSpan ? winnerNameSpan.textContent.trim() : ''; // Get the text from the span
+
+                // hide/show controls based on if there's a winner
+                if (winnerCellName !== '') {  // Check if the winner cell is not empty
+                    if (undoButton) undoButton.style.display = 'block';
+                    if (submitButton) submitButton.style.display = 'none';
+                    if (formSelect) formSelect.style.display = 'none';
+                } else {
+                    if (undoButton) undoButton.style.display = 'none';
+                    if (submitButton) submitButton.style.display = 'block';
+                    if (formSelect) formSelect.style.display = 'block';
+                }
+
+                if (submitButton) {
+                    submitButton.addEventListener('click', async () => {
+                        const allButtons = document.querySelectorAll('.game-row button');
+                        allButtons.forEach(button => {
+                            button.disabled = true;
+                        });
+                        submitButton.textContent = 'Loading...'; // Change the button text
+
+                        const roundID = row.dataset.round;
+                        const regionID = row.dataset.region;
+
+                        const team1Name = row.dataset.team1Name;
+                        const team1ID = row.dataset.team1Id;
+
+                        const team2Name = row.dataset.team2Name;
+                        const team2ID = row.dataset.team2Id;
+
+                        const nextGameID = row.dataset.nextGameId;
+                        const nextGameSpot = row.dataset.nextGameSpot;
+
+                        const winnerSelect = row.querySelector('.winner-select');
+                        const winnerID = winnerSelect.value;
+                        const winnerName = winnerSelect.options[winnerSelect.selectedIndex].text;
+
+                        const gameData = {
+                            gameID,
+                            regionID: regionID,
+                            round: roundID,
+                            team1ID: team1ID,
+                            team1Name: team1Name,
+                            team2ID: team2ID,
+                            team2Name: team2Name,
+                            nextGameID: nextGameID,
+                            nextGameSpot: nextGameSpot,
+                            winnerID,
+                            winnerName,
+                            year: currentYear
+                        };
+
+                        const jsonData = JSON.stringify(gameData);
+                        try {
+                            const response = await fetch('/updateWinner', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                },
+                                body: jsonData
+                            });
+                            if (response.ok) {
+                                alert('Game result submitted successfully! The page will refresh on OK.');
+                                window.location.reload();
+                            } else {
+                                alert('Error submitting game result. Please try again.');
+                                document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
+                                submitButton.textContent = 'Submit';
+                            }
+                        } catch (error) {
+                            console.error('Error submitting game result:', error);
+                            alert('Network error submitting game result. Please try again.');
+                            document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
+                            submitButton.textContent = 'Submit';
+                        }
+                    });
+                }
+
+                if (undoButton) {
+                    undoButton.addEventListener('click', async () => {
+                        const allButtons = document.querySelectorAll('.game-row button');
+                        allButtons.forEach(button => {
+                            button.disabled = true;
+                        });
+                        undoButton.textContent = 'Loading...'; // Change the button text
+
+                        const roundID = row.dataset.round;
+                        const regionID = row.dataset.region;
+
+                        const team1Name = row.dataset.team1Name;
+                        const team1ID = row.dataset.team1Id;
+
+                        const team2Name = row.dataset.team2Name;
+                        const team2ID = row.dataset.team2Id;
+
+                        const nextGameID = row.dataset.nextGameId;
+                        const nextGameSpot = row.dataset.nextGameSpot;
+
+                        const winnerSelect = row.querySelector('.winner-select');
+                        const winnerID = winnerSelect.value;
+                        const winnerName = winnerSelect.options[winnerSelect.selectedIndex].text;
+
+                        const gameData = {
+                            gameID,
+                            regionID: regionID,
+                            round: roundID,
+                            team1ID: team1ID,
+                            team1Name: team1Name,
+                            team2ID: team2ID,
+                            team2Name: team2Name,
+                            nextGameID: nextGameID,
+                            nextGameSpot: nextGameSpot,
+                            winnerID,
+                            winnerName,
+                            year: currentYear
+                        };
+
+                        const jsonData = JSON.stringify(gameData);
+                        try {
+                            const response = await fetch('/undoGame', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                },
+                                body: jsonData
+                            });
+                            if (response.ok) {
+                                alert('Game result undone successfully! The page will refresh on OK.');
+                                window.location.reload();
+                            } else {
+                                alert('Error undoing game result. Please try again.');
+                                document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
+                                undoButton.textContent = 'Undo';
+                            }
+                        } catch (error) {
+                            console.error('Error undoing game result:', error);
+                            alert('Network error undoing game result. Please try again.');
+                            document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
+                            undoButton.textContent = 'Undo';
+                        }
+                    });
+                }
+            });
+            //applyStripedStyling();
+        });
+
+
+        function refreshPage() {
+            window.location.reload();
+        }
+
+    </script>
+
+</body>
+<%- include('partials/rulesModal') %>
+
+</html>

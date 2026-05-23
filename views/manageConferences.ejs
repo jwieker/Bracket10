@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+        <title>Manage Conferences</title>
+</head>
+
+<body>
+    <div class="container-lg pt-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="fw-bold mb-0">Conferences</h2>
+            <a href="/addConferencePage" class="btn btn-success">+ Add Conference</a>
+        </div>
+
+        <table class="table table-bordered table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Slug</th>
+                    <th>Name</th>
+                    <th>Short Name</th>
+                    <th>Division</th>
+                    <th>Active</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <% conferences.forEach(conf=> { %>
+                    <tr class="<%= conf.active ? '' : 'table-secondary text-muted' %>">
+                        <td><code><%= conf.slug %></code></td>
+                        <td>
+                            <%= conf.name %>
+                        </td>
+                        <td>
+                            <%= conf.shortName %>
+                        </td>
+                        <td>
+                            <%= conf.division || 'I' %>
+                        </td>
+                        <td>
+                            <% if (conf.active) { %>
+                                <span class="badge bg-success">Active</span>
+                                <% } else { %>
+                                    <span class="badge bg-secondary">Inactive</span>
+                                    <% } %>
+                        </td>
+                        <td>
+                            <a href="/viewConference?slug=<%= conf.slug %>"
+                                class="btn btn-sm btn-outline-primary">Edit</a>
+                        </td>
+                    </tr>
+                    <% }) %>
+            </tbody>
+        </table>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+            <%- include('partials/scripts') %>
+    </div>
+</body>
+
+</html>

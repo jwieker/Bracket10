@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<body>
+    <div class="container-lg pt-3" id="regcont">
+        <div class="row" id="row1">
+            <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
+                id="col2">
+                <div class="mb-2 pt-3 fs-3 fw-bold text-center">
+                    <%= isNew ? "Add School" : "Edit School" %><br>
+                        <% if (!isNew) { %>ID: <%= team.sid %>
+                                <% } %>
+                </div>
+
+                <form action="<%= isNew ? '/addTeam' : '/updateTeam' %>" method="post">
+                    <% if (!isNew) { %>
+                        <input type="hidden" name="sid" value="<%= team.sid %>">
+                        <% } %>
+
+                            <div class="container pb-3">
+                                <label for="inputName">School Name</label>
+                                <input type="text" name="name" class="form-control" id="inputName"
+                                    value="<%= team.name %>" required>
+                            </div>
+                            <div class="container pb-3">
+                                <label for="inputMascot">Mascot</label>
+                                <input type="text" name="mascot" class="form-control" id="inputMascot"
+                                    value="<%= team.mascot %>">
+                            </div>
+                            <div class="container pb-3">
+                                <label for="inputNameNick">Short Name</label>
+                                <input type="text" name="nameNick" class="form-control" id="inputNameNick"
+                                    value="<%= team.nameNick %>">
+                            </div>
+
+                            <!-- Conference dropdown -->
+                            <div class="container pb-3">
+                                <label for="inputConfID">Conference</label>
+                                <select name="confID" class="form-select" id="inputConfID">
+                                    <option value="">— Select Conference —</option>
+                                    <% conferences.forEach(conf=> { %>
+                                        <option value="<%= conf.slug %>" <%=(team.confID===conf.slug) ? 'selected' : ''
+                                            %>>
+                                            <%= conf.name %> (<%= conf.shortName %>)
+                                                    <% if (!conf.active) { %>[inactive]<% } %>
+                                        </option>
+                                        <% }) %>
+                                </select>
+                            </div>
+
+                            <!-- ESPN Data (edit mode only) -->
+                            <% if (!isNew) { %>
+                                <div class="container pb-3">
+                                    <label class="fw-semibold">ESPN Data</label>
+                                    <% const espn = team.espn || {}; %>
+                                    <% if (espn.logoURL) { %>
+                                        <div class="mb-2 d-flex align-items-center gap-3">
+                                            <img src="<%= espn.logoURL %>" alt="Team logo" style="height:48px;width:48px;object-fit:contain;">
+                                            <% if (espn.primaryColor) { %>
+                                                <span class="badge rounded-pill" style="background:#<%= espn.primaryColor %>;color:#fff;font-size:0.85rem;">#<%= espn.primaryColor %></span>
+                                            <% } %>
+                                            <% if (espn.alternateColor) { %>
+                                                <span class="badge rounded-pill" style="background:#<%= espn.alternateColor %>;color:#fff;font-size:0.85rem;">#<%= espn.alternateColor %></span>
+                                            <% } %>
+                                        </div>
+                                    <% } %>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted mb-0">ESPN ID</label>
+                                            <input type="number" name="espn[espnID]" class="form-control form-control-sm" value="<%= espn.espnID ?? '' %>">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted mb-0">Abbreviation</label>
+                                            <input type="text" name="espn[espnAbbreviation]" class="form-control form-control-sm" value="<%= espn.espnAbbreviation ?? '' %>">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted mb-0">ESPN Short Name</label>
+                                            <input type="text" name="espn[espnShortName]" class="form-control form-control-sm" value="<%= espn.espnShortName ?? '' %>">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted mb-0">Slug</label>
+                                            <input type="text" name="espn[espnSlug]" class="form-control form-control-sm" value="<%= espn.espnSlug ?? '' %>">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted mb-0">Primary Color (hex)</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">#</span>
+                                                <input type="text" name="espn[primaryColor]" class="form-control form-control-sm" value="<%= espn.primaryColor ?? '' %>" maxlength="6" placeholder="e.g. a32136">
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted mb-0">Alternate Color (hex)</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">#</span>
+                                                <input type="text" name="espn[alternateColor]" class="form-control form-control-sm" value="<%= espn.alternateColor ?? '' %>" maxlength="6" placeholder="e.g. ffffff">
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label small text-muted mb-0">Logo URL</label>
+                                            <input type="text" name="espn[logoURL]" class="form-control form-control-sm" value="<%= espn.logoURL ?? '' %>">
+                                        </div>
+                                        <% if (espn.fetchedAt) { %>
+                                        <div class="col-12">
+                                            <small class="text-muted">Last fetched: <%= espn.fetchedAt %></small>
+                                        </div>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            <% } %>
+
+                            <!-- Conference History (edit mode only) -->
+                            <% if (!isNew) { %>
+                                <div class="container pb-3">
+                                    <label class="fw-semibold">Conference History</label>
+                                    <small class="text-muted d-block mb-2">Oldest → newest. Leave end year blank for
+                                        current affiliation.</small>
+                                    <table class="table table-sm table-bordered" id="historyTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Conference</th>
+                                                <th>Start Year</th>
+                                                <th>End Year</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="historyRows">
+                                            <% const history=team.conferenceHistory || []; %>
+                                                <% history.forEach((entry, i)=> { %>
+                                                    <tr class="history-row">
+                                                        <td>
+                                                            <select name="confHistory[<%= i %>][confID]"
+                                                                class="form-select form-select-sm">
+                                                                <option value="">—</option>
+                                                                <% conferences.forEach(conf=> { %>
+                                                                    <option value="<%= conf.slug %>"
+                                                                        <%=(entry.confID===conf.slug) ? 'selected' : ''
+                                                                        %>>
+                                                                        <%= conf.shortName %>
+                                                                    </option>
+                                                                    <% }) %>
+                                                            </select>
+                                                        </td>
+                                                        <td><input type="number" name="confHistory[<%= i %>][startYear]"
+                                                                class="form-control form-control-sm"
+                                                                value="<%= entry.startYear ?? '' %>"
+                                                                placeholder="(unknown)"></td>
+                                                        <td><input type="number" name="confHistory[<%= i %>][endYear]"
+                                                                class="form-control form-control-sm"
+                                                                value="<%= entry.endYear ?? '' %>"
+                                                                placeholder="(current)"></td>
+                                                        <td><button type="button"
+                                                                class="btn btn-sm btn-outline-danger remove-row">✕</button>
+                                                        </td>
+                                                    </tr>
+                                                    <% }) %>
+                                        </tbody>
+                                    </table>
+                                    <button type="button" id="addHistoryRow" class="btn btn-sm btn-outline-secondary">+
+                                        Add Entry</button>
+                                </div>
+                                <% } %>
+
+                                    <div class="container pb-2" id="innercont">
+                                        <button type="submit" class="btn btn-primary">
+                                            <%= isNew ? "Add School" : "Update School" %>
+                                        </button>
+                                    </div>
+                </form>
+
+                <% if (!isNew) { %>
+                    <form action="/deleteTeam" method="post" style="display:inline;"
+                        data-confirm="PERMANENTLY delete <%= team.name %>? This cannot be undone.">
+                        <input type="hidden" name="sid" value="<%= team.sid %>">
+                        <button type="submit" class="btn btn-danger pb-2">Delete School</button>
+                    </form>
+                    <% } %>
+
+                        <div><br></div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+            <%- include('partials/scripts') %>
+    </div>
+
+    <% if (!isNew) { %>
+        <script>
+            // Build the conference options HTML for new rows
+            const confOptions = `<option value="">—</option>` + [
+        <% conferences.forEach(conf => { %>
+                { slug: '<%= conf.slug %>', label: '<%= conf.shortName %>' },
+        <% }) %>
+    ].map(c => `<option value="${c.slug}">${c.label}</option>`).join('');
+
+            document.getElementById('addHistoryRow').addEventListener('click', () => {
+                const tbody = document.getElementById('historyRows');
+                const idx = tbody.querySelectorAll('.history-row').length;
+                const row = document.createElement('tr');
+                row.className = 'history-row';
+                row.innerHTML = `
+            <td><select name="confHistory[${idx}][confID]" class="form-select form-select-sm">${confOptions}</select></td>
+            <td><input type="number" name="confHistory[${idx}][startYear]" class="form-control form-control-sm" placeholder="(unknown)"></td>
+            <td><input type="number" name="confHistory[${idx}][endYear]" class="form-control form-control-sm" placeholder="(current)"></td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">✕</button></td>
+        `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('historyTable').addEventListener('click', e => {
+                if (e.target.classList.contains('remove-row')) {
+                    e.target.closest('tr').remove();
+                    // Re-index remaining rows so names stay sequential
+                    document.querySelectorAll('#historyRows .history-row').forEach((row, i) => {
+                        row.querySelectorAll('[name]').forEach(el => {
+                            el.name = el.name.replace(/\[\d+\]/, `[${i}]`);
+                        });
+                    });
+                }
+            });
+        </script>
+        <% } %>
+    <script src="/js/admin/confirmDestructive.js"></script>
+</body>
+
+</html>

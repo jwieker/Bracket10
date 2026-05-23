@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta itemprop="name" content="Bracket 10">
+<meta itemprop="description"
+    content="A new web application for for playing a different kind of college basketball tournament game.">
+<% if (appHost) { %>
+<meta itemprop="image" content="https://<%= appHost %>/logo.png">
+<% } %>
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<body>
+    <% if (state === 'comingsoon') { %>
+
+    <div class="container-fluid p-3">
+        <div class="row align-items-center justify-content-center" id="row1">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
+                <h1 class="t-display text-center pt-3 mb-2">
+                    New Tournament Brackets Coming Soon!
+                </h1>
+                <p class="t-body text-center pt-2 mb-4">
+                    Check back after 8:30PM EST Sunday, March 15th to create your bracket
+                </p>
+                <div class="container mt-3">
+                    <div class="row justify-content-center">
+                        <div class="col-12">
+                            <p class="t-label text-center mb-2">View previous brackets</p>
+                            <form action="/gameView" method="post">
+                                <div class="row justify-content-center pb-3">
+                                    <input type="hidden" name="year" value="2025" />
+                                    <div class="col-7 col-sm-6">
+                                        <input class="form-control" type="text" placeholder="Enter group name"
+                                            aria-label="Group name" name="game" required>
+                                    </div>
+                                    <div class="col-5 col-sm-3">
+                                        <button class="btn btn-primary w-100" type="submit">View</button>
+                                    </div>
+                                    <% if (error) { %>
+                                        <div class="col-12 col-sm-8 mt-2">
+                                            <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <% } else if (state === 'registration') { %>
+
+    <div class="container-fluid pt-3">
+        <div class="row align-items-center justify-content-center" id="row1">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
+                <h1 class="t-h1 text-center pt-3 mb-2">
+                    Create your bracket for the tournament!
+                </h1>
+                <p class="t-body text-center mb-4">
+                    Enter your group name to start creating your bracket
+                </p>
+                <form action="/newEntry" method="post">
+                    <div class="container">
+                        <div class="row pb-4 justify-content-center">
+                            <div class="col-7 col-sm-6">
+                                <input class="form-control" type="text" onfocus="this.placeholder = ''"
+                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameName">
+                            </div>
+                            <div class="col-5 col-sm-3">
+                                <button class="btn btn-primary w-100" type="submit">Enter</button>
+                            </div>
+                            <% if (error || createError) { %>
+                                <div class="col-12 col-sm-8 mt-2">
+                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <% } else if (state === 'tournament') { %>
+
+    <div class="container-fluid pt-4">
+        <div class="row align-items-center justify-content-center" id="row1">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-7 col-xl-6 form-container" id="col2">
+                <h1 class="t-h1 text-center pt-4 mb-2">
+                    View your bracket
+                </h1>
+                <p class="t-body text-center mb-4">
+                    Enter your group name to see how your bracket is doing
+                </p>
+                <form action="/gameView" method="post">
+                    <div class="container">
+                        <div class="row pb-4 justify-content-center">
+                            <input type="hidden" name="year" value="<%= thisYear %>" />
+                            <div class="col-7 col-sm-7">
+                                <input class="form-control" type="text" onfocus="this.placeholder = ''"
+                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameViewID">
+                            </div>
+                            <div class="col-5 col-sm-5">
+                                <button class="btn btn-primary w-100" type="submit">View Bracket</button>
+                            </div>
+                            <% if (error) { %>
+                                <div class="col-12 col-sm-8 mt-2">
+                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <% } else { %><%# test/dev: show all three sections %>
+
+    <div class="container-fluid p-3">
+        <div class="row align-items-center justify-content-center" id="row1">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
+                <h1 class="t-display text-center pt-3 mb-2">
+                    New Tournament Brackets Coming Soon!
+                </h1>
+                <p class="t-body text-center pt-2 mb-4">
+                    Check back after 8:30PM EST Sunday, March 15th to create your bracket
+                </p>
+                <div class="container mt-3">
+                    <div class="row justify-content-center">
+                        <div class="col-12">
+                            <p class="t-label text-center mb-2">View previous brackets</p>
+                            <form action="/gameView" method="post">
+                                <div class="row justify-content-center pb-3">
+                                    <input type="hidden" name="year" value="2025" />
+                                    <div class="col-7 col-sm-6">
+                                        <input class="form-control" type="text" placeholder="Enter group name"
+                                            aria-label="Group name" name="game" required>
+                                    </div>
+                                    <div class="col-5 col-sm-3">
+                                        <button class="btn btn-primary w-100" type="submit">View</button>
+                                    </div>
+                                    <% if (error) { %>
+                                        <div class="col-12 col-sm-8 mt-2">
+                                            <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid pt-3">
+        <div class="row align-items-center justify-content-center" id="row1">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
+                <h1 class="t-h1 text-center pt-3 mb-2">
+                    Create your bracket for the tournament!
+                </h1>
+                <p class="t-body text-center mb-4">
+                    Enter your group name to start creating your bracket
+                </p>
+                <form action="/newEntry" method="post">
+                    <div class="container">
+                        <div class="row pb-4 justify-content-center">
+                            <div class="col-7 col-sm-6">
+                                <input class="form-control" type="text" onfocus="this.placeholder = ''"
+                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameName">
+                            </div>
+                            <div class="col-5 col-sm-3">
+                                <button class="btn btn-primary w-100" type="submit">Enter</button>
+                            </div>
+                            <% if (createError) { %>
+                                <div class="col-12 col-sm-8 mt-2">
+                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid pt-3">
+        <div class="row align-items-center justify-content-center" id="row1">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
+                <h1 class="t-h1 text-center pt-3 mb-2">
+                    View your bracket
+                </h1>
+                <p class="t-body text-center mb-4">
+                    Enter your group name to see how your bracket is doing
+                </p>
+                <form action="/gameView" method="post">
+                    <div class="container">
+                        <div class="row pb-4 justify-content-center">
+                            <input type="hidden" name="year" value="<%= thisYear %>" />
+                            <div class="col-7 col-sm-6">
+                                <input class="form-control" type="text" onfocus="this.placeholder = ''"
+                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameViewID">
+                            </div>
+                            <div class="col-5 col-sm-3">
+                                <button class="btn btn-primary w-100" type="submit">View</button>
+                            </div>
+                            <% if (error) { %>
+                                <div class="col-12 col-sm-8 mt-2">
+                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <% } %>
+
+    <div>
+        <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
+    </div>
+</body>
+<footer>
+
+</footer>
+
+</html>

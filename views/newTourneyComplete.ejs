@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<body>
+    <div class="container-lg pl-1 pr-1 border border-dark border-2 align-self-center" id="col2">
+        <div class="row" id="row1">
+
+            <div class="row">
+                <div class="display-2 fw-bold text-center pt-5" id="page-header" data-year="<%= year %>">
+                    Creating Tournament for <%= year %>
+                </div>
+            </div>
+
+            <!-- ── Add Team Panel ────────────────────────────────────────────── -->
+            <div class="card my-3 border-secondary" id="addTeamPanel">
+                <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer"
+                    onclick="toggleAddTeam()">
+                    <span class="fw-bold">➕ Add a New Team</span>
+                    <span id="addTeamChevron">▼</span>
+                </div>
+                <div class="card-body" id="addTeamBody" style="display:none">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label mb-0" for="newTeamName">Name <span class="text-danger">*</span></label>
+                            <input type="text" id="newTeamName" class="form-control" placeholder="University of Kansas">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label mb-0" for="newTeamMascot">Mascot</label>
+                            <input type="text" id="newTeamMascot" class="form-control" placeholder="Jayhawks">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label mb-0" for="newTeamNick">Nick Name</label>
+                            <input type="text" id="newTeamNick" class="form-control" placeholder="Kansas">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label mb-0" for="newTeamConf">Conference</label>
+                            <select id="newTeamConf" class="form-select">
+                                <option value="">— Select —</option>
+                                <% conferences.forEach(conf => { %>
+                                    <option value="<%= conf.slug %>"><%= conf.shortName %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100" onclick="submitNewTeam()">Add Team</button>
+                        </div>
+                    </div>
+                    <div id="addTeamStatus" class="mt-2"></div>
+                    <div id="addedTeamsList" class="mt-2"></div>
+                </div>
+            </div>
+            <!-- ── End Add Team Panel ──────────────────────────────────────────── -->
+
+            <!-- ══ FIRST FOUR ══════════════════════════════════════════════════ -->
+            <div class="card my-3 border-primary">
+                <div class="card-header fw-bold">First Four</div>
+                <div class="card-body">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="includeFirstFour"
+                            onchange="toggleFirstFour()">
+                        <label class="form-check-label fw-bold" for="includeFirstFour">
+                            Include First Four games
+                        </label>
+                    </div>
+
+                    <div id="firstFourSection" style="display:none">
+                        <div class="row g-2 mb-3 align-items-end">
+                            <div class="col-auto">
+                                <label class="form-label mb-0">Number of games</label>
+                                <input type="number" id="ffGameCount" class="form-control" style="width:80px"
+                                    value="4" min="1" max="8" onchange="updateFFGameRows()">
+                            </div>
+                            <div class="col-auto">
+                                <label class="form-label mb-0">Date 1 (YYYYMMDD)</label>
+                                <input type="text" id="ffDate1" class="form-control" style="width:120px" placeholder="20260317">
+                            </div>
+                            <div class="col-auto">
+                                <label class="form-label mb-0">Date 2 (YYYYMMDD)</label>
+                                <input type="text" id="ffDate2" class="form-control" style="width:120px" placeholder="20260318">
+                            </div>
+                            <div class="col-auto align-self-end">
+                                <button type="button" class="btn btn-outline-primary" onclick="pollEspnFF()">
+                                    Poll ESPN
+                                </button>
+                            </div>
+                            <div class="col-auto align-self-end">
+                                <span id="ffPollStatus" class="text-muted small"></span>
+                            </div>
+                        </div>
+
+                        <div id="ffGameRows"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- ══ END FIRST FOUR ══════════════════════════════════════════════ -->
+
+            <!-- ══ REGIONS ════════════════════════════════════════════════════ -->
+            <div class="card my-3 border-secondary">
+                <div class="card-header fw-bold">Regions
+                    <small class="text-muted fw-normal ms-2">Region #1 plays #2, Region #3 plays #4 in Final Four</small>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <% for (let i = 0; i < 4; i++) { %>
+                        <div class="col-md-3">
+                            <label class="form-label mb-1">Region #<%= i + 1 %></label>
+                            <select class="form-select region-select" id="region<%= i %>" name="region<%= i %>"
+                                data-slot="<%= i %>">
+                                <option value="" disabled selected hidden>Choose Region #<%= i + 1 %></option>
+                                <% allRegionTypes.forEach(r => { %>
+                                    <option value="<%= r.regionID %>"><%= r.regionName %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+            <!-- ══ END REGIONS ════════════════════════════════════════════════ -->
+
+            <!-- ══ ROUND 1 GAMES ══════════════════════════════════════════════ -->
+            <div class="card my-3 border-secondary">
+                <div class="card-header fw-bold">Round 1 Games</div>
+                <div class="px-3 pt-3 pb-0">
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-auto">
+                            <label class="form-label mb-0">Date 1 (YYYYMMDD)</label>
+                            <input type="text" id="r1Date1" class="form-control" style="width:120px" placeholder="20260320">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label mb-0">Date 2 (YYYYMMDD)</label>
+                            <input type="text" id="r1Date2" class="form-control" style="width:120px" placeholder="20260321">
+                        </div>
+                        <div class="col-auto align-self-end">
+                            <button type="button" id="r1PollBtn" class="btn btn-outline-primary" disabled onclick="pollR1ESPN()">
+                                Poll ESPN
+                            </button>
+                        </div>
+                        <div class="col-auto align-self-end">
+                            <span id="r1PollStatus" class="text-muted small"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <%
+                    const r1Seeds = [1, 16, 8, 9, 5, 12, 4, 13, 6, 11, 3, 14, 7, 10, 2, 15];
+                    const r1Offsets = [0, 15, 30, 45];
+                    %>
+                    <% for (let regIdx = 0; regIdx < 4; regIdx++) { %>
+                    <div class="mb-4">
+                        <span class="region-section-header region-header-label" data-slot="<%= regIdx %>">Region #<%= regIdx + 1 %></span>
+                        <% for (let i = 1; i <= 8; i++) { %>
+                        <%
+                            const gameId = i + r1Offsets[regIdx];
+                            const s1 = r1Seeds[(i - 1) * 2];
+                            const s2 = r1Seeds[(i - 1) * 2 + 1];
+                        %>
+                        <div class="border rounded p-2 mb-2">
+                            <div class="fw-bold small mb-1 d-flex justify-content-between">
+                                <span>Game <%= gameId %> &nbsp; (<%= s1 %> vs <%= s2 %>)</span>
+                                <span class="text-muted fw-normal" style="font-size:0.75rem">FF slot</span>
+                            </div>
+                            <!-- Team 1 -->
+                            <div class="row g-1 mb-1 align-items-center">
+                                <div class="col-1 text-end"><small class="text-muted">Seed <%= s1 %></small></div>
+                                <div class="col-10">
+                                    <div class="search-dropdown">
+                                        <input type="text" class="search-input" placeholder="Search…"
+                                            aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                        <select class="r1-team-select form-select form-select-sm"
+                                            data-region-slot="<%= regIdx %>"
+                                            data-game-id="<%= gameId %>"
+                                            data-seed="<%= s1 %>">
+                                            <option value="">— Select Team —</option>
+                                            <% allTeams.forEach(team => { %>
+                                            <option value="<%= team.sid %>">
+                                                <%= team.name %> <%= team.mascot %> sID: <%= team.sid %>
+                                            </option>
+                                            <% }); %>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-1 text-center">
+                                    <input type="checkbox" class="form-check-input ff-slot-check" title="First Four slot"
+                                        data-game-id="<%= gameId %>" data-seed="<%= s1 %>">
+                                </div>
+                            </div>
+                            <!-- Team 2 -->
+                            <div class="row g-1 align-items-center">
+                                <div class="col-1 text-end"><small class="text-muted">Seed <%= s2 %></small></div>
+                                <div class="col-10">
+                                    <div class="search-dropdown">
+                                        <input type="text" class="search-input" placeholder="Search…"
+                                            aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                        <select class="r1-team-select form-select form-select-sm"
+                                            data-region-slot="<%= regIdx %>"
+                                            data-game-id="<%= gameId %>"
+                                            data-seed="<%= s2 %>">
+                                            <option value="">— Select Team —</option>
+                                            <% allTeams.forEach(team => { %>
+                                            <option value="<%= team.sid %>">
+                                                <%= team.name %> <%= team.mascot %> sID: <%= team.sid %>
+                                            </option>
+                                            <% }); %>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-1 text-center">
+                                    <input type="checkbox" class="form-check-input ff-slot-check" title="First Four slot"
+                                        data-game-id="<%= gameId %>" data-seed="<%= s2 %>">
+                                </div>
+                            </div>
+                        </div>
+                        <% } %>
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+            <!-- ══ END ROUND 1 GAMES ══════════════════════════════════════════ -->
+
+            <div class="container pb-5 text-center">
+                <button type="button" class="btn btn-primary btn-lg" onclick="submitTournament()">
+                    Create Tournament
+                </button>
+                <div id="submitStatus" class="mt-2"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // ── Constants ──────────────────────────────────────────────────────────
+        const YEAR = Number(document.getElementById('page-header').dataset.year);
+
+        // R1 game ID ranges by region slot index
+        const R1_GAME_RANGES = [
+            { start: 1, end: 8 },    // slot 0
+            { start: 16, end: 23 },  // slot 1
+            { start: 31, end: 38 },  // slot 2
+            { start: 46, end: 53 },  // slot 3
+        ];
+        const R1_SEED_MATCHUPS = [
+            [1, 16], [8, 9], [5, 12], [4, 13], [6, 11], [3, 14], [7, 10], [2, 15]
+        ];
+
+        const selectedTeams = new Set();
+
+        // ── Add Team Panel ─────────────────────────────────────────────────────
+        function toggleAddTeam() {
+            const body = document.getElementById('addTeamBody');
+            const chevron = document.getElementById('addTeamChevron');
+            const isHidden = body.style.display === 'none';
+            body.style.display = isHidden ? 'block' : 'none';
+            chevron.textContent = isHidden ? '▲' : '▼';
+        }
+
+        async function submitNewTeam() {
+            const name = document.getElementById('newTeamName').value.trim();
+            const mascot = document.getElementById('newTeamMascot').value.trim();
+            const nameNick = document.getElementById('newTeamNick').value.trim();
+            const confID = document.getElementById('newTeamConf').value.trim();
+            const statusEl = document.getElementById('addTeamStatus');
+
+            if (!name) {
+                statusEl.innerHTML = '<span class="text-danger">⚠ Team name is required.</span>';
+                return;
+            }
+            statusEl.innerHTML = '<span class="text-muted">Saving…</span>';
+
+            try {
+                const resp = await fetch('/api/addTeam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ name, mascot, nameNick, confID: confID || null }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    statusEl.innerHTML = `<span class="text-danger">⚠ ${esc(err.error || 'Failed to add team.')}</span>`;
+                    return;
+                }
+                const team = await resp.json();
+                statusEl.innerHTML = `<span class="text-success">✓ Added: ${esc(team.name)} ${esc(team.mascot || '')} (sID: ${esc(team.sid)})</span>`;
+                addTeamToAllDropdowns(team);
+                const listEl = document.getElementById('addedTeamsList');
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-secondary me-1 mb-1';
+                badge.textContent = `${team.name} ${team.mascot || ''} — sID: ${team.sid}`;
+                listEl.appendChild(badge);
+                ['newTeamName', 'newTeamMascot', 'newTeamNick', 'newTeamConf'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                document.getElementById('newTeamName').focus();
+            } catch (e) {
+                statusEl.innerHTML = `<span class="text-danger">⚠ Network error: ${esc(e.message)}</span>`;
+            }
+        }
+
+        function addTeamToAllDropdowns(team) {
+            document.querySelectorAll('.r1-team-select, .ff-team-select').forEach(select => {
+                const label = `${team.name} ${team.mascot || ''} sID: ${team.sid}`;
+                select.add(new Option(label, String(team.sid)));
+            });
+        }
+
+        // ── Search filter ──────────────────────────────────────────────────────
+        function filterDropdown(input) {
+            const filter = input.value.toUpperCase();
+            const select = input.parentElement.querySelector('select');
+            for (const opt of select.options) {
+                opt.style.display = opt.textContent.toUpperCase().includes(filter) ? '' : 'none';
+            }
+        }
+
+        // ── Region selection ───────────────────────────────────────────────────
+        const regionNames = ['', '', '', ''];
+
+        function onRegionChange(slot) {
+            const sel = document.getElementById(`region${slot}`);
+            regionNames[slot] = sel.options[sel.selectedIndex]?.text || `Region #${slot + 1}`;
+            // Update R1 section header for this slot
+            const label = document.querySelector(`.region-header-label[data-slot="${slot}"]`);
+            if (label) label.textContent = regionNames[slot];
+            // Update FF nextGame optgroup labels
+            document.querySelectorAll(`.ff-nextgame-optgroup[data-slot="${slot}"]`).forEach(og => {
+                og.label = regionNames[slot];
+            });
+            // Enable R1 ESPN poll button once all 4 regions are selected
+            const allSelected = [0, 1, 2, 3].every(i => document.getElementById(`region${i}`).value);
+            document.getElementById('r1PollBtn').disabled = !allSelected;
+        }
+
+        // ── ESPN Poll for R1 ───────────────────────────────────────────────────
+        async function pollR1ESPN() {
+            const date1 = document.getElementById('r1Date1').value.trim();
+            const date2 = document.getElementById('r1Date2').value.trim();
+            const statusEl = document.getElementById('r1PollStatus');
+
+            if (!date1) {
+                statusEl.textContent = '⚠ Enter at least Date 1';
+                return;
+            }
+            statusEl.textContent = 'Polling ESPN…';
+
+            try {
+                const resp = await fetch('/admin/poll-espn-scheduled', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date1, date2: date2 || null }),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const { games } = await resp.json();
+
+                if (!games.length) {
+                    statusEl.textContent = 'No games found for those dates.';
+                    return;
+                }
+
+                let filled = 0;
+                for (const game of games) {
+                    if (tryFillR1Slot(game)) filled++;
+                }
+                statusEl.textContent = `✓ Filled ${filled} of ${games.length} game(s). ${games.length - filled} could not be matched.`;
+            } catch (err) {
+                statusEl.textContent = `⚠ Error: ${err.message}`;
+            }
+        }
+
+        function tryFillR1Slot(game) {
+            // game = { team1SID, team2SID, team1Seed, team2Seed, regionName }
+            if (!game.team1SID || !game.team2SID || !game.team1Seed || !game.team2Seed) return false;
+
+            // Determine which slot(s) to search.
+            // If ESPN gave us a region name (e.g. "West"), narrow to slots whose selected
+            // region label contains that word. Otherwise fall back to checking all 4 slots.
+            const candidateSlots = [];
+            for (let slot = 0; slot < 4; slot++) {
+                if (!regionNames[slot]) continue;
+                if (!game.regionName || regionNames[slot].toLowerCase().includes(game.regionName.toLowerCase())) {
+                    candidateSlots.push(slot);
+                }
+            }
+            if (candidateSlots.length === 0) return false;
+
+            for (const slot of candidateSlots) {
+                const t1Select = findR1Select(slot, game.team1Seed);
+                const t2Select = findR1Select(slot, game.team2Seed);
+
+                if (!t1Select || !t2Select) continue;
+                if (!sameGamePair(t1Select, t2Select)) continue;
+
+                // Only fill if both sIDs exist as options
+                if (!selectHasOption(t1Select, String(game.team1SID))) continue;
+                if (!selectHasOption(t2Select, String(game.team2SID))) continue;
+
+                t1Select.value = String(game.team1SID);
+                t2Select.value = String(game.team2SID);
+                t1Select.closest('.border.rounded')?.classList.add('espn-autofilled');
+                return true;
+            }
+            return false;
+        }
+
+        function findR1Select(slot, seed) {
+            return document.querySelector(`.r1-team-select[data-region-slot="${slot}"][data-seed="${seed}"]`) || null;
+        }
+
+        function sameGamePair(sel1, sel2) {
+            return sel1.dataset.gameId === sel2.dataset.gameId;
+        }
+
+        function selectHasOption(select, value) {
+            return !!select.querySelector(`option[value="${value}"]`);
+        }
+
+        // ── First Four ─────────────────────────────────────────────────────────
+        function toggleFirstFour() {
+            const checked = document.getElementById('includeFirstFour').checked;
+            document.getElementById('firstFourSection').style.display = checked ? 'block' : 'none';
+            if (checked) renderFFGameRows();
+        }
+
+        let currentFFCount = 4;
+
+        function updateFFGameRows() {
+            currentFFCount = Number(document.getElementById('ffGameCount').value) || 4;
+            renderFFGameRows();
+        }
+
+        function renderFFGameRows() {
+            const count = Number(document.getElementById('ffGameCount').value) || currentFFCount;
+            const container = document.getElementById('ffGameRows');
+            // Preserve existing values before re-render
+            const existing = [];
+            container.querySelectorAll('.ff-game-row').forEach((row, i) => {
+                existing[i] = {
+                    t1: row.querySelector('.ff-team-select[data-slot="1"]')?.value || '',
+                    t2: row.querySelector('.ff-team-select[data-slot="2"]')?.value || '',
+                    seed: row.querySelector('.ff-seed-input')?.value || '',
+                    nextGame: row.querySelector('.ff-nextgame-select')?.value || '',
+                    nextSpot: row.querySelector('.ff-nextspot-select')?.value || '',
+                };
+            });
+
+            container.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                container.appendChild(buildFFRow(i, existing[i] || {}));
+            }
+        }
+
+        function buildFFRow(idx, saved = {}) {
+            const div = document.createElement('div');
+            div.className = 'ff-game-row border rounded p-3 mb-3';
+            div.innerHTML = `
+                <div class="fw-bold mb-2">FF Game ${idx + 1}</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-12 col-md-5">
+                        <label class="form-label mb-1">Team 1</label>
+                        <div class="search-dropdown">
+                            <input type="text" class="search-input" placeholder="Search…" onkeyup="filterDropdown(this)">
+                            <select class="ff-team-select form-select form-select-sm" data-idx="${idx}" data-slot="1">
+                                <option value="" disabled selected hidden>— Select Team —</option>
+                                ${allTeamOptions()}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-5">
+                        <label class="form-label mb-1">Team 2</label>
+                        <div class="search-dropdown">
+                            <input type="text" class="search-input" placeholder="Search…" onkeyup="filterDropdown(this)">
+                            <select class="ff-team-select form-select form-select-sm" data-idx="${idx}" data-slot="2">
+                                <option value="" disabled selected hidden>— Select Team —</option>
+                                ${allTeamOptions()}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <label class="form-label mb-1">Seed</label>
+                        <input type="number" class="form-control form-control-sm ff-seed-input" min="1" max="16" placeholder="11" value="${saved.seed || ''}">
+                    </div>
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-7">
+                        <label class="form-label mb-1">Feeds into R1 Game</label>
+                        <select class="form-select form-select-sm ff-nextgame-select">
+                            ${buildNextGameOptions()}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label mb-1">Spot</label>
+                        <select class="form-select form-select-sm ff-nextspot-select">
+                            <option value="1">1 (Team 1 slot)</option>
+                            <option value="2">2 (Team 2 slot)</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+
+            // Restore saved values
+            if (saved.t1) div.querySelector('.ff-team-select[data-slot="1"]').value = saved.t1;
+            if (saved.t2) div.querySelector('.ff-team-select[data-slot="2"]').value = saved.t2;
+            if (saved.nextGame) div.querySelector('.ff-nextgame-select').value = saved.nextGame;
+            if (saved.nextSpot) div.querySelector('.ff-nextspot-select').value = saved.nextSpot;
+
+            return div;
+        }
+
+        // Cached team option HTML built once from server-rendered data
+        let _teamOptionsCache = null;
+        function allTeamOptions() {
+            if (_teamOptionsCache) return _teamOptionsCache;
+            const opts = [];
+            document.querySelectorAll('.r1-team-select').item(0)?.querySelectorAll('option:not([disabled])').forEach(o => {
+                opts.push(`<option value="${esc(o.value)}">${esc(o.textContent)}</option>`);
+            });
+            _teamOptionsCache = opts.join('');
+            return _teamOptionsCache;
+        }
+
+        function buildNextGameOptions() {
+            const groups = [];
+            R1_GAME_RANGES.forEach((range, slot) => {
+                const label = regionNames[slot] || `Region #${slot + 1}`;
+                const opts = [];
+                for (let gid = range.start; gid <= range.end; gid++) {
+                    const matchupIdx = gid - range.start;
+                    const [s1, s2] = R1_SEED_MATCHUPS[matchupIdx];
+                    opts.push(`<option value="${gid}">Game ${gid} (${s1} vs ${s2})</option>`);
+                }
+                groups.push(`<optgroup class="ff-nextgame-optgroup" data-slot="${slot}" label="${label}">${opts.join('')}</optgroup>`);
+            });
+            return groups.join('');
+        }
+
+        // ── ESPN Poll for FF ───────────────────────────────────────────────────
+        async function pollEspnFF() {
+            const date1 = document.getElementById('ffDate1').value.trim();
+            const date2 = document.getElementById('ffDate2').value.trim();
+            const statusEl = document.getElementById('ffPollStatus');
+
+            if (!date1) {
+                statusEl.textContent = '⚠ Enter at least Date 1';
+                return;
+            }
+            statusEl.textContent = 'Polling ESPN…';
+
+            try {
+                const resp = await fetch('/admin/poll-espn-scheduled', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date1, date2: date2 || null }),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const { games } = await resp.json();
+
+                if (!games.length) {
+                    statusEl.textContent = 'No games found for those dates.';
+                    return;
+                }
+
+                // Ensure enough FF rows exist
+                const countInput = document.getElementById('ffGameCount');
+                if (games.length > Number(countInput.value)) {
+                    countInput.value = games.length;
+                    renderFFGameRows();
+                }
+
+                // Populate FF rows with ESPN data
+                const rows = document.querySelectorAll('.ff-game-row');
+                games.forEach((game, i) => {
+                    if (i >= rows.length) return;
+                    const row = rows[i];
+                    if (game.team1SID) setSelectValue(row.querySelector('.ff-team-select[data-slot="1"]'), String(game.team1SID));
+                    if (game.team2SID) setSelectValue(row.querySelector('.ff-team-select[data-slot="2"]'), String(game.team2SID));
+                    if (game.team1Seed) row.querySelector('.ff-seed-input').value = game.team1Seed;
+                });
+
+                statusEl.textContent = `✓ Populated ${Math.min(games.length, rows.length)} FF game(s) from ESPN.`;
+            } catch (err) {
+                statusEl.textContent = `⚠ Error: ${err.message}`;
+            }
+        }
+
+        function setSelectValue(select, value) {
+            if (!select) return;
+            for (const opt of select.options) {
+                if (opt.value === value) { select.value = value; return; }
+            }
+        }
+
+        // ── Form submission ────────────────────────────────────────────────────
+        async function submitTournament() {
+            const statusEl = document.getElementById('submitStatus');
+
+            // Validate regions
+            const regions = [0, 1, 2, 3].map(i => {
+                const v = document.getElementById(`region${i}`).value;
+                return v ? Number(v) : null;
+            });
+            if (regions.some(r => !r)) {
+                statusEl.innerHTML = '<span class="text-danger">⚠ Please select all 4 regions.</span>';
+                return;
+            }
+
+            // Collect R1 games — build "regionID-gameID-seed-teamSID" strings
+            // FF-reserved slots (checkbox checked) submit with blank teamSID
+            const games = [];
+            let missingR1 = false;
+            document.querySelectorAll('.r1-team-select').forEach(select => {
+                const regionSlot = Number(select.dataset.regionSlot);
+                const gameId = select.dataset.gameId;
+                const seed = select.dataset.seed;
+                const isFFSlot = !!document.querySelector(
+                    `.ff-slot-check[data-game-id="${gameId}"][data-seed="${seed}"]:checked`
+                );
+                if (!select.value && !isFFSlot) { missingR1 = true; return; }
+                games.push(`${regions[regionSlot]}-${gameId}-${seed}-${select.value}`);
+            });
+            if (missingR1) {
+                statusEl.innerHTML = '<span class="text-danger">⚠ Please select all Round 1 teams (or mark as First Four slot).</span>';
+                return;
+            }
+
+            const body = { year: YEAR, regions, games };
+
+            // Collect FF data
+            const includeFF = document.getElementById('includeFirstFour').checked;
+            body.includeFirstFour = includeFF;
+            if (includeFF) {
+                const rows = document.querySelectorAll('.ff-game-row');
+                body.firstFourCount = rows.length;
+                let missingFF = false;
+                rows.forEach((row, i) => {
+                    const t1 = row.querySelector('.ff-team-select[data-slot="1"]').value;
+                    const t2 = row.querySelector('.ff-team-select[data-slot="2"]').value;
+                    if (!t1 || !t2) { missingFF = true; return; }
+                    body[`ff_team1_${i}`] = Number(t1);
+                    body[`ff_team2_${i}`] = Number(t2);
+                    body[`ff_seed_${i}`] = Number(row.querySelector('.ff-seed-input').value) || 0;
+                    body[`ff_nextGame_${i}`] = Number(row.querySelector('.ff-nextgame-select').value);
+                    body[`ff_nextGameSpot_${i}`] = Number(row.querySelector('.ff-nextspot-select').value);
+                });
+                if (missingFF) {
+                    statusEl.innerHTML = '<span class="text-danger">⚠ Please select both teams for all First Four games.</span>';
+                    return;
+                }
+            }
+
+            statusEl.innerHTML = '<span class="text-muted">Creating tournament…</span>';
+
+            try {
+                const resp = await fetch('/createTournament', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+                statusEl.innerHTML = '<span class="text-success">✓ Tournament created! Redirecting…</span>';
+                setTimeout(() => { window.location.href = '/admin'; }, 1500);
+            } catch (err) {
+                statusEl.innerHTML = `<span class="text-danger">⚠ Error: ${esc(err.message)}</span>`;
+            }
+        }
+
+        // ── FF slot checkboxes ─────────────────────────────────────────────────
+        function onFFSlotCheck(checkbox) {
+            const gameId = checkbox.dataset.gameId;
+            const seed = checkbox.dataset.seed;
+            const select = document.querySelector(
+                `.r1-team-select[data-game-id="${gameId}"][data-seed="${seed}"]`
+            );
+            if (!select) return;
+            const searchInput = select.closest('.search-dropdown')?.querySelector('.search-input');
+
+            if (checkbox.checked) {
+                // Release any team currently held by this slot
+                const prev = select.dataset.prevValue || '';
+                if (prev) selectedTeams.delete(prev);
+                select.dataset.prevValue = '';
+                select.value = '';
+                select.disabled = true;
+                if (searchInput) searchInput.disabled = true;
+                select.closest('.border.rounded')?.classList.add('ff-slot-reserved');
+            } else {
+                select.disabled = false;
+                if (searchInput) searchInput.disabled = false;
+                select.closest('.border.rounded')?.classList.remove('ff-slot-reserved');
+            }
+        }
+
+        // ── Init ───────────────────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            // Wire region selects
+            document.querySelectorAll('.region-select').forEach(select => {
+                select.addEventListener('change', () => onRegionChange(Number(select.dataset.slot)));
+            });
+
+            // Wire FF slot checkboxes
+            document.querySelectorAll('.ff-slot-check').forEach(cb => {
+                cb.addEventListener('change', () => onFFSlotCheck(cb));
+            });
+
+            // Wire duplicate-team prevention to R1 selects
+            document.querySelectorAll('.r1-team-select').forEach(select => {
+                select.addEventListener('change', () => {
+                    const prev = select.dataset.prevValue || '';
+                    const next = select.value;
+                    if (prev) selectedTeams.delete(prev);
+                    if (next && selectedTeams.has(next)) {
+                        alert('That team is already selected in another slot.');
+                        select.value = prev;
+                        return;
+                    }
+                    if (next) selectedTeams.add(next);
+                    select.dataset.prevValue = next;
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

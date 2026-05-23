@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+        <!-- sorting -->
+        <script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
+        <!-- <script src='tablesort.number.js'></script> -->
+        <script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
+        <link rel="stylesheet" href="/table-styles.css">
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
+        crossorigin="anonymous"></script>
+    <!-- <div class="container mt-4 mb-5" style="max-width: 1400px; padding: 0 1rem;"> -->
+
+    <div class="col-12 col-xxl-10 mx-auto mt-2" style="max-width: 1300px;">
+        <div class="card-table-container">
+            <div class="card-table-header">
+                <h3 class="card-table-title">Results for group: <%= name %>
+                </h3>
+
+                <div class="d-flex flex-wrap gap-3 align-items-center mt-3 mt-md-0">
+                    <form action="/getFullGrid" method="post" class="m-0">
+                        <input type="hidden" name="gameName" value="<%= name %>" />
+                        <input type="hidden" name="gameYear" value="<%= requestedYear %>" />
+                        <button class="btn btn-sm text-white px-3 py-2 btn-primary"
+                            type="submit">See full grid of picks</button>
+                    </form>
+
+                    <button id="pwaRefreshBtn" class="btn btn-sm btn-outline-secondary d-none px-3 py-2 rounded-3"
+                         onclick="location.reload()" title="Refresh page">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                            viewBox="0 0 16 16">
+                            <path fill-rule="evenodd"
+                                d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+                            <path
+                                d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+                        </svg>
+                    </button>
+                    <!-- Script relocated next to button for simplicity -->
+                    <script>
+                        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+                            document.getElementById('pwaRefreshBtn').classList.remove('d-none');
+                        }
+                    </script>
+
+                    <form method="POST" action="/gameView" class="m-0 d-flex align-items-center gap-2">
+                        <input type="hidden" name="game" value="<%= name %>">
+                        <% if (availableYears && availableYears.length> 1) { %>
+                            <a href="#" id="toggleYearSelect" class="text-decoration-none year-select-link">Previous Years</a>
+                            <select name="year" id="yearSelect"
+                                class="form-select form-select-sm border border-secondary year-select-custom">
+                                <% availableYears.forEach(function(yearOption) { %>
+                                    <option value="<%= yearOption %>" <%=yearOption==currentYear ? 'selected' : '' %>>
+                                        <%= yearOption %>
+                                    </option>
+                                    <% }); %>
+                            </select>
+                            <% } %>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ══ SEARCH BAR ══ -->
+            <div class="results-search-bar">
+                <div class="results-search-wrap">
+                    <svg class="results-search-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.656a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/>
+                    </svg>
+                    <input type="search"
+                           id="resultsSearch"
+                           class="results-search-input"
+                           placeholder="Search by name or team…"
+                           autocomplete="off">
+                    <span class="results-search-count" id="resultsCount"></span>
+                </div>
+            </div>
+
+            <div class="results-table-wrapper">
+                <% 
+                    const rank1Group = groupData.find(g => g.rank === 1);
+                    const isTourneyOver = rank1Group && rank1Group.totalPoints === rank1Group.possPoints;
+                %>
+            <div class="table-responsive" data-mdb-perfect-scrollbar="true">
+                <table class="table mb-0 table-hover table-view-collapse custom-card-table" id="groupTable">
+                    <thead>
+                        <tr>
+                            <th class="col-expand-toggle"></th>
+                            <th>Entry</th>
+                            <th data-sort-method="number" class="tbl-rank-sort-cell">Rank</th>
+                            <th data-sort-method="number" class="tbl-pts-cell">Points</th>
+                            <th class="col-collapsible tbl-teams-cell" data-sort-method="number">Teams Left <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16" data-bs-toggle="tooltip" data-bs-placement="top" title="'Advanced' shows how many of your remaining teams have won a game in the current round." style="cursor:help;vertical-align:middle;opacity:0.5"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg></th>
+                            <th class="col-collapsible col-hide-sm tbl-num-cell" data-sort-method="number">Max Possible</th>
+                            <th class="col-collapsible col-hide-md tbl-rnd-cell" data-sort-method="number">Rd 1 ×2</th>
+                            <th class="col-collapsible col-hide-md tbl-rnd-cell" data-sort-method="number">Rd 2 ×3</th>
+                            <th class="col-collapsible col-hide-md tbl-rnd-cell" data-sort-method="number">Rd 3 ×5</th>
+                            <th class="col-collapsible col-hide-md tbl-rnd-cell" data-sort-method="number">Rd 4 ×9</th>
+                            <th class="col-collapsible col-hide-md tbl-rnd-cell" data-sort-method="number">Rd 5 ×17</th>
+                            <th class="col-collapsible col-hide-md tbl-rnd-cell" data-sort-method="number">Rd 6 ×33</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% groupData.forEach(group=> { %>
+                            <tr data-group-id="<%= group.id %>" data-search="<%= (group.person + ' ' + group.teamName).toLowerCase() %>">
+                                <td class="col-expand-toggle"></td>
+                                <td class="text-start text-md-nowrap">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="tbl-rank-badge"><%= group.rank %></span>
+                                        <div class="tbl-entry-names">
+                                            <button type="button" class="btn btn-link p-0 tbl-person-btn"
+                                                data-bs-toggle="modal" data-bs-target="#picksModal<%= group.id %>">
+                                                <% if (group.rank===1 && isTourneyOver) { %>🏆 <% } %><%= group.person %>
+                                            </button><span class="tbl-sep"> · </span><span class="tbl-team-name"><%= group.teamName %></span>
+                                        </div>
+                                    </div>
+                                    <div class="modal fade" id="picksModal<%= group.id %>" tabindex="-1"
+                                        aria-labelledby="picksModalLabel<%= group.id %>" aria-hidden="true">
+                                        <div class="modal-dialog modal-xl">
+                                            <div class="modal-content border border-dark border-2">
+                                                <div class="modal-header bracket-header text-white">
+                                                    <div class="flex-grow-1">
+                                                        <h5 class="modal-title h4 mb-0"
+                                                            id="picksModalLabel<%= group.id %>">
+                                                            <%= group.person %> - <%= group.teamName %>
+                                                        </h5>
+                                                        <div class="d-flex gap-3 mt-1 text-white" style="font-size: 1rem;">
+                                                            <span>Teams Remaining: <%= group.teamsRemaining || 0 %></span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="d-flex gap-2 me-2">
+                                                        <button type="button" class="btn btn-outline-light btn-sm modal-nav-prev" aria-label="Previous entry">&#8592;</button>
+                                                        <button type="button" class="btn btn-outline-light btn-sm modal-nav-next" aria-label="Next entry">&#8594;</button>
+                                                    </div>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                                        aria-label="Close"></button>
+                                                </div>
+                                                <!-- New row for side-by-side layout on large screens -->
+
+                                                <div class="row">
+                                                    <!-- Bracket Column -->
+                                                    <div class="col-12 col-lg-5">
+                                                        <div class="row m-1">
+                                                            <div class="biggertext col-9">
+                                                                <strong>
+                                                                    Points: <%= group.totalPoints || 0 %>
+                                                                </strong>
+                                                            </div>
+                                                            <div class="biggertext col-9">
+                                                                <strong>
+
+                                                                    Max Possible Points:
+                                                                    <%= group.possPoints || 0 %>
+                                                                </strong>
+                                                            </div>
+                                                        </div>
+
+
+                                                        <div class="picks-card-list mx-lg-2 mt-2">
+                                                            <% group.pickNames.forEach(pick=> {
+                                                                const isElim = pick.gameStatus && pick.gameStatus.length > 0 && pick.gameStatus[pick.gameStatus.length - 1] === 'L';
+                                                                const accentColor = pick.primaryColor ? '#' + pick.primaryColor : '#adb5bd';
+                                                            %>
+                                                            <div class="pick-card-row d-flex align-items-center gap-2 py-2 px-2"
+                                                                 data-accent="<%= accentColor %>"
+                                                                 data-elim="<%= isElim ? '1' : '0' %>">
+                                                                <!-- Logo -->
+                                                                <div class="pick-logo-box flex-shrink-0" data-border-color="<%= accentColor %>">
+                                                                    <% if (pick.logoUrl) { %>
+                                                                        <img src="<%= pick.logoUrl %>" alt="<%= pick.nameNick %>" style="width:100%;height:100%;object-fit:contain;" loading="lazy">
+                                                                    <% } else { %>
+                                                                        <span class="pick-logo-fallback"><%= (pick.nameNick || '?').substring(0,2).toUpperCase() %></span>
+                                                                    <% } %>
+                                                                </div>
+                                                                <!-- Seed + Name + Region -->
+                                                                <div class="flex-grow-1" style="min-width:0;">
+                                                                    <div class="d-flex align-items-center gap-1 flex-wrap">
+                                                                        <span class="badge-ds" style="font-size:0.6rem;font-weight:600;"><%= pick.seed %></span>
+                                                                        <span class="fw-semibold text-truncate" style="font-size:0.85rem;"><%= pick.nameNick || pick.name %></span>
+                                                                    </div>
+                                                                    <div class="text-muted" style="font-size:0.7rem;"><%= pick.regionName %></div>
+                                                                </div>
+                                                                <!-- W/L chips -->
+                                                                <div class="pick-wl-chips">
+                                                                    <% if (pick.gameStatus && pick.gameStatus.length > 0) {
+                                                                        pick.gameStatus.forEach(result => { %>
+                                                                        <span class="wl-chip <%= result === 'W' ? 'win' : 'loss' %>"><%= result %></span>
+                                                                    <% }); } %>
+                                                                </div>
+                                                                <!-- Points -->
+                                                                <div class="text-end flex-shrink-0" style="min-width:34px;">
+                                                                    <div class="pick-pts fw-bold" data-accent="<%= accentColor %>" data-elim="<%= isElim ? '1' : '0' %>" style="font-size:0.95rem;line-height:1;"><%= pick.pickPoints || 0 %></div>
+                                                                    <div class="text-muted" style="font-size:0.65rem;">pts</div>
+                                                                </div>
+                                                            </div>
+                                                            <% }); %>
+                                                        </div>
+
+                                                        <% const entryConfStats={}; group.pickNames.forEach(pick=> {
+                                                            const confName = pick.conferenceName;
+                                                            if (confName) {
+                                                            if (!entryConfStats[confName]) entryConfStats[confName] = 0;
+                                                            entryConfStats[confName]++;
+                                                            }
+                                                            });
+                                                            const sortedConfStats =
+                                                            Object.entries(entryConfStats).sort((a,b) => b[1] - a[1]);
+                                                            %>
+                                                            <% if (sortedConfStats.length> 0) { %>
+                                                                <div class="d-flex flex-wrap gap-1 mt-2 mb-1 mx-lg-2 px-2">
+                                                                    <% sortedConfStats.forEach(([confName, count])=> { %>
+                                                                        <span class="badge bg-primary" style="font-size:0.75em;"><%= count %> <%= confName %></span>
+                                                                    <% }); %>
+                                                                </div>
+                                                            <% } %>
+                                                    </div>
+                                                    <div class="col-12 col-lg-7">
+                                                        <div class="row m-lg-2" id="bracketRow">
+                                                            <div class="col-12">
+                                                                <%- include('partials/bracket.ejs') %>
+
+                                                                    <div class="legend row justify-content-center">
+                                                                        <div class="legend-item col-2 picked">
+                                                                            <span>Upcoming</span>
+                                                                        </div>
+                                                                        <div
+                                                                            class="legend-item col-2 picked-win text-center">
+                                                                            <span>Win</span>
+                                                                        </div>
+                                                                        <div class="legend-item col-2 picked-loss">
+                                                                            <span>Loss</span>
+                                                                        </div>
+                                                                    </div>
+                                                            </div>
+                                                        </div>
+
+                                                    </div>
+                                                    <!-- Picks Table Column -->
+
+                                                </div>
+
+                                            </div>
+                                        </div>
+                                    </div>
+            </td>
+            <!-- <td>
+                                                        <ul>
+                                                            <% group.pickNames.forEach(pick=> { %>
+                                                                <li>
+                                                                    <%= pick.seed %> - <%= pick.nameNick %>
+                                                                            <%= pick.mascot %>
+                                                                </li>
+                                                                <% }); %>
+                                                        </ul>
+                                                    </td> -->
+            <td class="tbl-rank-sort-cell"><%= group.rank %></td>
+            <td class="tbl-pts-cell">
+                <span class="tbl-pts-val"><%= group.totalPoints || 0 %></span><span class="tbl-pts-lbl"> pts</span>
+            </td>
+            <td data-label="Teams Remaining" class="col-collapsible tbl-teams-cell" data-sort="<%= group.teamsRemaining || 0 %>">
+                <% if ((group.teamsRemaining || 0) > 0) { %><span class="tbl-teams-badge"><%= group.teamsRemaining %><% if (group.teamsAdvanced > 0) { %> (<%= group.teamsAdvanced %> adv)<% } %></span><% } else { %><span class="tbl-teams-badge tbl-teams-zero">0</span><% } %>
+            </td>
+            <td data-label="Max Possible Points" class="col-collapsible col-hide-sm tbl-num-cell">
+                <%= group.possPoints || 0 %>
+            </td>
+            <% const rds = [0,1,2,3,4,5].map(i => (group.picksProgress && group.picksProgress[i] ? group.picksProgress[i][3] : 0) || 0); %>
+            <td data-label="Rd 1 ×2" class="col-collapsible col-hide-md tbl-rnd-cell"><span class="<%= rds[0]===0 ? 'tbl-rnd-zero' : '' %>"><%= rds[0] %></span></td>
+            <td data-label="Rd 2 ×3" class="col-collapsible col-hide-md tbl-rnd-cell"><span class="<%= rds[1]===0 ? 'tbl-rnd-zero' : '' %>"><%= rds[1] %></span></td>
+            <td data-label="Rd 3 ×5" class="col-collapsible col-hide-md tbl-rnd-cell"><span class="<%= rds[2]===0 ? 'tbl-rnd-zero' : '' %>"><%= rds[2] %></span></td>
+            <td data-label="Rd 4 ×9" class="col-collapsible col-hide-md tbl-rnd-cell"><span class="<%= rds[3]===0 ? 'tbl-rnd-zero' : '' %>"><%= rds[3] %></span></td>
+            <td data-label="Rd 5 ×17" class="col-collapsible col-hide-md tbl-rnd-cell"><span class="<%= rds[4]===0 ? 'tbl-rnd-zero' : '' %>"><%= rds[4] %></span></td>
+            <td data-label="Rd 6 ×33" class="col-collapsible col-hide-md tbl-rnd-cell"><span class="<%= rds[5]===0 ? 'tbl-rnd-zero' : '' %>"><%= rds[5] %></span></td>
+
+            </tr>
+            <% }); %>
+                </tbody>
+                </table>
+            </div> <!-- closing table-responsive div -->
+            </div> <!-- closing results-table-wrapper div -->
+
+            <!-- ══ MOBILE CARD LIST (hidden ≥769px via CSS) ══ -->
+            <div class="mobile-card-list">
+                <% groupData.forEach(function(group) {
+                    const rankClass = '';
+                    const rankLabel = group.rank;
+                    const hasTeams = (group.teamsRemaining || 0) > 0;
+                    const rd = [0,1,2,3,4,5].map(i => (group.picksProgress && group.picksProgress[i] ? group.picksProgress[i][3] : 0) || 0);
+                    const rdLabels = ['Rd 1·2pts','Rd 2·3pts','Rd 3·5pts','Rd 4·9pts','Rd 5·17pts','Rd 6·33pts'];
+                %>
+                <div class="mob-entry-card" id="mob-card-<%= group.id %>" data-search="<%= (group.person + ' ' + group.teamName).toLowerCase() %>">
+
+                    <!-- Visible Row: Rank, Content, and Points -->
+                    <div class="mob-card-visible-row">
+                        <!-- Rank -->
+                        <div class="mob-rank-col"
+                             data-bs-toggle="modal"
+                             data-bs-target="#picksModal<%= group.id %>"
+                             style="cursor:pointer; -webkit-tap-highlight-color:transparent;">
+                            <div class="mob-rank-badge <%= rankClass %>"><%= rankLabel %></div>
+                        </div>
+
+                        <!-- Content: Name & Stats -->
+                        <div class="mob-content-col"
+                             data-bs-toggle="modal"
+                             data-bs-target="#picksModal<%= group.id %>"
+                             style="cursor:pointer; -webkit-tap-highlight-color:transparent;">
+                            <div class="mob-name-block">
+                                <span class="mob-person-name" style="pointer-events: none;">
+                                    <% if (group.rank === 1 && isTourneyOver) { %>🏆 <% } %><%= group.person %><span class="mob-sep"> · </span><span class="mob-team-inline"><%= group.teamName %></span>
+                                </span>
+                            </div>
+                            <div class="mob-stat-strip">
+                                <span class="mob-stat-chip">Max <strong><%= group.possPoints || 0 %></strong></span>
+                                <% if (hasTeams) { %>
+                                <span class="mob-alive-badge"><%= group.teamsRemaining || 0 %> team<%= group.teamsRemaining !== 1 ? 's' : '' %><% if (group.teamsAdvanced > 0) { %> (<%= group.teamsAdvanced %> adv)<% } %></span>
+                                <% } else { %>
+                                <span class="mob-elim-badge">Eliminated</span>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Points & Toggle -->
+                        <div class="mob-pts-col"
+                             data-bs-toggle="collapse"
+                             href="#mob-round-<%= group.id %>"
+                             role="button"
+                             aria-expanded="false"
+                             aria-controls="mob-round-<%= group.id %>"
+                             onclick="toggleMobCard('<%= group.id %>')"
+                             style="cursor: pointer; -webkit-tap-highlight-color: transparent;">
+                            <div class="mob-pts-row">
+                                <span class="mob-pts-total"><%= group.totalPoints || 0 %></span>
+                                <span class="mob-chevron">▼</span>
+                            </div>
+                            <span class="mob-pts-label">pts</span>
+                        </div>
+                    </div>
+
+                    <!-- Round breakdown: tap card header to reveal -->
+                    <div class="collapse" id="mob-round-<%= group.id %>">
+                        <div class="mob-round-detail" style="display: block;">
+                            <div class="mob-round-grid">
+                                <% for (let i = 0; i < 6; i++) { %>
+                                <div class="mob-round-item">
+                                    <span class="mob-round-pts <%= rd[i] === 0 ? 'zero' : '' %>"><%= rd[i] %></span>
+                                    <span class="mob-round-lbl"><%= rdLabels[i] %></span>
+                                </div>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <% }); %>
+            </div>
+            <!-- ══ END MOBILE CARD LIST ══ -->
+
+        </div> <!-- closing card-table-container div -->
+    </div> <!-- closing container div -->
+
+    <script>
+        function toggleMobCard(id) {
+            const card = document.getElementById('mob-card-' + id);
+            if (card) card.classList.toggle('expanded');
+        }
+
+        // Shared search — filters desktop table rows AND mobile cards simultaneously
+        (function () {
+            const searchInput = document.getElementById('resultsSearch');
+            const countEl     = document.getElementById('resultsCount');
+
+            function filterResults() {
+                const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+                const tableRows   = document.querySelectorAll('#groupTable tbody tr[data-search]');
+                const mobileCards = document.querySelectorAll('.mob-entry-card[data-search]');
+
+                let visible = 0;
+
+                tableRows.forEach(function (row) {
+                    const match = !q || row.dataset.search.includes(q);
+                    row.style.display = match ? '' : 'none';
+                    // Keep any adjacent details-row in sync
+                    const next = row.nextElementSibling;
+                    if (next && next.classList.contains('details-row')) {
+                        next.style.display = match ? '' : 'none';
+                    }
+                    if (match) visible++;
+                });
+
+                mobileCards.forEach(function (card) {
+                    const match = !q || card.dataset.search.includes(q);
+                    card.style.display = match ? '' : 'none';
+                });
+
+                if (countEl) {
+                    const total = tableRows.length;
+                    countEl.textContent = q
+                        ? (visible + ' of ' + total + ' ' + (total === 1 ? 'entry' : 'entries'))
+                        : (total + ' ' + (total === 1 ? 'entry' : 'entries'));
+                }
+            }
+
+            // Wire up input — no inline handlers needed
+            if (searchInput) {
+                searchInput.addEventListener('input', filterResults);
+                // Clear button (×) resets the filter too
+                searchInput.addEventListener('search', filterResults);
+            }
+
+            // Initialise count immediately (script runs after DOM is rendered)
+            filterResults();
+        }());
+    </script>
+
+    <div>
+        <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
+    </div>
+
+    <script type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="groupDataJson"><%- JSON.stringify(groupData || []).replace(/</g, '\\u003c') %></script>
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        const yearSelectElement = document.getElementById('yearSelect');
+        if (yearSelectElement) {
+            yearSelectElement.addEventListener('change', function () {
+                this.form.submit();
+            });
+        }
+
+        const toggleYearSelectLink = document.getElementById('toggleYearSelect');
+        if (toggleYearSelectLink && yearSelectElement) {
+            toggleYearSelectLink.addEventListener('click', function (event) {
+                event.preventDefault(); // Prevent default link behavior
+                const isHidden = getComputedStyle(yearSelectElement).display === 'none';
+                yearSelectElement.style.display = isHidden ? 'inline-block' : 'none'; // Toggle display
+            });
+        }
+
+        const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
+        const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);
+        const teamData = JSON.parse(document.getElementById('teamDataJson').textContent);
+        // console.log("Game Data: " + JSON.stringify(gameData));
+        // console.log("Region Data: " + JSON.stringify(regionData));
+
+
+
+        // --- Debounce function ---
+        function debounce(func, wait, immediate) {
+            var timeout;
+            return function () {
+                var context = this, args = arguments;
+                var later = function () {
+                    timeout = null;
+                    if (!immediate) func.apply(context, args);
+                };
+                var callNow = immediate && !timeout;
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+                if (callNow) func.apply(context, args);
+            };
+        };
+
+        if (gameData) {
+            regionID1Name = regionData[0];
+            regionID2Name = regionData[1];
+            regionID3Name = regionData[2];
+            regionID4Name = regionData[3];
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
+            // Apply pick-card dynamic colors from data attributes whenever a modal opens.
+            // Static styling (border-bottom, opacity, eliminated text color) lives in
+            // table-styles.css. Only the per-team accent (ESPN team color) is set here
+            // because it varies per row.
+            function applyPickCardColors(modalEl) {
+                modalEl.querySelectorAll('.pick-card-row[data-accent]').forEach(row => {
+                    row.style.borderLeftColor = row.dataset.accent;
+                    row.classList.toggle('eliminated', row.dataset.elim === '1');
+                });
+                modalEl.querySelectorAll('.pick-logo-box[data-border-color]').forEach(box => {
+                    box.style.borderColor = box.dataset.borderColor;
+                });
+                modalEl.querySelectorAll('.pick-pts[data-accent]').forEach(el => {
+                    const isElim = el.dataset.elim === '1';
+                    el.classList.toggle('eliminated', isElim);
+                    el.style.color = isElim ? '' : el.dataset.accent;
+                });
+            }
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.addEventListener('show.bs.modal', () => applyPickCardColors(modal));
+            });
+
+            // Global event delegation for the expand toggle
+            document.addEventListener('click', function (e) {
+                if (e.target && e.target.classList && e.target.classList.contains('col-expand-toggle')) {
+                    const toggleTd = e.target;
+                    const tr = toggleTd.closest('tr');
+                    if (!tr) return;
+
+                    if (tr.classList.contains('expanded')) {
+                        tr.classList.remove('expanded');
+                        const next = tr.nextElementSibling;
+                        if (next && next.classList.contains('details-row')) {
+                            next.remove();
+                        }
+                    } else {
+                        tr.classList.add('expanded');
+                        const detailsTr = document.createElement('tr');
+                        detailsTr.className = 'details-row';
+
+                        const detailsTd = document.createElement('td');
+                        detailsTd.colSpan = 12; // span all columns
+                        detailsTd.className = 'p-0';
+
+                        let html = '<div class="container-fluid details-row-inner">';
+                        const hiddenCells = tr.querySelectorAll('.col-collapsible');
+                        let hasHidden = false;
+                        hiddenCells.forEach(cell => {
+                            const compStyle = window.getComputedStyle(cell);
+                            const isHidden = (compStyle && compStyle.display === 'none') || cell.offsetWidth === 0;
+                            if (isHidden) {
+                                const label = cell.getAttribute('data-label') || 'Column';
+                                const value = cell.innerHTML.trim();
+                                html += `<div class="details-pair"><strong class="col-7 col-sm-5 col-md-4 text-start">${esc(label)}</strong><span class="col-5 col-sm-7 col-md-8 text-start">${value}</span></div>`;
+                                hasHidden = true;
+                            }
+                        });
+                        if (!hasHidden) {
+                            html += '<div class="details-empty">All columns are currently visible.</div>';
+                        }
+                        html += '</div>';
+
+                        detailsTd.innerHTML = html;
+                        detailsTr.appendChild(detailsTd);
+                        tr.after(detailsTr);
+                    }
+                }
+            });
+
+            function createTeamFills(modalElement, groupId, pickNames) { // Added modalElement parameter
+                //console.log("Creating team fills for group ID: " + groupId + " with picks: " + JSON.stringify(pickNames));
+
+                // Scope to the current modal's bracket
+                const allStaticTeamsInModal = modalElement.querySelectorAll('.bracket-wrapper .team');
+                allStaticTeamsInModal.forEach(teamEl => {
+                    teamEl.classList.remove('picked', 'picked-loss', 'picked-win'); // Clear all relevant classes
+                    teamEl.removeAttribute('data-bs-toggle');
+                    teamEl.removeAttribute('data-bs-title');
+                    const existingTooltip = bootstrap.Tooltip.getInstance(teamEl);
+                    if (existingTooltip) {
+                        existingTooltip.dispose();
+                    }
+                });
+
+                // Populate R1 team names before mapping picks 
+                const r1TeamSlots = modalElement.querySelectorAll('.bracket-wrapper .team[data-round="1"]');
+                r1TeamSlots.forEach(slot => {
+                    const seed = parseInt(slot.dataset.seed);
+                    const dataRegion = parseInt(slot.dataset.region);
+
+                    if (dataRegion >= 1 && dataRegion <= regionData.length) {
+                        const regionName = regionData[dataRegion - 1];
+                        // Using the teamData object which is already parsed in results.ejs
+                        const teamInfo = teamData.find(t => t.seed === seed && t.regionName === regionName);
+
+                        if (teamInfo) {
+                            const nameSpan = slot.querySelector('span.name');
+                            if (nameSpan) {
+                                const fullName = `${teamInfo.seed}. ${teamInfo.nameNick} ${teamInfo.mascot}`;
+                                const mascotName = `${teamInfo.seed}. ${teamInfo.mascot}`;
+                                nameSpan.textContent = fullName;
+                                nameSpan.dataset.fullName = fullName;
+                                nameSpan.dataset.mascotName = mascotName;
+                            }
+                        }
+                    }
+                });
+
+                //loop through each pick
+                for (const pick of pickNames) {
+
+                    const regionArrayIndex = regionData.indexOf(pick.regionName);
+
+                    if (regionArrayIndex !== -1) {
+                        // Convert the 0-based array index to a 1-based data-region value
+                        // (assuming bracket.ejs uses data-region="1" for regionData[0], "2" for regionData[1], etc.)
+                        const targetDataRegionValue = regionArrayIndex + 1;
+
+                        //ROUND 1
+                        const elementsToPick = modalElement.querySelectorAll(`.team[data-round="1"][data-region="${targetDataRegionValue}"][data-seed="${pick.seed}"]`); // Scoped and specific to round 1
+                        //const numbershortName = pick.seed + ": " + pick.nameNick.substring(0, 4); //adds team name to the bracket
+                        //elementsToPick.forEach(el => el.textContent = numbershortName);
+                        elementsToPick.forEach(el => {
+                            el.dataset.bsToggle = "tooltip";
+                            el.dataset.bsTitle = pick.nameNick;
+                        });
+                        if (pick.gameStatus[0] === "L") {
+                            elementsToPick.forEach(el => {
+                                el.classList.add('picked-loss');
+                                el.querySelector('.name').textContent = `${pick.seed}. ${pick.nameNick}`;
+                            });
+                        } else if (pick.gameStatus[0] === undefined) {
+                            elementsToPick.forEach(el => {
+                                el.classList.add('picked');
+                                el.querySelector('.name').textContent = `${pick.seed}. ${pick.nameNick}`;
+                            });
+                        } else if (pick.gameStatus[0] === "W") {
+                            elementsToPick.forEach(el => {
+                                el.classList.add('picked-win');
+                                el.querySelector('.name').textContent = `${pick.seed}. ${pick.nameNick}`;
+                            });
+                            let targetR2Slot = null;
+                            const r2TeamSlotsInRegion = modalElement.querySelectorAll( // Scoped
+                                `.team[data-round="2"][data-region="${targetDataRegionValue}"]`
+                            );
+
+                            //ROUND 2
+                            r2TeamSlotsInRegion.forEach(slotElement => {
+                                const possibleSeedsString = slotElement.dataset.possibleSeeds; // e.g., "1,16" or "8,9"
+
+                                if (possibleSeedsString) {
+                                    const possibleSeedsArray = possibleSeedsString.split(',').map(s => s.trim()); // -> ["1", "16"] or ["8", "9"]
+                                    //console.log("seed" + pick.seed + "with region" + targetDataRegionValue + " Possible Seeds Array: " + possibleSeedsArray);
+                                    const pickSeed = pick.seed.toString();
+                                    if (possibleSeedsArray.includes(pickSeed)) {
+                                        targetR2Slot = slotElement;
+                                        targetR2Slot.dataset.seed = pick.seed; // Team's seed for this R2 slot
+                                        // Set tooltip for the team that advanced to this R2 slot
+                                        targetR2Slot.dataset.bsToggle = "tooltip";
+                                        targetR2Slot.dataset.bsTitle = pick.nameNick; // pick.nameNick is the team from R1 that won
+
+                                        if (pick.gameStatus[1] === "L") {
+                                            targetR2Slot.classList.add('picked-loss');
+                                        } else if (pick.gameStatus[1] === undefined) {
+                                            targetR2Slot.classList.add('picked');
+                                        } else if (pick.gameStatus[1] === "W") {
+                                            targetR2Slot.classList.add('picked-win');
+                                            targetR2Slot.textContent = pick.seed; // Set the text content to the seed number
+                                            //ROUND 3
+                                            let targetR3Slot = null;
+                                            const r3TeamSlotsInRegion = modalElement.querySelectorAll(
+                                                `.team[data-round="3"][data-region="${targetDataRegionValue}"]`
+                                            );
+
+                                            r3TeamSlotsInRegion.forEach(slotElementR3 => {
+                                                const possibleSeedsStringR3 = slotElementR3.dataset.possibleSeeds; // e.g., "1,16" or "8,9"
+
+                                                if (possibleSeedsStringR3) {
+                                                    const possibleSeedsArrayR3 = possibleSeedsStringR3.split(',').map(s => s.trim()); // -> ["1", "16"] or ["8", "9"]
+                                                    //console.log("seed " + pick.seed + " with region" + targetDataRegionValue + " Possible Seeds Array R3: " + possibleSeedsArrayR3);
+                                                    if (possibleSeedsArrayR3.includes(pickSeed)) {
+                                                        targetR3Slot = slotElementR3;
+                                                        targetR3Slot.dataset.bsToggle = "tooltip";
+                                                        targetR3Slot.dataset.bsTitle = pick.nameNick;
+                                                        targetR3Slot.dataset.seed = pick.seed;
+                                                        if (pick.gameStatus[2] === "L") {
+                                                            targetR3Slot.classList.add('picked-loss');
+                                                        } else if (pick.gameStatus[2] === undefined) {
+                                                            targetR3Slot.classList.add('picked');
+                                                        } else if (pick.gameStatus[2] === "W") {
+                                                            targetR3Slot.classList.add('picked-win');
+                                                            targetR3Slot.textContent = pick.seed;
+
+
+
+                                                            //ROUND 4
+                                                            let targetR4Slot = null;
+                                                            const r4TeamSlotsInRegion = modalElement.querySelectorAll(
+                                                                `.team[data-round="4"][data-region="${targetDataRegionValue}"]`
+                                                            );
+
+                                                            r4TeamSlotsInRegion.forEach(slotElementR4 => {
+                                                                const possibleSeedsStringR4 = slotElementR4.dataset.possibleSeeds; // e.g., "1,16" or "8,9"
+
+                                                                if (possibleSeedsStringR4) {
+                                                                    const possibleSeedsArrayR4 = possibleSeedsStringR4.split(',').map(s => s.trim()); // -> ["1", "16"] or ["8", "9"]
+                                                                    //console.log("seed " + pick.seed + " with region" + targetDataRegionValue + " Possible Seeds Array R4: " + possibleSeedsArrayR4);
+                                                                    if (possibleSeedsArrayR4.includes(pickSeed)) {
+                                                                        targetR4Slot = slotElementR4;
+                                                                        targetR4Slot.dataset.bsToggle = "tooltip";
+                                                                        targetR4Slot.dataset.bsTitle = pick.nameNick;
+                                                                        targetR4Slot.dataset.seed = pick.seed;
+                                                                        if (pick.gameStatus[3] === "L") {
+                                                                            targetR4Slot.classList.add('picked-loss');
+                                                                        } else if (pick.gameStatus[3] === undefined) {
+                                                                            targetR4Slot.classList.add('picked');
+                                                                        } else if (pick.gameStatus[3] === "W") {
+                                                                            targetR4Slot.classList.add('picked-win');
+                                                                            targetR4Slot.textContent = pick.seed;
+
+                                                                            //Round 5 - Final 4
+                                                                            let targetR5Slot = null;
+                                                                            const r5TeamSlotsInRegion = modalElement.querySelectorAll(
+                                                                                `.team[data-round="5"][data-region="${targetDataRegionValue}"]`
+                                                                            );
+
+                                                                            r5TeamSlotsInRegion.forEach(slotElementR5 => {
+                                                                                targetR5Slot = slotElementR5;
+                                                                                targetR5Slot.dataset.bsToggle = "tooltip";
+                                                                                targetR5Slot.dataset.bsTitle = pick.nameNick;
+                                                                                targetR5Slot.dataset.seed = pick.seed;
+                                                                                if (pick.gameStatus[4] === "L") {
+                                                                                    targetR5Slot.classList.add('picked-loss');
+                                                                                } else if (pick.gameStatus[4] === undefined) {
+                                                                                    targetR5Slot.classList.add('picked');
+                                                                                } else if (pick.gameStatus[4] === "W") {
+                                                                                    targetR5Slot.classList.add('picked-win');
+                                                                                    targetR5Slot.textContent = pick.seed;
+
+                                                                                    //Round 6 - Championship game
+                                                                                    let targetR6Slot = null;
+                                                                                    const r6TeamSlotsInRegion = modalElement.querySelectorAll(
+                                                                                        `.team[data-round="6"]`
+                                                                                    );
+                                                                                    r6TeamSlotsInRegion.forEach(slotElementR6 => {
+                                                                                        //get the region-data from the slotElementR6
+                                                                                        const possibleRegionStringR6 = slotElementR6.dataset.region;
+                                                                                        //console.log("Region for R6 slot: " + possibleRegionStringR6);
+                                                                                        const possibleRegionArrayR6 = possibleRegionStringR6.split(',').map(s => s.trim());
+                                                                                        if (possibleRegionArrayR6.includes(targetDataRegionValue.toString())) {
+                                                                                            targetR6Slot = slotElementR6;
+                                                                                            targetR6Slot.dataset.bsToggle = "tooltip";
+                                                                                            targetR6Slot.dataset.bsTitle = pick.nameNick;
+                                                                                            targetR6Slot.dataset.seed = pick.seed;
+                                                                                            if (pick.gameStatus[5] === "L") {
+                                                                                                targetR6Slot.classList.add('picked-loss');
+                                                                                            } else if (pick.gameStatus[5] === undefined) {
+                                                                                                targetR6Slot.classList.add('picked');
+                                                                                            } else if (pick.gameStatus[5] === "W") {
+                                                                                                targetR6Slot.classList.add('picked-win');
+                                                                                                targetR6Slot.textContent = pick.seed;
+
+                                                                                                //find championship game slot and make it picked
+
+                                                                                                let targetR7Slot = null;
+                                                                                                const r7TeamSlotsInRegion = modalElement.querySelectorAll(
+                                                                                                    `.team[data-round="7"]`
+                                                                                                );
+                                                                                                r7TeamSlotsInRegion.forEach(slotElementR7 => {
+                                                                                                    //get the region-data from the slotElementR7
+                                                                                                    //console.log("Region for R7 slot: " + possibleRegionStringR7);
+                                                                                                    slotElementR7.dataset.bsToggle = "tooltip";
+                                                                                                    slotElementR7.dataset.bsTitle = pick.nameNick;
+                                                                                                    targetR7Slot = slotElementR7;
+                                                                                                    targetR7Slot.dataset.seed = pick.seed;
+                                                                                                    targetR7Slot.classList.add('picked-win');
+                                                                                                    targetR7Slot.textContent = pick.nameNick;
+
+
+
+                                                                                                });
+
+                                                                                            }
+                                                                                        }
+
+                                                                                    });
+
+
+                                                                                }
+                                                                            });
+                                                                        }
+
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    }
+                                                }
+                                            });
+
+
+
+
+                                        }
+                                    }
+                                }
+                            });
+
+                        } else {
+                            console.warn(`Region name "${pick.regionName}" not found in regionData. Cannot highlight team in static bracket.`);
+                        }
+
+                    }
+
+                }
+
+            }
+
+
+            const groupTable = document.getElementById('groupTable');
+            if (groupTable) {
+                // Initialize Tablesort without default sorting
+                const tableSort = new Tablesort(groupTable);
+
+                // Close all expanded rows when sorting to prevent layout issues
+                document.querySelectorAll('thead th').forEach(th => {
+                    th.addEventListener('click', () => {
+                        document.querySelectorAll('.details-row').forEach(row => row.remove());
+                        document.querySelectorAll('tr.expanded').forEach(tr => tr.classList.remove('expanded'));
+                    });
+                });
+
+                // Custom sorting function for multi-level sorting
+                const customSort = (a, b) => {
+                    const maxPossibleA = parseFloat(a.children[5].textContent); // Max Possible Points
+                    const maxPossibleB = parseFloat(b.children[5].textContent);
+                    const totalPointsA = parseFloat(a.children[3].textContent); // Total Points
+                    const totalPointsB = parseFloat(b.children[3].textContent);
+                    const teamsRemainingA = parseFloat(a.children[4].textContent); // Teams Remaining
+                    const teamsRemainingB = parseFloat(b.children[4].textContent);
+
+                    // Sort by Total Points (descending)
+                    if (totalPointsA !== totalPointsB) {
+                        return totalPointsB - totalPointsA;
+                    }
+                    // Then by Teams Remaining (descending)
+                    if (teamsRemainingA !== teamsRemainingB) {
+                        return teamsRemainingB - teamsRemainingA;
+                    }
+                    // Then by Max Possible Points (descending)
+                    return maxPossibleB - maxPossibleA;
+
+                };
+
+                // Get the table body rows
+                const rows = Array.from(groupTable.tBodies[0].rows);
+
+                // Sort the rows using the custom sorting function
+                rows.sort(customSort);
+
+                const mobileCardList = document.querySelector('.mobile-card-list');
+
+                // Append the sorted rows back to the table and sync mobile cards
+                rows.forEach(row => {
+                    groupTable.tBodies[0].appendChild(row);
+                    const groupId = row.getAttribute('data-group-id');
+                    if (groupId && mobileCardList) {
+                        const card = document.getElementById('mob-card-' + groupId);
+                        if (card) mobileCardList.appendChild(card);
+                    }
+                });
+
+                // Add the rank numbers after sorting
+                let rank = 0;
+                let previousTotalPoints = -1; // Initialize with a very low value
+                let previousRank = 0;
+                let sameRankCount = 0;
+                rows.forEach((row, index) => {
+                    const currentTotalPoints = parseFloat(row.children[3].textContent); // Total Points is now at index 3
+
+                    let assignedRank;
+                    if (currentTotalPoints === previousTotalPoints) {
+                        // Same total points as the previous row
+                        sameRankCount++;
+                        assignedRank = previousRank;
+                    } else {
+                        // Different total points
+                        rank += sameRankCount + 1;
+                        sameRankCount = 0;
+                        assignedRank = rank;
+                        previousRank = rank;
+                    }
+                    
+                    row.children[2].textContent = assignedRank;
+
+                    // Update the desktop entry cell rank badge
+                    const tblRankBadge = row.children[1].querySelector('.tbl-rank-badge');
+                    if (tblRankBadge) {
+                        tblRankBadge.textContent = assignedRank;
+                    }
+
+                    // Also update the mobile card's rank value and badge!
+                    const groupId = row.getAttribute('data-group-id');
+                    if (groupId && mobileCardList) {
+                        const card = document.getElementById('mob-card-' + groupId);
+                        if (card) {
+                            const rankBadge = card.querySelector('.mob-rank-badge');
+                            if (rankBadge) {
+                                rankBadge.textContent = assignedRank;
+                            }
+                            const statCells = card.querySelectorAll('.mob-stat-val');
+                            if (statCells && statCells.length >= 3) {
+                                statCells[2].textContent = assignedRank; 
+                            }
+                        }
+                    }
+
+                    previousTotalPoints = currentTotalPoints;
+                });
+
+                // Function to trigger confetti
+                function triggerConfetti() {
+                    const confettiSettings = {
+                        target: 'confetti-canvas',
+                        max: 150,
+                        size: 1,
+                        animate: true,
+                        props: ['circle', 'square', 'triangle', 'line'],
+                        colors: [[165, 104, 246], [230, 61, 135], [0, 199, 228], [253, 214, 126]],
+                        clock: 25,
+                        rotate: true,
+                        start_from_edge: true,
+                        respawn: false,
+                    };
+                    const confetti = new ConfettiGenerator(confettiSettings);
+                    confetti.render();
+                }
+
+                // Add confetti canvas
+                const confettiCanvas = document.createElement('canvas');
+                confettiCanvas.id = 'confetti-canvas';
+                confettiCanvas.style.position = 'fixed';
+                confettiCanvas.style.top = '0';
+                confettiCanvas.style.left = '0';
+                confettiCanvas.style.width = '100vw';
+                confettiCanvas.style.height = '100vh';
+                confettiCanvas.style.pointerEvents = 'none';
+                confettiCanvas.style.zIndex = '1000';
+                document.body.appendChild(confettiCanvas);
+
+                let finalReached = false; // Flag to check if rank 1 has reached max points
+                //check if entry rankCell '1' has reached its max possible points
+                //there probably is a better way to verify the tourney is over
+                rows.forEach(row => {
+                    const rankCell = row.children[2];
+                    const entryCell = row.children[1].querySelector('button');
+                    const totalPoints = parseFloat(row.children[3].textContent);
+                    const maxPossiblePoints = parseFloat(row.children[5].textContent);
+                    //console.log("Checking rankCell: " + rankCell.textContent + ", totalPoints: " + totalPoints + ", maxPossiblePoints: " + maxPossiblePoints);
+                    if (rankCell.textContent === '1' && totalPoints === maxPossiblePoints) {
+                        triggerConfetti();
+                        finalReached = true;
+                        //console.log("Final reached with max points for rank 1");
+                    }
+                });
+
+
+                // Check for gold, silver, and bronze icons
+                if (finalReached) {
+                    // If the first rank has reached max points, trigger confetti
+
+
+                    rows.forEach(row => {
+                        const rankCell = row.children[2];
+                        const entryCell = row.children[1].querySelector('button');
+                        const totalPoints = parseFloat(row.children[3].textContent);
+                        const maxPossiblePoints = parseFloat(row.children[5].textContent);
+
+                        if (entryCell && totalPoints === maxPossiblePoints) {
+                            let iconSrc = '';
+                            if (rankCell.textContent === '1') {
+                                iconSrc = '/gold.png';
+                                // 
+                            } else if (rankCell.textContent === '2') {
+                                iconSrc = '/silver.png';
+                            } else if (rankCell.textContent === '3') {
+                                iconSrc = '/bronze.png';
+                            }
+
+                            if (iconSrc) {
+                                const icon = document.createElement('img');
+                                icon.src = iconSrc;
+                                icon.style.width = '25px';
+                                icon.style.height = '25px';
+                                icon.style.marginRight = '5px';
+                                icon.style.verticalAlign = 'middle';
+                                entryCell.insertBefore(icon, entryCell.firstChild);
+
+                                const groupId = row.getAttribute('data-group-id');
+                                if (groupId) {
+                                    const mobCard = document.getElementById('mob-card-' + groupId);
+                                    if (mobCard) {
+                                        const mobNameSpan = mobCard.querySelector('.mob-person-name');
+                                        if (mobNameSpan && !mobNameSpan.dataset.iconAdded) {
+                                            const mobIcon = icon.cloneNode();
+                                            mobNameSpan.insertBefore(mobIcon, mobNameSpan.firstChild);
+                                            mobNameSpan.dataset.iconAdded = 'true';
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+                    });
+                }
+                // Trigger the sort on the "Max Possible Points" column (index 3)
+                //tableSort.refresh(); // Refresh the table to apply the sort
+
+                // Make sure Tablesort syncs the mobile cards when someone clicks on a column header
+                groupTable.addEventListener('afterSort', function() {
+                    const mobileCardList = document.querySelector('.mobile-card-list');
+                    if (!mobileCardList) return;
+                    
+                    const currentRows = Array.from(groupTable.tBodies[0].rows);
+                    currentRows.forEach(row => {
+                        if (row.classList.contains('details-row')) return; // ignore expanded details rows
+                        const groupId = row.getAttribute('data-group-id');
+                        if (groupId) {
+                            const card = document.getElementById('mob-card-' + groupId);
+                            if (card) mobileCardList.appendChild(card);
+                        }
+                    });
+                });
+            }
+
+
+
+            const modals = document.querySelectorAll('.modal');
+
+            modals.forEach(modal => {
+                document.body.appendChild(modal);
+                //console.log("appended");
+            });
+
+            modals.forEach(modal => {
+                const picksTable = modal.querySelector('#picksTable');
+                if (!picksTable) return;
+
+                const rows = picksTable.querySelectorAll('tbody tr');
+
+                rows.forEach(row => {
+                    const statusCell = row.querySelector('td:nth-child(2)');
+                    if (!statusCell) return;
+
+                    const statusText = statusCell.textContent.trim();
+
+                    if (statusText.endsWith('L')) {
+                        //nothing
+                    } else {
+                        row.style.fontWeight = 'bold';
+                    }
+                });
+            });
+            const groupData = JSON.parse(document.getElementById('groupDataJson').textContent);
+
+            groupData.forEach(currentGroup => {
+                const groupId = currentGroup.id;
+                //createTeamOverlays(groupId, currentGroup.pickNames);
+            });
+
+            // --- Add Event Listeners AFTER parsing groupData ---
+            modals.forEach(modal => {
+                // Style rows in picks table within modals (can still do this on DOMContentLoaded)
+                const picksTable = modal.querySelector('#picksTable');
+                if (picksTable) { // Check if the table exists in this modal
+                    const rows = picksTable.querySelectorAll('tbody tr');
+                    rows.forEach(row => {
+                        const statusCell = row.querySelector('td:nth-child(2)'); // Second column for Status
+                        if (statusCell) {
+                            const statusText = statusCell.textContent.trim().slice(-1).toUpperCase();
+                            //console.log(`Status Text: ${statusText}`); // Debugging log
+                            if (statusText === 'L') { // Check for 'L'
+                                row.classList.add('text-muted'); // Add Bootstrap classes
+                                //row.classList.add('text-decoration-line-through', 'text-muted'); // Add Bootstrap classes
+                                row.style.fontWeight = 'normal'; // Ensure not bold
+                            } else if (statusText === 'W') { // Check for 'W'
+                                row.style.fontWeight = 'bold'; // Make winners bold
+                                row.classList.remove('text-decoration-line-through', 'text-muted');
+                            } else {
+                                // Pending or other statuses
+                                row.style.fontWeight = 'normal';
+                                row.classList.remove('text-decoration-line-through', 'text-muted');
+                            }
+                        }
+                    });
+                }
+
+                // --- Add event listener to draw overlays when modal is SHOWN ---
+                modal.addEventListener('shown.bs.modal', event => {
+                    // console.log(`Modal shown: ${modal.id}`);
+                    // Extract group ID from the modal's ID (e.g., "picksModal123" -> "123")
+                    const groupId = modal.id.replace('picksModal', '');
+                    if (!groupId) {
+                        console.error(`Could not extract group ID from modal ID: ${modal.id}`);
+                        return;
+                    }
+
+
+                    adjustR3MatchupMargins(modal);
+                    adjustTeamNameFontSize(modal);
+
+                    modal.querySelector('#regionTopLeft').textContent = regionData[0];
+                    modal.querySelector('#regionBottomLeft').textContent = regionData[1];
+                    modal.querySelector('#regionTopRight').textContent = regionData[2];
+                    modal.querySelector('#regionBottomRight').textContent = regionData[3];
+                    // Find the corresponding group data using the extracted ID
+                    // Use == for comparison in case groupId is a string and currentGroup.id is a number
+
+                    const currentGroup = groupData.find(g => g.id == groupId);
+
+
+                    if (currentGroup && currentGroup.pickNames) {
+                        // console.log(`Found group data for ID: ${groupId}. Drawing overlays.`);
+                        createTeamFills(modal, groupId, currentGroup.pickNames);
+
+                        // --- New Tooltip Grouping Logic ---
+                        const tooltipElements = Array.from(modal.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                        const tooltipsGroupedByTitle = {};
+
+                        // Initialize all tooltips with 'manual' trigger and group them by their bs-title
+                        tooltipElements.forEach(el => {
+                            const title = el.dataset.bsTitle;
+                            if (!title) return; // Skip if no title, though createTeamFills should set it
+
+                            // Initialize the tooltip instance for this element
+                            new bootstrap.Tooltip(el, {
+                                trigger: 'manual', // We will control show/hide
+                                container: 'body', // Append tooltip to the body
+                                boundary: 'window'  // Keep tooltip within window bounds
+                            });
+
+                            if (!tooltipsGroupedByTitle[title]) {
+                                tooltipsGroupedByTitle[title] = [];
+                            }
+                            tooltipsGroupedByTitle[title].push(el);
+                        });
+
+                        // Add event listeners to each element to control its group's tooltips
+                        tooltipElements.forEach(triggerEl => {
+                            const title = triggerEl.dataset.bsTitle;
+                            if (!title || !tooltipsGroupedByTitle[title]) return;
+
+                            triggerEl.addEventListener('mouseenter', () => {
+                                tooltipsGroupedByTitle[title].forEach(groupMemberEl => {
+                                    const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                    if (instance) instance.show();
+                                });
+                            });
+
+                            triggerEl.addEventListener('mouseleave', () => {
+                                tooltipsGroupedByTitle[title].forEach(groupMemberEl => {
+                                    const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                    if (instance) instance.hide();
+                                });
+                            });
+                        });
+                        // --- End of New Tooltip Grouping Logic ---
+
+                        // --- New: Tooltip control from Picks Table click ---
+                        let activeTableClickedTeamGroup = null; // Tracks the currently "active" group from table click
+
+                        const picksTableRows = modal.querySelectorAll('#picksTable tbody tr[data-team-name]');
+                        picksTableRows.forEach(row => {
+                            const teamName = row.dataset.teamName;
+                            const currentTeamBracketElements = tooltipsGroupedByTitle[teamName];
+
+                            if (teamName && currentTeamBracketElements && currentTeamBracketElements.length > 0) {
+                                row.style.cursor = 'pointer'; // Indicate clickable
+
+                                row.addEventListener('mouseenter', () => {
+                                    currentTeamBracketElements.forEach(groupMemberEl => {
+                                        const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                        if (instance) instance.show();
+                                    });
+                                });
+
+                                row.addEventListener('mouseleave', () => {
+                                    // Only hide if this group is not the actively clicked/pinned one
+                                    if (activeTableClickedTeamGroup !== currentTeamBracketElements) {
+                                        currentTeamBracketElements.forEach(groupMemberEl => {
+                                            const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                            if (instance) instance.hide();
+                                        });
+                                    }
+                                });
+
+                                row.addEventListener('click', () => {
+                                    // If a different group was "pinned" by a click, unpin it and hide its tooltips
+                                    if (activeTableClickedTeamGroup && activeTableClickedTeamGroup !== currentTeamBracketElements) {
+                                        activeTableClickedTeamGroup.forEach(groupMemberEl => {
+                                            const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                            if (instance) instance.hide();
+                                        });
+                                        activeTableClickedTeamGroup = null; // Clear the old pinned group
+                                    }
+
+                                    // Toggle the "pinned" state for the current group
+                                    if (activeTableClickedTeamGroup === currentTeamBracketElements) {
+                                        // This group was already pinned, so unpin it and hide its tooltips
+                                        currentTeamBracketElements.forEach(groupMemberEl => {
+                                            const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                            if (instance) instance.hide();
+                                        });
+                                        activeTableClickedTeamGroup = null;
+                                    } else {
+                                        // Pin this group: show its tooltips and set it as active
+                                        currentTeamBracketElements.forEach(groupMemberEl => {
+                                            const instance = bootstrap.Tooltip.getInstance(groupMemberEl);
+                                            if (instance) instance.show();
+                                        });
+                                        activeTableClickedTeamGroup = currentTeamBracketElements;
+                                    }
+                                });
+                            }
+                        });
+                        // --- End of New Tooltip control from Picks Table click ---
+                    } else {
+                        console.error(`Could not find group data or pickNames for group ID: ${groupId}`);
+                    }
+                });
+
+                modal.addEventListener('hidden.bs.modal', () => {
+                    // Clean up any tooltips that might be lingering when the modal is closed
+                    const tooltipsToHide = modal.querySelectorAll('[data-bs-toggle="tooltip"]');
+                    tooltipsToHide.forEach(el => {
+                        const instance = bootstrap.Tooltip.getInstance(el);
+                        if (instance) {
+                            instance.hide();
+                        }
+                    });
+                    // activeTableClickedTeamGroup is scoped to the 'shown.bs.modal' event, so it's naturally reset.
+
+                    // After ID-swapping navigation, Bootstrap's internal state can get out of sync
+                    // and leave a stuck backdrop or modal-open class on body. Force cleanup here.
+                    if (!document.querySelector('.modal.show')) {
+                        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                        document.body.classList.remove('modal-open');
+                        document.body.style.removeProperty('overflow');
+                        document.body.style.removeProperty('padding-right');
+                    }
+                });
+            });
+
+            // Left/right arrow key navigation between entry modals
+            // Build in sorted display order by reading from the already-sorted table rows
+            const entryModalIds = groupTable
+                ? Array.from(groupTable.tBodies[0].rows).map(row => {
+                    const btn = row.querySelector('[data-bs-target^="#picksModal"]');
+                    return btn ? btn.getAttribute('data-bs-target').slice(1) : null;
+                }).filter(Boolean)
+                : groupData.map(g => 'picksModal' + g.id);
+            let navigating = false;
+
+            function navigateModal(direction) {
+                if (navigating) return;
+
+                const currentModal = document.querySelector('.modal.show');
+                if (!currentModal) return;
+
+                const currentIndex = entryModalIds.indexOf(currentModal.id);
+                if (currentIndex === -1) return;
+
+                const nextIndex = direction === 'next'
+                    ? (currentIndex + 1) % entryModalIds.length
+                    : (currentIndex - 1 + entryModalIds.length) % entryModalIds.length;
+
+                const nextModalEl = document.getElementById(entryModalIds[nextIndex]);
+                if (!nextModalEl) return;
+
+                navigating = true;
+
+                const currentContent = currentModal.querySelector('.modal-content');
+                const nextContent = nextModalEl.querySelector('.modal-content');
+
+                // Fade out just the content box — backdrop stays perfectly still
+                currentContent.style.transition = 'opacity 0.12s ease';
+                currentContent.style.opacity = '0';
+
+                setTimeout(() => {
+                    // Swap the .modal-content elements between the two modal wrappers
+                    const placeholder = document.createComment('nav-swap');
+                    nextContent.before(placeholder);
+                    currentModal.querySelector('.modal-dialog').replaceChild(nextContent, currentContent);
+                    placeholder.replaceWith(currentContent);
+
+                    // Swap IDs so all existing event listeners keep working
+                    const prevId = currentModal.id;
+                    currentModal.id = nextModalEl.id;
+                    nextModalEl.id = prevId;
+
+                    // Fire the shown.bs.modal logic (fills bracket, sets up tooltips, etc.)
+                    currentModal.dispatchEvent(new Event('shown.bs.modal'));
+
+                    // Fade in the new content
+                    nextContent.style.transition = '';
+                    nextContent.style.opacity = '0';
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            nextContent.style.transition = 'opacity 0.12s ease';
+                            nextContent.style.opacity = '1';
+                            setTimeout(() => { navigating = false; }, 120);
+                        });
+                    });
+                }, 120);
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowLeft') navigateModal('prev');
+                else if (e.key === 'ArrowRight') navigateModal('next');
+            });
+
+            document.addEventListener('click', function (e) {
+                if (e.target.closest('.modal-nav-prev')) navigateModal('prev');
+                else if (e.target.closest('.modal-nav-next')) navigateModal('next');
+            });
+        });
+
+
+
+        // Function to adjust R3 matchup margins based on parent .round.r3 height
+        function adjustR3MatchupMargins(contextElement) { // Added contextElement parameter
+            // If no context is provided (e.g. initial call or global resize), default to document
+            const effectiveContext = contextElement || document;
+            const roundR3Elements = effectiveContext.querySelectorAll('.bracket-wrapper .round.r3'); // Query within context
+
+            roundR3Elements.forEach(roundElement => {
+                const parentHeight = roundElement.offsetHeight;
+                if (parentHeight > 0) {
+                    // We want the total margin (top + bottom) for a matchup to be 1/5 of parentHeight.
+                    // So, marginTop = 1/10 of parentHeight, and marginBottom = 1/10 of parentHeight.
+                    const marginValue = parentHeight * 0.06;
+
+                    const matchupElements = roundElement.querySelectorAll('.matchup');
+                    // matchupElements.forEach(matchup => {
+                    //     matchup.style.marginTop = `${marginValue}px`;
+                    //     matchup.style.marginBottom = `${marginValue}px`;
+                    // });
+                    if (matchupElements.length >= 4) { // Ensure enough matchups exist
+                        matchupElements[0].style.marginTop = `${marginValue}px`;
+                        matchupElements[1].style.marginBottom = `${marginValue}px`;
+                        matchupElements[2].style.marginTop = `${marginValue}px`;
+                        matchupElements[3].style.marginBottom = `${marginValue}px`;
+                    }
+                }
+            });
+            const roundR4Elements = effectiveContext.querySelectorAll('.bracket-wrapper .round.r4'); // Query within context
+
+            roundR4Elements.forEach(roundElement => {
+                const parentHeight2 = roundElement.offsetHeight;
+                if (parentHeight2 > 0) {
+                    // We want the total margin (top + botßom) for a matchup to be 1/5 of parentHeight.
+                    // So, marginTop = 1/10 of parentHeight, and marginBottom = 1/10 of parentHeight.
+                    const marginValue2 = parentHeight2 * 0.125;
+
+                    const matchupElements2 = roundElement.querySelectorAll('.matchup');
+                    // matchupElements.forEach(matchup => {
+                    //     matchup.style.marginTop = `${marginValue}px`;
+                    //     matchup.style.marginBottom = `${marginValue}px`;
+                    // });
+
+                    matchupElements2[0].style.marginTop = `${marginValue2}px`;
+                    matchupElements2[2].style.marginBottom = `${marginValue2}px`;
+
+                }
+            });
+        }
+        const debouncedAdjustR3MatchupMargins = debounce(adjustR3MatchupMargins, 150);
+
+        // Function to adjust font size of team names in R1 if they wrap
+        function adjustTeamNameFontSize(contextElement) {
+            const effectiveContext = contextElement || document;
+            const teamNameSpans = effectiveContext.querySelectorAll('#bracketRow .round.r1 .team span.name');
+
+            teamNameSpans.forEach(span => {
+                span.style.fontSize = '';
+                const parentTeamElement = span.parentElement;
+                if (span.dataset.fullName && span.textContent !== span.dataset.fullName) {
+                    span.textContent = span.dataset.fullName;
+                }
+
+                if (span.scrollHeight > parentTeamElement.clientHeight + 6) {
+                    if (span.dataset.mascotName && span.textContent === span.dataset.fullName) {
+                        span.textContent = span.dataset.mascotName;
+                    }
+                }
+            });
+        }
+        const debouncedAdjustTeamNameFontSize = debounce(adjustTeamNameFontSize, 150);
+
+        $(document).ready(function () {
+
+            $(window).on('resize', function () {
+                document.querySelectorAll('.modal.show').forEach(visibleModal => {
+                    debouncedAdjustR3MatchupMargins(visibleModal);
+                    debouncedAdjustTeamNameFontSize(visibleModal);
+                });
+
+            });
+
+
+        });
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"></script>
+
+</body>
+
+</html>

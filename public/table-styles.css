@@ -1,0 +1,798 @@
+/* --- SHARED TABLE & CARD STYLES --- */
+
+.card-table-container {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 0 2rem 0 rgba(136, 152, 170, 0.15);
+    border: 0;
+    overflow: hidden;
+    width: 100%;
+}
+
+.card-table-header {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-table-title {
+    margin: 0;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--text-main);
+    font-family: inherit;
+}
+
+.custom-card-table {
+    width: 100%;
+    margin-bottom: 0;
+    color: var(--text-muted);
+    background-color: transparent;
+}
+
+.custom-card-table thead th {
+    padding: 0.75rem 0.75rem;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    background-color: var(--bg-soft);
+    border-bottom: 1px solid var(--border-color);
+    border-top: none;
+    font-weight: 600;
+    white-space: normal;
+    position: sticky;
+    z-index: 20;
+}
+
+.custom-card-table tbody td {
+    padding: 0.5rem 0.75rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-color);
+    border-top: none;
+    font-size: 0.875rem;
+    white-space: normal;
+}
+
+.custom-card-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Zebra striping for scannability — keep it subtle in both themes.
+   Dark mode sets BOTH rows explicitly so Bootstrap's box-shadow cell
+   painter can't leak a bright color through transparent cells. */
+.custom-card-table tbody tr td {
+    background-color: var(--bg-card);
+    box-shadow: none;
+}
+
+.custom-card-table tbody tr:nth-child(even) td {
+    background-color: var(--bg-softer);
+}
+
+[data-theme="dark"] .custom-card-table tbody tr:nth-child(even) td {
+    background-color: var(--bg-soft);
+}
+
+.custom-card-table tbody tr:hover td {
+    background-color: var(--bg-hover) !important;
+    box-shadow: none !important;
+}
+
+[data-theme="dark"] .custom-card-table tbody tr:hover td {
+    background-color: var(--bg-hover) !important;
+}
+
+/* First-column sticky cell inside the card table keeps row coloring
+   (don't let .table td:first-child force --bg-card on stripes). */
+.custom-card-table tbody tr:nth-child(even) td:first-child {
+    background-color: var(--bg-softer);
+}
+
+[data-theme="dark"] .custom-card-table tbody tr:nth-child(even) td:first-child {
+    background-color: var(--bg-soft);
+}
+
+
+/* Year Select & Link */
+.year-select-link {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-card);
+    transition: background-color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.year-select-link:hover {
+    background-color: var(--bg-soft);
+    border-color: var(--border-strong);
+    color: var(--text-main);
+    text-decoration: none;
+}
+
+.year-select-custom {
+    display: none;
+    width: auto;
+    background-color: var(--bg-card);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+/* Mobile responsive bits preserved from results.ejs */
+.table-view-collapse td.col-expand-toggle {
+    display: table-cell;
+    text-align: center;
+    cursor: pointer;
+    color: var(--accent-color);
+    vertical-align: middle;
+}
+
+.table-view-collapse td.col-expand-toggle::after {
+    content: "▼";
+    font-size: 0.8em;
+}
+
+.table-view-collapse tr.expanded td.col-expand-toggle::after {
+    content: "▲";
+}
+
+@media screen and (max-width: 1200px) {
+    .table-view-collapse .col-hide-md {
+        display: none;
+    }
+}
+
+@media screen and (max-width: 700px) {
+    .table-view-collapse .col-hide-sm {
+        display: none;
+    }
+}
+
+@media screen and (max-width: 576px) {
+    .table-view-collapse .col-hide-xs {
+        display: none;
+    }
+}
+
+@media screen and (min-width: 1201px) {
+
+    .table-view-collapse .col-expand-toggle,
+    .details-row {
+        display: none !important;
+    }
+}
+
+.details-row>td {
+    padding: 0 !important;
+    background-color: var(--bg-softer);
+}
+
+[data-theme="dark"] .details-row>td {
+    background-color: var(--bg-soft);
+}
+
+/* Inline expansion shown when collapsed columns are revealed on small viewports.
+   Keeps colors token-driven so the row is dark-safe. */
+.details-row-inner {
+    background-color: var(--bg-softer);
+    border-bottom: 2px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+}
+
+[data-theme="dark"] .details-row-inner {
+    background-color: var(--bg-soft);
+}
+
+.details-row-inner .details-pair {
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.25rem 0;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.details-row-inner .details-pair:last-child { border-bottom: none; }
+
+.details-row-inner .details-empty {
+    text-align: center;
+    padding: 0.5rem 0;
+    color: var(--text-muted);
+}
+
+/* Scrollbar styling */
+.table-responsive::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: var(--bg-softer);
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: var(--text-xmuted);
+}
+
+/* Specific sticky header offsets for fullGrid */
+.full-grid-sticky-1 {
+    top: 0;
+}
+
+.full-grid-sticky-2 {
+    top: 44px;
+}
+
+/* ══════════════════════════════════════════════════
+   RESULTS PAGE — picks card, logo box, bracket sizing
+   ══════════════════════════════════════════════════ */
+
+/* Bracket sizing tweaks specific to the results modal layout. */
+#bracketRow .bracket-wrapper .bracket-half > .round.r1 {
+    flex-grow: 5;
+    max-width: 100%;
+}
+
+#bracketRow .championship-column {
+    flex: 0 0 auto;
+    width: 8.33333333%;
+}
+
+#bracketRow .bracket-half {
+    flex: 0 0 auto;
+    width: 45.83333333%;
+}
+
+.bracket-wrapper .final-matchup .team {
+    flex-grow: 1;
+}
+
+@media (min-width: 992px) {
+    .modal-xl {
+        max-width: min(95vw, 1400px);
+    }
+}
+
+@media (min-width: 768px) {
+    .text-md-nowrap {
+        white-space: nowrap !important;
+    }
+}
+
+/* Per-pick logo box used in the picks modal. */
+.pick-logo-box {
+    width: 32px;
+    height: 32px;
+    border-width: 2px;
+    border-style: solid;
+    border-color: var(--border-strong);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--bg-card);
+    flex-shrink: 0;
+}
+
+.pick-logo-fallback {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+/* Fixed-width chip column: 6 chips × ~22px + 5 gaps × 4px ≈ 152px */
+.pick-wl-chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    width: 152px;
+    flex-shrink: 0;
+}
+
+/* Pick row inside the modal — accent border-left + opacity controlled in JS. */
+.pick-card-row {
+    border-bottom: 1px solid var(--border-color);
+    border-left-width: 3px;
+    border-left-style: solid;
+    border-left-color: transparent;
+}
+
+.pick-card-row.eliminated { opacity: 0.55; }
+
+.pick-pts.eliminated { color: var(--text-xmuted) !important; }
+
+/* ══════════════════════════════════════════════════
+   SEARCH BAR — results page
+   ══════════════════════════════════════════════════ */
+
+.results-search-bar {
+    padding: 0.65rem 1rem;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.results-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.results-search-icon {
+    position: absolute;
+    left: 0.75rem;
+    color: var(--text-xmuted);
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
+.results-search-input {
+    width: 100%;
+    padding: 0.5rem 6rem 0.5rem 2.25rem;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.875rem;
+    color: var(--text-main);
+    background: var(--bg-soft);
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.results-search-input:focus {
+    border-color: var(--primary-color);
+    background: var(--bg-card);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.results-search-input::placeholder { color: var(--text-xmuted); }
+
+/* Clear button from browser — keep it visible */
+.results-search-input::-webkit-search-cancel-button { cursor: pointer; }
+
+.results-search-count {
+    position: absolute;
+    right: 0.85rem;
+    font-size: 0.7rem;
+    color: var(--text-xmuted);
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════
+   MOBILE CARD LIST — results page, max-width 768px
+   ══════════════════════════════════════════════════ */
+
+.mobile-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem 1.5rem;
+}
+
+/* Each entry card */
+.mob-entry-card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: box-shadow 0.15s;
+    display: flex;
+    flex-direction: column;
+}
+
+.mob-entry-card:active {
+    box-shadow: var(--shadow-md);
+}
+
+/* ── Card header row (always visible) ── */
+.mob-card-visible-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+}
+
+/* Rank column */
+.mob-rank-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mob-rank-badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--bg-softer);
+    border: 1.5px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+/* Content column fills remaining width */
+.mob-content-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.mob-name-block {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.mob-person-name {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--blue-link);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    margin: 0;
+}
+
+.mob-person-name:hover { color: var(--blue-link); text-decoration: underline; }
+
+.mob-sep {
+    color: var(--text-xmuted);
+    font-weight: 400;
+    font-size: 0.75rem;
+}
+
+.mob-team-inline {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Compact stat strip */
+.mob-stat-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.mob-stat-chip {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.mob-stat-chip strong {
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+.mob-pts-col {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.mob-pts-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+}
+
+.mob-pts-total {
+    font-size: 1.125rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+}
+
+.mob-chevron {
+    color: var(--text-xmuted);
+    font-size: 0.55rem;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+    margin-top: 1px;
+}
+
+.mob-entry-card.expanded .mob-chevron {
+    transform: rotate(180deg);
+}
+
+.mob-pts-label {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: -2px;
+}
+
+.mob-stat-cell {
+    flex: 1;
+    padding: 0.4rem 0.3rem;
+    text-align: center;
+    border-right: 1px solid var(--bg-soft);
+}
+
+.mob-stat-cell:last-child { border-right: none; }
+
+.mob-stat-val {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: block;
+}
+
+.mob-stat-lbl {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-xmuted);
+    font-weight: 600;
+    display: block;
+    margin-top: 1px;
+}
+
+/* ── Expandable round breakdown ── */
+.mob-round-detail {
+    display: none;
+    background: var(--bg-softer);
+    border-top: 1px solid var(--border-color);
+    padding: 0.6rem 0.85rem;
+}
+
+.mob-entry-card.expanded .mob-round-detail {
+    display: block;
+}
+
+.mob-round-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+}
+
+.mob-round-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.4rem 0.3rem;
+    text-align: center;
+}
+
+.mob-round-pts {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-main);
+    display: block;
+}
+
+.mob-round-pts.zero { color: var(--border-strong); }
+
+.mob-round-lbl {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-xmuted);
+    font-weight: 600;
+    display: block;
+    margin-top: 2px;
+}
+
+/* ── Alive indicator dot ── */
+.mob-alive-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success-color);
+    margin-left: 4px;
+    vertical-align: middle;
+    margin-bottom: 1px;
+}
+
+.mob-alive-dot.eliminated { background: var(--border-color); }
+
+/* ── Inline name · team ── */
+.mob-alive-badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-softer);
+    color: var(--text-muted);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.mob-elim-badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-softer);
+    color: var(--text-xmuted);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* ── Desktop table rank badge in entry cell ── */
+.tbl-rank-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--bg-softer);
+    border: 1.5px solid var(--border-color);
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.tbl-sep {
+    color: var(--text-xmuted);
+    font-weight: 400;
+}
+
+.tbl-team-name {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.82rem;
+}
+
+/* Hide the numeric rank sort column (value present for tablesort) */
+.tbl-rank-sort-cell {
+    display: none;
+}
+
+/* ── Entry cell layout ── */
+.tbl-entry-names {
+    display: flex;
+    align-items: baseline;
+    gap: 0;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.tbl-person-btn {
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-decoration: none !important;
+    color: var(--blue-link) !important;
+}
+
+.tbl-person-btn:hover {
+    text-decoration: underline !important;
+}
+
+/* Override Bootstrap btn-link so team name stays muted */
+.tbl-sep {
+    color: var(--text-xmuted);
+    font-weight: 400;
+    margin: 0 2px;
+}
+
+.tbl-team-name {
+    color: var(--text-muted) !important;
+    font-weight: 400;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+/* ── Points cell ── */
+.tbl-pts-cell {
+    text-align: right !important;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.tbl-pts-val {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--text-main);
+}
+
+.tbl-pts-lbl {
+    font-size: 0.68rem;
+    color: var(--text-xmuted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ── Teams Left cell ── */
+.tbl-teams-cell {
+    text-align: center !important;
+    white-space: nowrap;
+}
+
+.tbl-teams-badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-softer);
+    color: var(--text-muted);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tbl-teams-zero {
+    background: var(--bg-softer) !important;
+    color: var(--text-xmuted) !important;
+}
+
+/* ── Max Possible / generic number cell ── */
+.tbl-num-cell {
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}
+
+/* ── Round cells ── */
+.tbl-rnd-cell {
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.tbl-rnd-zero {
+    color: var(--border-strong);
+}
+
+/* Tighter rows on desktop */
+.custom-card-table tbody td {
+    padding: 0.45rem 0.65rem;
+}
+
+.custom-card-table thead th {
+    padding: 0.6rem 0.65rem;
+}
+
+/* ── Hide/show by breakpoint ── */
+@media (min-width: 769px) {
+    .mobile-card-list { display: none; }
+}
+
+@media (max-width: 768px) {
+    .results-table-wrapper { display: none; }
+}

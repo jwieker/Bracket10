@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+    <title>Entries — Admin</title>
+</head>
+
+<% const adminSection = 'entries'; %>
+
+<body>
+    <%- include('partials/admin-nav', { year, adminSection }) %>
+
+    <div class="container-lg pb-5">
+
+        <div class="row g-4">
+
+            <!-- Find Entry by Name -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Find Entry</div>
+                    <div class="card-body">
+                        <form id="findEntryForm">
+                            <div class="input-group">
+                                <input type="hidden" name="year" value="<%= year %>">
+                                <input type="text" name="entryName" class="form-control" placeholder="Name or team name" aria-label="Entry name">
+                                <button class="btn btn-outline-secondary" id="findEntryBtn" type="button">Search</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View Entry by ID -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">View Entry by ID</div>
+                    <div class="card-body">
+                        <form action="/viewEntry" method="get">
+                            <div class="input-group">
+                                <input type="hidden" name="year" value="<%= year %>">
+                                <input type="hidden" name="fromAdmin" value="true">
+                                <input type="text" name="entryId" class="form-control" placeholder="Entry ID" aria-label="Entry ID">
+                                <button class="btn btn-outline-secondary" type="submit">View</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unpaid Entries -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Unpaid Entries</div>
+                    <div class="card-body d-flex align-items-center">
+                        <input type="hidden" id="unpaidYear" value="<%= year %>">
+                        <button class="btn btn-outline-warning w-100" type="button" id="unpaidEntriesBtn">
+                            Show Unpaid (Bob)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bracket Emails -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Bracket Emails</div>
+                    <div class="card-body d-flex align-items-center">
+                        <input type="hidden" id="emailYear" value="<%= year %>">
+                        <button class="btn btn-outline-info w-100" type="button" id="loadUnsentEmailsBtn">
+                            Check Unsent Bracket Emails
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Group -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">New Group</div>
+                    <div class="card-body">
+                        <form action="/newGroup" method="post">
+                            <div class="input-group">
+                                <input type="hidden" name="year" value="<%= year %>">
+                                <input type="text" name="groupName" class="form-control" placeholder="Group name" aria-label="Group name">
+                                <button class="btn btn-outline-secondary" type="submit">Create</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Find Entry Modal -->
+    <div class="modal fade" id="findEntryModal" tabindex="-1" aria-labelledby="findEntryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="findEntryModalLabel">Entry Search Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="findEntryModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unpaid Entries Modal -->
+    <div class="modal fade" id="unpaidEntriesModal" tabindex="-1" aria-labelledby="unpaidEntriesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="unpaidEntriesModalLabel">Unpaid Entries — Bob</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="unpaidEntriesModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bracket Emails Modal -->
+    <div class="modal fade" id="bracketEmailsModal" tabindex="-1" aria-labelledby="bracketEmailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bracketEmailsModalLabel">Bracket Emails</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="bracketEmailsModalBody"></div>
+                <div class="modal-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <button type="button" class="btn btn-outline-secondary me-2" id="copyEmailDataBtn" style="display:none;">Copy Entry Data</button>
+                        <button type="button" class="btn btn-success" id="markAllSentBtn" style="display:none;">Mark All as Sent</button>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // ── Find Entry ────────────────────────────────────────────────────
+            const findEntryForm = document.getElementById('findEntryForm');
+            if (findEntryForm) {
+                findEntryForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    document.getElementById('findEntryBtn').click();
+                });
+            }
+
+            const findEntryBtn = document.getElementById('findEntryBtn');
+            if (findEntryBtn) {
+                findEntryBtn.addEventListener('click', async () => {
+                    const form = document.getElementById('findEntryForm');
+                    const entryName = form.querySelector('input[name="entryName"]').value;
+                    const year = form.querySelector('input[name="year"]').value;
+
+                    if (!entryName) {
+                        alert('Please enter an entry name to search for.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/find-entry?year=${year}&name=${encodeURIComponent(entryName)}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) throw new Error('Failed to fetch entry data.');
+                        const entries = await response.json();
+
+                        const modalBody = document.getElementById('findEntryModalBody');
+                        modalBody.innerHTML = '';
+
+                        if (entries.length === 0) {
+                            modalBody.innerHTML = '<p>No entries found matching that name.</p>';
+                        } else {
+                            entries.forEach(entry => {
+                                const entryDiv = document.createElement('div');
+                                entryDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
+                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
+                                    <strong>Person:</strong> ${esc(entry.person)}<br>
+                                    <strong>Email:</strong> ${esc(entry.email)}<br>
+                                    <strong>Group:</strong> ${esc((entry.groups || [entry.group]).filter(Boolean).join(', '))}<br>
+                                    <strong>Paid:</strong> ${entry.payByCheck ? 'Paid by Check' : (entry.hasPaid ? 'Yes' : 'No')}${entry.paymentNote ? ' — ' + esc(entry.paymentNote) : ''}<br>
+                                    <strong>Year:</strong> ${esc(String(entry.year ?? year))}
+                                </p><hr>`;
+                                modalBody.appendChild(entryDiv);
+                            });
+                        }
+
+                        new bootstrap.Modal(document.getElementById('findEntryModal')).show();
+                    } catch (error) {
+                        console.error('Error finding entry:', error);
+                        alert('An error occurred while searching for the entry.');
+                    }
+                });
+            }
+
+            // ── Unpaid Entries ────────────────────────────────────────────────
+            const unpaidEntriesBtn = document.getElementById('unpaidEntriesBtn');
+            if (unpaidEntriesBtn) {
+                unpaidEntriesBtn.addEventListener('click', async () => {
+                    const year = document.getElementById('unpaidYear').value;
+
+                    try {
+                        const response = await fetch(`/unpaid-entries?year=${year}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) throw new Error('Failed to fetch unpaid entries.');
+                        const entries = await response.json();
+
+                        const modalBody = document.getElementById('unpaidEntriesModalBody');
+                        modalBody.innerHTML = '';
+
+                        if (entries.length === 0) {
+                            modalBody.innerHTML = '<p>Everyone in Bob has paid!</p>';
+                        } else {
+                            entries.forEach(entry => {
+                                const entryDiv = document.createElement('div');
+                                entryDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
+                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
+                                    <strong>Person:</strong> ${esc(entry.person)}<br>
+                                    <strong>Group:</strong> ${esc((entry.groups || []).join(', '))}
+                                </p><hr>`;
+                                modalBody.appendChild(entryDiv);
+                            });
+                        }
+
+                        new bootstrap.Modal(document.getElementById('unpaidEntriesModal')).show();
+                    } catch (error) {
+                        console.error('Error fetching unpaid entries:', error);
+                        alert('An error occurred while fetching unpaid entries.');
+                    }
+                });
+            }
+
+            // ── Bracket Emails ────────────────────────────────────────────────
+            let unsentEmailData = [];
+
+            const loadUnsentEmailsBtn = document.getElementById('loadUnsentEmailsBtn');
+            if (loadUnsentEmailsBtn) {
+                loadUnsentEmailsBtn.addEventListener('click', async () => {
+                    const year = document.getElementById('emailYear').value;
+                    loadUnsentEmailsBtn.disabled = true;
+                    loadUnsentEmailsBtn.textContent = 'Loading...';
+
+                    try {
+                        const response = await fetch(`/admin/unsent-emails?year=${year}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) throw new Error('Failed to fetch unsent emails.');
+                        const data = await response.json();
+                        unsentEmailData = data.data.entries || [];
+
+                        const modalBody = document.getElementById('bracketEmailsModalBody');
+                        const copyBtn = document.getElementById('copyEmailDataBtn');
+                        const markSentBtn = document.getElementById('markAllSentBtn');
+
+                        if (unsentEmailData.length === 0) {
+                            modalBody.innerHTML = '<p class="text-success mb-0">✓ All entries have been emailed!</p>';
+                            copyBtn.style.display = 'none';
+                            markSentBtn.style.display = 'none';
+                        } else {
+                            let html = `<p class="mb-2"><strong>${unsentEmailData.length}</strong> entr${unsentEmailData.length === 1 ? 'y needs' : 'ies need'} a bracket email:</p>`;
+                            html += '<div class="list-group">';
+                            unsentEmailData.forEach(entry => {
+                                const picks = (entry.pickNames || []).join(', ') || '—';
+                                html += `
+                                    <div class="list-group-item py-2">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <strong>${esc(entry.person)}</strong>
+                                                <span class="text-muted ms-2">${esc(entry.teamName)}</span>
+                                            </div>
+                                            <small class="text-muted ms-2">${esc(entry.email || '—')}</small>
+                                        </div>
+                                        <div class="mt-1 text-muted" style="font-size:0.82rem;">
+                                            Picks: ${esc(picks)}
+                                        </div>
+                                    </div>`;
+                            });
+                            html += '</div>';
+                            modalBody.innerHTML = html;
+                            copyBtn.style.display = 'inline-block';
+                            markSentBtn.style.display = 'inline-block';
+                        }
+
+                        new bootstrap.Modal(document.getElementById('bracketEmailsModal')).show();
+                    } catch (err) {
+                        alert('Error loading unsent emails: ' + err.message);
+                    } finally {
+                        loadUnsentEmailsBtn.disabled = false;
+                        loadUnsentEmailsBtn.textContent = 'Check Unsent Bracket Emails';
+                    }
+                });
+            }
+
+            const copyEmailDataBtn = document.getElementById('copyEmailDataBtn');
+            if (copyEmailDataBtn) {
+                copyEmailDataBtn.addEventListener('click', () => {
+                    const text = JSON.stringify(unsentEmailData, null, 2);
+                    navigator.clipboard.writeText(text).then(() => {
+                        copyEmailDataBtn.textContent = 'Copied!';
+                        setTimeout(() => { copyEmailDataBtn.textContent = 'Copy Entry Data'; }, 2000);
+                    }).catch(() => {
+                        alert('Copy failed — paste this manually:\n\n' + text);
+                    });
+                });
+            }
+
+            const markAllSentBtn = document.getElementById('markAllSentBtn');
+            if (markAllSentBtn) {
+                markAllSentBtn.addEventListener('click', async () => {
+                    if (!unsentEmailData.length) return;
+                    const year = document.getElementById('emailYear').value;
+                    const entryIds = unsentEmailData.map(e => e.id);
+
+                    markAllSentBtn.disabled = true;
+                    markAllSentBtn.textContent = 'Marking...';
+
+                    try {
+                        const response = await fetch('/admin/mark-emails-sent', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ year: Number(year), entryIds })
+                        });
+                        if (!response.ok) throw new Error('Failed to mark emails sent.');
+                        const result = await response.json();
+
+                        document.getElementById('bracketEmailsModalBody').innerHTML =
+                            `<p class="text-success mb-0">✓ Marked <strong>${result.data.marked}</strong> entr${result.data.marked === 1 ? 'y' : 'ies'} as sent.</p>`;
+                        copyEmailDataBtn.style.display = 'none';
+                        markAllSentBtn.style.display = 'none';
+                        unsentEmailData = [];
+                    } catch (err) {
+                        alert('Error marking emails as sent: ' + err.message);
+                        markAllSentBtn.disabled = false;
+                        markAllSentBtn.textContent = 'Mark All as Sent';
+                    }
+                });
+            }
+        });
+    </script>
+
+</body>
+
+</html>

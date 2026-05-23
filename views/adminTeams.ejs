@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+    <title>Teams — Admin</title>
+</head>
+
+<% const adminSection = 'teams'; %>
+
+<body>
+    <%- include('partials/admin-nav', { year, adminSection }) %>
+
+    <div class="container-lg pb-5">
+
+        <div class="row g-4">
+
+            <!-- Find Team by Name -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Find Team</div>
+                    <div class="card-body">
+                        <form id="findTeamForm">
+                            <div class="input-group">
+                                <input type="text" name="teamName" class="form-control" placeholder="School name" aria-label="School name">
+                                <button class="btn btn-outline-secondary" id="findTeamBtn" type="button">Search</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View Team by ID -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">View Team by ID</div>
+                    <div class="card-body">
+                        <form action="/viewTeam" method="get">
+                            <div class="input-group">
+                                <input type="text" name="teamId" class="form-control" placeholder="School ID" aria-label="School ID">
+                                <button class="btn btn-outline-secondary" type="submit">View</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add New Team -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Add New Team</div>
+                    <div class="card-body d-flex align-items-center">
+                        <form action="/addTeamPage" method="get" class="w-100">
+                            <button class="btn btn-outline-secondary w-100" type="submit">Go to Add Team Page</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conferences -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Conferences</div>
+                    <div class="card-body d-flex align-items-center">
+                        <a href="/conferences" class="btn btn-outline-secondary w-100">Manage Conferences</a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Find Team Modal -->
+    <div class="modal fade" id="findTeamModal" tabindex="-1" aria-labelledby="findTeamModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="findTeamModalLabel">School Search Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="findTeamModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const findTeamForm = document.getElementById('findTeamForm');
+            if (findTeamForm) {
+                findTeamForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    document.getElementById('findTeamBtn').click();
+                });
+            }
+
+            const findTeamBtn = document.getElementById('findTeamBtn');
+            if (findTeamBtn) {
+                findTeamBtn.addEventListener('click', async () => {
+                    const form = document.getElementById('findTeamForm');
+                    const teamName = form.querySelector('input[name="teamName"]').value;
+
+                    if (!teamName) {
+                        alert('Please enter a school name to search for.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/find-team?name=${encodeURIComponent(teamName)}`, { headers: { 'Accept': 'application/json' } });
+                        if (!response.ok) throw new Error('Failed to fetch school data.');
+                        const teams = await response.json();
+
+                        const modalBody = document.getElementById('findTeamModalBody');
+                        modalBody.innerHTML = '';
+
+                        if (teams.length === 0) {
+                            modalBody.innerHTML = '<p>No schools found matching that name.</p>';
+                        } else {
+                            teams.forEach(team => {
+                                const teamDiv = document.createElement('div');
+                                teamDiv.innerHTML = `<p>
+                                    <strong>ID:</strong> <a href="/viewTeam?teamId=${esc(String(team.sid))}">${esc(String(team.sid))}</a><br>
+                                    <strong>Name:</strong> ${esc(team.name)}<br>
+                                    <strong>Mascot:</strong> ${esc(team.mascot)}<br>
+                                    <strong>Short Name:</strong> ${esc(team.nameNick)}<br>
+                                    <strong>Conference ID:</strong> ${esc(String(team.confID))}
+                                </p><hr>`;
+                                modalBody.appendChild(teamDiv);
+                            });
+                        }
+
+                        new bootstrap.Modal(document.getElementById('findTeamModal')).show();
+                    } catch (error) {
+                        console.error('Error finding team:', error);
+                        alert('An error occurred while searching for the school.');
+                    }
+                });
+            }
+        });
+    </script>
+
+</body>
+
+</html>

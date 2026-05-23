@@ -1,0 +1,875 @@
+/* -- Global Reset & Typography -- */
+body {
+  font-family: var(--sans);
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.5;
+  background-image: linear-gradient(135deg, var(--bg-soft) 0%, var(--bg-body) 50%, var(--bg-softer) 100%);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Pseudo-element for the light mode background image to allow premium fallback gradient
+   when the image is missing, and to avoid background-attachment: fixed mobile performance lag. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  background-image: url("teams.webp");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.15; /* Equal to the previous 0.85 opacity overlay blend */
+  pointer-events: none;
+}
+
+/* In dark mode, drop the photo background and use a stunning rich dark gradient fallback. */
+[data-theme="dark"] body {
+  background-image: linear-gradient(135deg, #2b303c 0%, #242830 50%, #1a1d24 100%);
+  background-color: var(--bg-body);
+}
+[data-theme="dark"] body::before {
+  display: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.display-1,
+.display-2,
+.display-3,
+.display-4,
+.display-5,
+.display-6,
+p {
+  color: var(--text-main);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.display-1,
+.display-2,
+.display-3,
+.display-4,
+.display-5,
+.display-6 {
+  font-weight: 700;
+  margin-bottom: var(--spacing-sm);
+}
+
+/* ── Typography utility classes (mirror docs/Design System.html scale) ───
+   Declared AFTER element resets so they win the cascade when applied to
+   bare h1/h2/h3/p tags (equal specificity → last wins). */
+.t-display {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--text-main);
+}
+.t-h1 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-main);
+}
+.t-h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text-main);
+}
+.t-h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+.t-body {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+.t-small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.t-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.t-mono {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: var(--primary-dark);
+}
+
+/* -- Navbar Overrides -- */
+.navbar {
+  background-color: var(--primary-color) !important;
+  box-shadow: var(--shadow-md);
+  padding-top: var(--spacing-sm) !important;
+  padding-bottom: var(--spacing-sm) !important;
+}
+
+.navbar-brand {
+  font-weight: 800 !important;
+  letter-spacing: -0.025em;
+  font-size: 1.4rem !important;
+}
+
+.nav-link {
+  font-weight: 500;
+  font-size: 1.1rem !important;
+}
+
+/* -- Mode Switcher -- */
+.mode-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  color: rgba(255, 255, 255, 0.75);
+  background: transparent;
+}
+
+.mode-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+.mode-btn.active {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--primary-color);
+}
+
+.mode-btn:hover:not(.active) { color: rgba(255, 255, 255, 0.95); }
+
+/* -- Modal Overrides -- */
+.modal-header.bracket-header {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.modal-header.bracket-header .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Bootstrap modal dark-mode overrides */
+[data-theme="dark"] .modal-content {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-main);
+}
+
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal-header .btn-close {
+  filter: invert(1) brightness(0.8);
+}
+
+/* -- Card Styles -- */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s, box-shadow 0.2s;
+  --bs-card-bg: var(--bg-card);
+  --bs-card-color: var(--text-main);
+  --bs-card-border-color: var(--border-color);
+  --bs-card-cap-bg: var(--bg-soft);
+  --bs-card-cap-color: var(--text-muted);
+  color: var(--text-main);
+}
+
+.card-header {
+  background-color: var(--bg-soft);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.card-body,
+.card-footer {
+  background-color: transparent;
+  color: var(--text-main);
+}
+
+.card-footer {
+  border-top: 1px solid var(--border-color);
+}
+
+/* -- Buttons -- */
+.btn-primary {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+  color: #0b0d10 !important;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-md);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+  color: #fff !important;
+}
+
+/* -- Forms & Inputs -- */
+.form-control, .input {
+  background-color: var(--bg-card);
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .form-control, 
+[data-theme="dark"] .input {
+  background-color: var(--bg-soft) !important;
+  border: 1.5px solid var(--border-color);
+}
+
+.form-control:focus, .input:focus {
+  background-color: var(--bg-card);
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px var(--primary-soft) !important;
+  color: var(--text-main) !important;
+  outline: none;
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .input:focus {
+  background-color: var(--bg-soft) !important;
+}
+
+.form-control::placeholder, .input::placeholder {
+  color: var(--text-xmuted) !important;
+}
+
+/* Chrome's autofill paints its own pale-yellow background — paint over it
+   so dark-mode inputs don't flash to a near-white surface. */
+[data-theme="dark"] .form-control:-webkit-autofill,
+[data-theme="dark"] .input:-webkit-autofill,
+[data-theme="dark"] .form-control:-webkit-autofill:focus,
+[data-theme="dark"] .input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-main);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-soft) inset;
+  caret-color: var(--text-main);
+  transition: background-color 9999s ease-in-out 0s;
+}
+.form-control:-webkit-autofill,
+.input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-main);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-card) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* -- Utilities -- */
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+.text-primary {
+  color: var(--primary-color) !important;
+}
+
+.text-secondary {
+  color: var(--text-muted) !important;
+}
+
+.text-success {
+  color: var(--success-color) !important;
+}
+
+.text-danger {
+  color: var(--danger-color) !important;
+}
+
+.text-warning {
+  color: var(--warning-color) !important;
+}
+
+.text-white {
+  color: var(--text-light) !important;
+}
+
+.fw-bold {
+  font-weight: 700 !important;
+}
+
+/* ── Alerts (token-driven, dark-safe) ─────────────────────────────── */
+.alert-info,
+.alert-success,
+.alert-warn,
+.alert-danger {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.alert-info    { background: var(--alert-info-bg);    color: var(--alert-info-fg);    border-color: var(--alert-info-border); }
+.alert-success { background: var(--alert-success-bg); color: var(--alert-success-fg); border-color: var(--alert-success-border); }
+.alert-warn    { background: var(--alert-warn-bg);    color: var(--alert-warn-fg);    border-color: var(--alert-warn-border); }
+.alert-danger  { background: var(--alert-danger-bg);  color: var(--alert-danger-fg);  border-color: var(--alert-danger-border); }
+.alert-info strong,
+.alert-success strong,
+.alert-warn strong,
+.alert-danger strong { display: block; margin-bottom: 2px; }
+
+/* ── Badges & chips ───────────────────────────────────────────────── */
+.badge-ds {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+}
+.badge-success { background: var(--badge-success-bg); color: var(--badge-success-fg); }
+.badge-warn    { background: var(--badge-warn-bg);    color: var(--badge-warn-fg); }
+.badge-danger  { background: var(--badge-danger-bg);  color: var(--badge-danger-fg); }
+.badge-info    { background: var(--badge-info-bg);    color: var(--badge-info-fg); }
+.badge-zero    { background: var(--badge-bg);         color: var(--text-xmuted); }
+
+/* W / L chip — round-by-round outcomes */
+.wl-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  font-family: var(--mono);
+}
+.wl-chip.win     { background: var(--badge-success-bg); color: var(--badge-success-fg); }
+.wl-chip.loss    { background: var(--badge-danger-bg);  color: var(--badge-danger-fg); }
+.wl-chip.pending { background: var(--bg-softer);        color: var(--text-xmuted); }
+
+/* Alive dot */
+.alive-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-color);
+  vertical-align: middle;
+}
+.alive-dot.eliminated { background: var(--border-strong); }
+
+/* ── Design-system card (used by index/landing form containers) ───── */
+.ds-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.ds-card-accent {
+  border-top: 4px solid var(--primary-color);
+}
+.ds-card-body { padding: var(--spacing-lg); }
+.ds-card-body.pad-lg { padding: var(--spacing-xl); }
+
+/* ── Admin form helpers (team-select dropdowns, ESPN autofill) ────── */
+.search-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.search-input {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.875rem;
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.2rem rgba(234, 123, 64, 0.2);
+}
+.espn-autofilled {
+  background-color: var(--alert-success-bg);
+  border-color: var(--success-color) !important;
+}
+.ff-slot-reserved {
+  background-color: var(--alert-warn-bg);
+  border-color: var(--warning-color) !important;
+}
+.ff-slot-check {
+  cursor: pointer;
+  width: 1.1em;
+  height: 1.1em;
+}
+.region-section-header {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid var(--border-color);
+  color: var(--text-main);
+}
+
+/* -- Legacy Support -- */
+.disabled-option {
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+#col2 {
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-card);
+  border-top: 4px solid var(--primary-color) !important;
+  border-left: 1px solid var(--border-color) !important;
+  border-right: 1px solid var(--border-color) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-lg);
+}
+
+/* -- Data Grid (Desktop) -- */
+.table-responsive {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  background: var(--bg-card);
+  border: none !important;
+}
+
+.table {
+  margin-bottom: 0;
+}
+
+.table thead th {
+  background-color: var(--bg-soft);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border-color);
+  padding: var(--spacing-md);
+  vertical-align: middle;
+  text-align: center;
+}
+
+.table td {
+  padding: var(--spacing-md);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.875rem;
+  text-align: center;
+  color: var(--text-main);
+}
+
+/* Sticky Columns */
+.table td:first-child,
+.table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background-color: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.table th:first-child {
+  background-color: var(--bg-soft);
+  z-index: 30;
+}
+
+/* -- Mobile Card View -- */
+@media (max-width: 768px) {
+
+  .table-responsive.table-scroll-full-grid {
+    display: none;
+  }
+
+  .mobile-entry-card {
+    display: block;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
+  }
+
+  .mobile-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .mobile-rank {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--primary-color);
+  }
+
+  .mobile-entry-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .mobile-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+  }
+
+  .stat-item {
+    background: var(--bg-soft);
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-md);
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-weight: 700;
+    font-size: 1rem;
+  }
+}
+
+/* -- Bracket Styles (Preserved) -- */
+.bracket-container {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center center;
+  min-height: 300px;
+  margin: 0 auto;
+  background-image: url("/blank-bracket.jpg");
+  padding-top: 70%;
+}
+
+.team-overlay {
+  position: absolute;
+  width: 33px;
+  height: 10px;
+  background-color: var(--bg-softer);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--text-main);
+  transform: translate(-50%, -50%);
+  z-index: 100;
+}
+
+.team-overlay.team-win {
+  background-color: var(--success-color);
+  color: white;
+  border-color: var(--alert-success-fg);
+}
+
+.team-overlay.team-loss {
+  background-color: var(--danger-color);
+  color: white;
+  border-color: var(--alert-danger-fg);
+}
+
+.region-label {
+  position: absolute;
+  font-weight: bold;
+  font-size: 1em;
+  color: var(--text-main);
+  background-color: var(--bg-card);
+  opacity: 0.9;
+  padding: 1.5px 4px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 5;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+#label-top-left {
+  top: 21%;
+  left: 25%;
+}
+
+#label-top-right {
+  top: 21%;
+  left: 75%;
+}
+
+#label-bottom-left {
+  top: 71%;
+  left: 25%;
+}
+
+#label-bottom-right {
+  top: 71%;
+  left: 75%;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 0;
+  border-radius: 5px;
+  font-size: 12px;
+  margin: 5px;
+}
+
+.legend-item span {
+  color: var(--text-main);
+  text-align: center;
+}
+
+.legend-item.picked {
+  background-color: var(--bg-softer);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.legend-item.picked-win {
+  background-color: var(--green-bg);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.legend-item.picked-loss {
+  background-color: rgba(239, 68, 68, 0.12);
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+/* -- PWA Install Banner dark mode -- */
+[data-theme="dark"] #pwaInstallBanner {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-main);
+}
+
+[data-theme="dark"] #pwaInstallBanner h6 {
+  color: var(--primary-color) !important;
+}
+
+[data-theme="dark"] #pwaInstallBanner p {
+  color: var(--text-muted) !important;
+}
+
+/* -- Bootstrap Utility Re-mapping to Design Tokens -- */
+.bg-white { background-color: var(--bg-card) !important; }
+.bg-light { background-color: var(--bg-soft) !important; }
+.text-dark { color: var(--text-main) !important; }
+.border-dark { border-color: var(--border-color) !important; }
+.table-dark { background-color: var(--bg-soft) !important; color: var(--text-muted) !important; border-color: var(--border-color) !important; }
+.table-dark th { background-color: var(--bg-softer) !important; color: var(--text-muted) !important; border-bottom: 2px solid var(--border-color) !important; }
+.table-dark td { background-color: var(--bg-card) !important; color: var(--text-main) !important; border-bottom: 1px solid var(--border-color) !important; }
+
+/* Bootstrap tables — drive striping/hover from tokens so dark mode works */
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-main);
+  --bs-table-border-color: var(--border-color);
+  --bs-table-striped-bg: var(--bg-soft);
+  --bs-table-striped-color: var(--text-main);
+  --bs-table-hover-bg: var(--bg-softer);
+  --bs-table-hover-color: var(--text-main);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+.table > :not(caption) > * > * {
+  background-color: transparent;
+  color: var(--text-main);
+  border-bottom-color: var(--border-color);
+  box-shadow: none;
+}
+/* When a table provides its own zebra (e.g. .custom-card-table) defuse
+   Bootstrap's striping/hover so the two systems don't fight. */
+.custom-card-table {
+  --bs-table-bg: transparent;
+  --bs-table-accent-bg: transparent;
+  --bs-table-striped-bg: transparent;
+  --bs-table-hover-bg: transparent;
+  --bs-table-bg-state: transparent;
+  --bs-table-bg-type: transparent;
+}
+/* Remap Bootstrap's .table-light custom properties so the light header
+   block follows our tokens (Bootstrap paints via --bs-table-bg on cells). */
+.table-light {
+  --bs-table-color:           var(--text-main);
+  --bs-table-bg:              var(--bg-soft);
+  --bs-table-border-color:    var(--border-color);
+  --bs-table-striped-bg:      var(--bg-softer);
+  --bs-table-striped-color:   var(--text-main);
+  --bs-table-active-bg:       var(--bg-softer);
+  --bs-table-active-color:    var(--text-main);
+  --bs-table-hover-bg:        var(--bg-hover);
+  --bs-table-hover-color:     var(--text-main);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+.table-light,
+.table > thead.table-light > tr > th,
+.table thead.table-light th {
+  background-color: var(--bg-soft) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Bootstrap modal body — inherit card token instead of default white */
+.modal-body { background-color: var(--bg-card); color: var(--text-main); }
+
+/* Bootstrap form controls in dark mode (checkboxes/radios + selects) */
+[data-theme="dark"] .form-check-input {
+  background-color: var(--bg-softer);
+  border-color: var(--border-strong);
+}
+[data-theme="dark"] .form-check-input:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+[data-theme="dark"] .form-select {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
+/* Buttons — solid */
+.btn-success { background-color: var(--success-color) !important; border-color: var(--success-color) !important; color: var(--text-light) !important; }
+.btn-danger  { background-color: var(--danger-color)  !important; border-color: var(--danger-color)  !important; color: var(--text-light) !important; }
+.btn-warning { background-color: var(--warning-color) !important; border-color: var(--warning-color) !important; color: var(--text-main) !important; }
+.btn-info    { background-color: var(--accent-color)  !important; border-color: var(--accent-color)  !important; color: var(--text-light) !important; }
+.btn-secondary { background-color: var(--secondary-color) !important; border-color: var(--secondary-color) !important; color: var(--text-light) !important; }
+
+/* Buttons — outline (light theme keeps Bootstrap defaults; dark theme tokenizes) */
+[data-theme="dark"] .btn-outline-secondary,
+[data-theme="dark"] .btn-outline-dark {
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+[data-theme="dark"] .btn-outline-secondary:hover,
+[data-theme="dark"] .btn-outline-dark:hover {
+  background-color: var(--bg-softer);
+  color: var(--text-main);
+}
+[data-theme="dark"] .btn-outline-primary { border-color: var(--primary-color); color: var(--primary-color); }
+[data-theme="dark"] .btn-outline-primary:hover { background-color: var(--primary-color); color: var(--secondary-color); }
+[data-theme="dark"] .btn-outline-info    { border-color: var(--accent-color);  color: var(--accent-color); }
+[data-theme="dark"] .btn-outline-info:hover    { background-color: var(--accent-color);  color: var(--secondary-color); }
+[data-theme="dark"] .btn-outline-success { border-color: var(--success-color); color: var(--success-color); }
+[data-theme="dark"] .btn-outline-success:hover { background-color: var(--success-color); color: var(--secondary-color); }
+[data-theme="dark"] .btn-outline-danger  { border-color: var(--danger-color);  color: var(--danger-color); }
+[data-theme="dark"] .btn-outline-danger:hover  { background-color: var(--danger-color);  color: var(--secondary-color); }
+[data-theme="dark"] .btn-outline-warning { border-color: var(--warning-color); color: var(--warning-color); }
+[data-theme="dark"] .btn-outline-warning:hover { background-color: var(--warning-color); color: var(--secondary-color); }
+
+/* Bootstrap link/btn-link in dark mode */
+[data-theme="dark"] .btn-link { color: var(--blue-link); }
+
+/* Bootstrap's `.bg-body-tertiary` resolves --bs-tertiary-bg-rgb (we remap
+   --bs-tertiary-bg but not the -rgb variant), so override with our token. */
+.bg-body-tertiary {
+  background-color: var(--bg-softer) !important;
+}
+
+/* Admin .navbar-light — when used on admin pages, keep readable in dark mode */
+[data-theme="dark"] .navbar-light.bg-light {
+  background-color: var(--bg-header) !important;
+  border-color: var(--border-color) !important;
+}
+[data-theme="dark"] .navbar-light .navbar-brand,
+[data-theme="dark"] .navbar-light .nav-link {
+  color: var(--text-main);
+}
+[data-theme="dark"] .navbar-light .nav-link:hover,
+[data-theme="dark"] .navbar-light .nav-link.active {
+  color: var(--primary-color);
+}
+
+/* Bootstrap's `.alert-warning` (the others share names with our utilities at line ~284) */
+.alert-warning { background-color: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-border); }
+
+/* List groups */
+[data-theme="dark"] .list-group-item {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
+/* Dropdown menus */
+[data-theme="dark"] .dropdown-menu {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+[data-theme="dark"] .dropdown-item { color: var(--text-main); }
+[data-theme="dark"] .dropdown-item:hover,
+[data-theme="dark"] .dropdown-item:focus { background-color: var(--bg-softer); color: var(--text-main); }
+
+/* Bootstrap badge utilities — keep brand backgrounds, fix the foreground for tokens */
+[data-theme="dark"] .badge.bg-light { background-color: var(--bg-softer) !important; color: var(--text-main) !important; }
+[data-theme="dark"] .badge.bg-secondary { color: var(--text-light) !important; }
+

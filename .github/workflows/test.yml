@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned to match Dockerfile (FROM node:24.14.0-alpine).
+          node-version: '24.14.0'
+          cache: 'npm'
+
+      # `npm ci` runs with --ignore-scripts implicitly by repo policy
+      # (see docs/development/npm-updates.md). Keep it explicit here too.
+      - run: npm ci --ignore-scripts
+
+      - run: npm test

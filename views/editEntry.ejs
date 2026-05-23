@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<style>
+    .bracket-wrapper .final-matchup .team {
+        flex-grow: 1;
+    }
+
+    /* By adding #bracketRow, we increase the specificity of this rule,
+       ensuring it overrides the default styles from bracket.ejs. */
+    #bracketRow .bracket-wrapper .bracket-half>.round.r1 {
+        flex-grow: 5;
+        max-width: 100%;
+    }
+
+    /* Override Bootstrap grid for registration page only.
+       Make the center column narrower and the side brackets wider. */
+    #bracketRow .championship-column {
+        flex: 0 0 auto;
+        width: 8.33333333%;
+        /* Equivalent to Bootstrap's col-1 */
+    }
+
+    #bracketRow .bracket-half {
+        flex: 0 0 auto;
+        width: 45.83333333%;
+        /* A custom width, like col-5.5 */
+    }
+</style>
+
+
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
+        crossorigin="anonymous"></script>
+    <div class="container-lg pt-3" id="regcont">
+        <div class="row" id="row1">
+            <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
+                id="col2">
+                <div class="mb-2 pt-3 fs-3 fw-bold text-center ">
+                    Edit Entry </br>
+                    ID: <%= entryData.id %>
+                </div>
+                <div class="alert alert-info py-2 mb-3 text-center">
+                    Editing your <strong><%= year %></strong> entry
+                </div>
+                <form action="/entryUpdate" method="post">
+                    <div class="container pb-3">
+                        <label for="inputName">Your Name</label>
+                        <!-- Pre-populate Your Name -->
+                        <input type="text" name="name" class="form-control" onfocus="this.placeholder = ''"
+                            id="inputName" placeholder="John Doe" value="<%= entryData.person %>" required>
+                    </div>
+                    <div class="container pb-3">
+                        <label for="inputTeam">Team Name</label>
+                        <!-- Pre-populate Team Name -->
+                        <input type="text" name="team" class="form-control" maxlength="25"
+                            onfocus="this.placeholder = ''" id="inputTeam" placeholder="Winning team!"
+                            value="<%= entryData.teamName %>" required>
+                    </div>
+                    <div class="container pb-3">
+                        <label>Groups</label>
+                        <div class="border rounded p-2" style="max-height:150px; overflow-y:auto;">
+                            <% (availableGroups || []).forEach(function(g) { %>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="groups" value="<%= g %>"
+                                        id="groupCheck_<%= g %>" <%=(entryData.groups || []).includes(g) ? 'checked'
+                                        : '' %>>
+                                    <label class="form-check-label" for="groupCheck_<%= g %>">
+                                        <%= g %>
+                                    </label>
+                                </div>
+                                <% }); %>
+                        </div>
+                        <div class="form-text text-muted">Select all groups this entry belongs to.</div>
+                    </div>
+
+                    <% if (typeof fromAdmin !=='undefined' && fromAdmin && (entryData.groups || []).includes('Bob')) {
+                        %>
+                        <div class="container pb-3 border rounded p-3 bg-light">
+                            <h5>Admin: Payment Tracking</h5>
+                            <input type="hidden" name="paymentSectionRendered" value="true">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="hasPaid" id="hasPaidCheck"
+                                    <%=entryData.hasPaid ? 'checked' : '' %>>
+                                <label class="form-check-label" for="hasPaidCheck">Paid</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="payByCheck" id="payByCheckCheck"
+                                    <%=entryData.payByCheck ? 'checked' : '' %>>
+                                <label class="form-check-label" for="payByCheckCheck">Pay by Check</label>
+                            </div>
+                            <div>
+                                <label for="paymentNote">Payment Note</label>
+                                <input type="text" class="form-control" name="paymentNote" id="paymentNote"
+                                    placeholder="e.g. Paid via Venmo" value="<%= entryData.paymentNote || '' %>">
+                            </div>
+                        </div>
+                        <% } %>
+
+                            <% if (typeof fromAdmin !== 'undefined' && fromAdmin) { %>
+                            <div class="container pb-3">
+                                <input type="hidden" name="emailSectionRendered" value="true">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="emailSent" id="emailSentCheck"
+                                        <%= entryData.emailSent ? 'checked' : '' %>>
+                                    <label class="form-check-label" for="emailSentCheck">Bracket Email Sent</label>
+                                </div>
+                            </div>
+                            <% } %>
+                            <input type="hidden" name="entryId" value="<%= entryData.id %>" />
+                            <input type="hidden" name="year" value="<%= year %>" />
+                            <input type="hidden" name="maxPoints" id="maxPointsHidden" value="0" />
+                            <!-- Assuming 'name' variable passed to EJS is entryData.group -->
+                            <!-- If not, it should be value="<%= entryData.group %>" -->
+                            <div class="container pb-3" id="innercont">
+                                <label for="exampleInputEmail1">Email address</label>
+
+                                <!-- Pre-populate Email -->
+                                <input type="email" class="form-control" name="email" onfocus="this.placeholder = ''"
+                                    id="exampleInputEmail1" aria-describedby="emailHelp"
+                                    placeholder="john.doe@gmail.com" value="<%= entryData.email %>" required>
+                            </div>
+
+
+
+                            <!-- Populates Dropdowns -->
+                            <h3 class=" text-center pb-1">
+                                Pick your teams
+                            </h3>
+
+                            <!-- set teams here -->
+                            <% for (let i=1; i <=10; i++) { %>
+                                <div class="container pb-3">
+                                    <label for="teamSelect<%= i %>">#<%= i %> Pick</label>
+                                    <select class="form-selector" required id="teamSelect<%= i %>"
+                                        name="teamSelect<%= i %>">
+                                        <option value="" disabled selected hidden>Choose Your #<%= i %> Team
+                                        </option>
+                                        <% teamData.forEach(team=> { %>
+                                            <% if (team.seed>= i) { %>
+                                                <option
+                                                    value="<%= team.sID %>, <%= team.nameNick %> <%= team.mascot %> (<%= team.regionName %>) "
+                                                    data-seed="<%= team.seed %>" data-region="<%= team.regionName %>">
+                                                    <%= team.seed %>. <%= team.nameNick %>
+                                                            <%= team.mascot %> (<%= team.regionName %>)
+                                                                    <!-- sID: <%= team.sID %> -->
+                                                </option>
+                                                <% } %>
+                                                    <% }); %>
+                                    </select>
+                                </div>
+                                <% } %>
+
+                                    <div class="container pb-2" id="innercont">
+                                        <button type="submit" class="btn btn-primary">Update Entry</button>
+                                    </div>
+                </form>
+                <% if (entryData && entryData.id) { %>
+                    <form action="/deleteEntry" method="post" style="display:inline;"
+                        data-confirm="PERMANENTLY delete entry for <%= entryData.person %>? This cannot be undone.">
+                        <input type="hidden" name="entryId" value="<%= entryData.id %>">
+                        <input type="hidden" name="year" value="<%= year %>">
+                        <button type="submit" class="btn btn-danger ms-2">Delete Entry</button>
+                    </form>
+                    <% } %>
+                        <!-- Bracket Visualization Area -->
+                        <h4 class=" text-center pb-1">
+                            Your Picks Max Possible Points: <span id="maxPoints">--</span>
+                        </h4>
+                        <h3 class=" text-center pb-1">
+                            Visualization of Your Picks
+                        </h3>
+                        <div class="row" id="bracketRow">
+                            <div class="col-12">
+                                <%- include('partials/bracket.ejs') %>
+                            </div>
+                        </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
+    </div>
+
+
+
+    <script type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="entryPicksFromServerJson"><%- JSON.stringify(entryData.picks || []).replace(/</g, '\\u003c') %></script>
+    <script type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script>
+        const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
+        const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);
+        const entryPicksFromServer = JSON.parse(document.getElementById('entryPicksFromServerJson').textContent);
+        const teamData = JSON.parse(document.getElementById('teamDataJson').textContent);
+
+        // Set region labels from server data
+        document.getElementById('regionTopLeft').textContent = regionData[0];
+        document.getElementById('regionBottomLeft').textContent = regionData[1];
+        document.getElementById('regionTopRight').textContent = regionData[2];
+        document.getElementById('regionBottomRight').textContent = regionData[3];
+    </script>
+    <script src="/js/editEntry.js"></script>
+    <script src="/js/admin/confirmDestructive.js"></script>
+
+</body>
+
+</html>

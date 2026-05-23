@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+    <title>Admin Console</title>
+</head>
+
+<body>
+    <%- include('partials/admin-nav') %>
+
+    <div class="container-lg pb-5">
+        <div class="row g-3">
+
+            <div class="col-12 col-md-6 col-xl-4">
+                <a href="/admin/tournament" class="text-decoration-none">
+                    <div class="card h-100 border-primary">
+                        <div class="card-body">
+                            <h5 class="card-title text-primary">Game Results</h5>
+                            <ul class="card-text text-muted small mb-0 ps-3">
+                                <li>Submit and undo game winners</li>
+                                <li>Poll ESPN for completed games</li>
+                                <li>Create or edit the tournament bracket</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 text-end">
+                            <span class="text-primary small">Go →</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-4">
+                <a href="/admin/entries?year=<%= year %>" class="text-decoration-none">
+                    <div class="card h-100 border-secondary">
+                        <div class="card-body">
+                            <h5 class="card-title text-secondary">Entries</h5>
+                            <ul class="card-text text-muted small mb-0 ps-3">
+                                <li>Find and edit entries by name or ID</li>
+                                <li>Check unpaid entries (Bob group)</li>
+                                <li>Review and send bracket emails</li>
+                                <li>Create a new group</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 text-end">
+                            <span class="text-secondary small">Go →</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-4">
+                <a href="/admin/teams" class="text-decoration-none">
+                    <div class="card h-100 border-secondary">
+                        <div class="card-body">
+                            <h5 class="card-title text-secondary">Teams</h5>
+                            <ul class="card-text text-muted small mb-0 ps-3">
+                                <li>Find and edit teams by name or ID</li>
+                                <li>Add a new team</li>
+                                <li>Manage conferences</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 text-end">
+                            <span class="text-secondary small">Go →</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-12 col-md-6 col-xl-4">
+                <a href="/admin/system?year=<%= year %>" class="text-decoration-none">
+                    <div class="card h-100 border-warning">
+                        <div class="card-body">
+                            <h5 class="card-title text-warning-emphasis">System</h5>
+                            <ul class="card-text text-muted small mb-0 ps-3">
+                                <li>Recalculate all team scores</li>
+                                <li>Clear the application cache</li>
+                                <li>Switch the active year</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 text-end">
+                            <span class="text-warning-emphasis small">Go →</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+</body>
+
+</html>

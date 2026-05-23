@@ -1,0 +1,23 @@
+# robots.txt for Bracket 10 Application
+
+# Allow all web crawlers to access only the homepage
+User-agent: *
+Allow: /$
+Disallow: /
+
+# Specify a crawl delay to prevent server overload (in seconds)
+Crawl-delay: 10
+
+# Specific rules for Googlebot
+User-agent: Googlebot
+Allow: /$
+Disallow: /private/
+
+# Specific rules for Bingbot
+User-agent: Bingbot
+Allow: /$
+Disallow: /private/
+
+# Sitemap pointing to the homepage. Update the host below to match your
+# deployed origin (or remove this line for non-production deployments).
+Sitemap: https://www.example.com/sitemap.xml

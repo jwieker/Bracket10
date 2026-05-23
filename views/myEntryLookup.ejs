@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<body>
+    <div class="container-lg pt-3">
+        <div class="row">
+            <div
+                class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-6 offset-lg-3 col-xl-4 offset-xl-4 border border-dark border-2 bg-white">
+                <div class="mb-2 pt-3 fs-3 fw-bold text-center">
+                    Edit Your Entry
+                </div>
+                <div class="mb-3 text-center text-muted">
+                    Enter your Entry ID and the email you registered with.
+                </div>
+
+                <% if (error === 'notfound') { %>
+                    <div class="alert alert-danger" role="alert">
+                        No entry found with that ID. Please double-check and try again.
+                    </div>
+                <% } else if (error === 'invalid') { %>
+                    <div class="alert alert-danger" role="alert">
+                        We couldn't find an entry matching that ID and email. Double-check both fields and try again.
+                    </div>
+                <% } %>
+
+                <form action="/my-entry/verify" method="post">
+                    <div class="container pb-3">
+                        <label for="entryId">Entry ID</label>
+                        <input type="text" name="entryId" id="entryId" class="form-control form-control-lg"
+                            placeholder="e.g. 1710000000000" value="<%= entryId || '' %>" required autofocus>
+                        <div class="form-text text-muted">Found in the confirmation email you received when registering.</div>
+                    </div>
+                    <div class="container pb-3">
+                        <label for="email">Email Address</label>
+                        <input type="email" name="email" id="email" class="form-control form-control-lg"
+                            placeholder="you@example.com" required>
+                    </div>
+                    <input type="hidden" name="year" value="<%= year || currentYear %>">
+                    <div class="container pb-3">
+                        <button type="submit" class="btn btn-primary w-100">Verify &amp; Edit My Entry</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+</body>
+
+</html>

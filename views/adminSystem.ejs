@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+    <title>System — Admin</title>
+</head>
+
+<% const adminSection = 'system'; %>
+
+<body>
+    <%- include('partials/admin-nav', { year, adminSection }) %>
+
+    <div class="container-lg pb-5">
+
+        <div class="row g-4">
+
+            <!-- Change Year -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Active Year</div>
+                    <div class="card-body">
+                        <form action="/changeYear" method="post">
+                            <div class="input-group">
+                                <input type="text" name="year" class="form-control" value="<%= year %>" aria-label="Year">
+                                <button class="btn btn-outline-secondary" type="submit">Update Year</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Update Total Points -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Recalculate Scores</div>
+                    <div class="card-body d-flex align-items-center">
+                        <form action="/updateTotalPoints" method="post" class="w-100">
+                            <input type="hidden" name="year" value="<%= year %>">
+                            <button class="btn btn-outline-secondary w-100" type="submit">Update Total Points</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clear Cache -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Cache</div>
+                    <div class="card-body d-flex align-items-center">
+                        <form id="clearCacheForm" class="w-100">
+                            <input type="hidden" name="year" value="<%= year %>">
+                            <button class="btn btn-outline-danger w-100 clear-cache-btn" type="button" id="clearCacheBtn">Clear Cache</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const clearCacheBtn = document.getElementById('clearCacheBtn');
+            const clearCacheForm = document.getElementById('clearCacheForm');
+
+            if (clearCacheBtn) {
+                clearCacheBtn.addEventListener('click', async () => {
+                    if (confirm("Are you sure you want to clear the cache?")) {
+                        const formData = new FormData(clearCacheForm);
+                        const data = Object.fromEntries(formData.entries());
+
+                        try {
+                            const response = await fetch('/clearCache', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                body: JSON.stringify(data)
+                            });
+                            if (response.ok) {
+                                const responseData = await response.json();
+                                alert(responseData);
+                                window.location.reload();
+                            } else {
+                                alert('Failed to clear cache. Server error.');
+                            }
+                        } catch (error) {
+                            console.error("Error clearing cache:", error);
+                            alert('An error occurred while clearing the cache.');
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+
+</body>
+
+</html>

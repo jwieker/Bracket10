@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+
+<body>
+
+    <div class="container-lg pl-1 pr-1 border border-dark border-2 align-self-center" id="col2">
+        <div class="row" id="row1">
+
+            <div class="row">
+                <div class="display-2 fw-bold text-center pt-5">
+                    Add All the Games <%= year %>
+                </div>
+            </div>
+
+            <!-- ── Add Team Panel ─────────────────────────────────────────── -->
+            <div class="card my-3 border-secondary" id="addTeamPanel">
+                <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer"
+                    onclick="toggleAddTeam()">
+                    <span class="fw-bold">➕ Add a New Team</span>
+                    <span id="addTeamChevron">▼</span>
+                </div>
+                <div class="card-body" id="addTeamBody" style="display:none">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label mb-0" for="newTeamName">Name <span class="text-danger">*</span></label>
+                            <input type="text" id="newTeamName" class="form-control" placeholder="University of Kansas">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label mb-0" for="newTeamMascot">Mascot</label>
+                            <input type="text" id="newTeamMascot" class="form-control" placeholder="Jayhawks">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label mb-0" for="newTeamNick">Nick Name</label>
+                            <input type="text" id="newTeamNick" class="form-control" placeholder="Kansas">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label mb-0" for="newTeamConf">Conference</label>
+                            <select id="newTeamConf" class="form-select">
+                                <option value="">— Select —</option>
+                                <% conferences.forEach(conf=> { %>
+                                    <option value="<%= conf.slug %>">
+                                        <%= conf.shortName %>
+                                    </option>
+                                    <% }) %>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100" onclick="submitNewTeam()">Add Team</button>
+                        </div>
+                    </div>
+                    <div id="addTeamStatus" class="mt-2"></div>
+                    <!-- List of teams added this session -->
+                    <div id="addedTeamsList" class="mt-2"></div>
+                </div>
+            </div>
+            <!-- ── End Add Team Panel ──────────────────────────────────────── -->
+
+            <form action="/gamesVerify" method="post">
+                <input type="hidden" name="year" value="<%= year %>" />
+                <input type="hidden" name="region" value="<%= regions %>" />
+                <% regions.forEach((reg, regIndex)=> { %>
+                    <h2>Region: <%= regionNames[regIndex] %>
+                    </h2>
+
+                    <% for( let i=1; i < 9; i++ ) { %>
+                        <!-- SWITCH BACK TO 9 -->
+                        <div class="row">
+                            <div class="col-2">
+                                <h4>Game #<%= i + (regIndex * 15) %>
+                                </h4>
+                            </div>
+                        </div>
+
+                        <% for (let j=1; j <=2; j++) { %>
+                            <div class="row">
+
+                                <div class="col-2">
+                                    Seed <%= seeds[((i*2)-2) +j-1 ] %>
+                                </div>
+                                <div class="col-10">
+                                    <div class="search-dropdown">
+                                        <input type="text" class="search-input" placeholder="Search..."
+                                            aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                        <select class="form-selector" required id="gameSelect<%= i %>-<%= j %>"
+                                            name="games" data-region="<%= reg %>"
+                                            data-gameid="<%= i + (regIndex * 15) %>"
+                                            data-seed="<%= seeds[((i*2)-2) +j-1 ] %>">
+                                            <option value="" disabled selected hidden>gameSelect<%= i %>-<%= j %>
+                                            </option>
+                                            <!-- Option is regionID-gameID-seed-teamID -->
+                                            <% allTeams.forEach(team=> { %>
+                                                <option
+                                                    value="<%= reg %>-<%= i + (regIndex * 15) %>-<%= seeds[((i*2)-2) +j-1 ] %>-<%= team.sid %>">
+                                                    <%= team.name %>
+                                                        <%= team.mascot %> sID: <%= team.sid %>
+                                                </option>
+                                                <% }); %>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <% } %>
+                                <% } %>
+                                    <% }) %>
+
+                                        <div class="container pb-5" id="innercont">
+                                            <button type="submit" class="btn btn-primary">Submit Games</button>
+                                        </div>
+            </form>
+
+        </div>
+        <!-- </div> -->
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
+    </div>
+
+
+    <script>
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        const selectedTeams = new Set(); // Track selected teams
+        const selectedTeams2 = new Set(); // Track selected teams
+
+        // ── Add Team Panel ──────────────────────────────────────────────────
+        function toggleAddTeam() {
+            const body = document.getElementById('addTeamBody');
+            const chevron = document.getElementById('addTeamChevron');
+            const isHidden = body.style.display === 'none';
+            body.style.display = isHidden ? 'block' : 'none';
+            chevron.textContent = isHidden ? '▲' : '▼';
+        }
+
+        async function submitNewTeam() {
+            const name = document.getElementById('newTeamName').value.trim();
+            const mascot = document.getElementById('newTeamMascot').value.trim();
+            const nameNick = document.getElementById('newTeamNick').value.trim();
+            const confID = document.getElementById('newTeamConf').value.trim();
+            const statusEl = document.getElementById('addTeamStatus');
+
+            if (!name) {
+                statusEl.innerHTML = '<span class="text-danger">⚠ Team name is required.</span>';
+                return;
+            }
+
+            statusEl.innerHTML = '<span class="text-muted">Saving…</span>';
+
+            try {
+                const resp = await fetch('/api/addTeam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ name, mascot, nameNick, confID: confID || null }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    statusEl.innerHTML = `<span class="text-danger">⚠ ${esc(err.error || 'Failed to add team.')}</span>`;
+                    return;
+                }
+
+                const team = await resp.json();
+                statusEl.innerHTML = `<span class="text-success">✓ Added: ${esc(team.name)} ${esc(team.mascot || '')} (sID: ${esc(team.sid)})</span>`;
+
+                // Add to all dropdowns
+                addTeamToAllDropdowns(team);
+
+                // Log in the session list
+                const listEl = document.getElementById('addedTeamsList');
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-secondary me-1 mb-1';
+                badge.textContent = `${team.name} ${team.mascot || ''} — sID: ${team.sid}`;
+                listEl.appendChild(badge);
+
+                // Clear fields for next entry
+                document.getElementById('newTeamName').value = '';
+                document.getElementById('newTeamMascot').value = '';
+                document.getElementById('newTeamNick').value = '';
+                document.getElementById('newTeamConf').value = '';
+                document.getElementById('newTeamName').focus();
+
+            } catch (e) {
+                statusEl.innerHTML = `<span class="text-danger">⚠ Network error: ${esc(e.message)}</span>`;
+            }
+        }
+
+        function addTeamToAllDropdowns(team) {
+            const selects = document.querySelectorAll('.form-selector');
+            selects.forEach(select => {
+                const regionID = select.dataset.region;
+                const gameID = select.dataset.gameid;
+                const seed = select.dataset.seed;
+                const value = `${regionID}-${gameID}-${seed}-${team.sid}`;
+                const label = `${team.name} ${team.mascot || ''} sID: ${team.sid}`;
+                const opt = new Option(label, value);
+                select.add(opt);
+            });
+        }
+        // ── End Add Team Panel ──────────────────────────────────────────────
+
+        function filterDropdown(input) {
+            const filter = input.value.toUpperCase();
+            const select = input.parentElement.querySelector('select');
+            const options = select.getElementsByTagName('option');
+
+            for (let i = 0; i < options.length; i++) {
+                const txtValue = options[i].textContent || options[i].innerText;
+                const valueParts = options[i].value.split('-');
+                const teamId = valueParts[3];
+
+                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                    if (selectedTeams.has(teamId) && !options[i].selected) {
+                        options[i].classList.add('disabled-option');
+                    } else {
+                        options[i].classList.remove('disabled-option');
+                    }
+                    options[i].style.display = ""; // Show all filtered options
+                } else {
+                    options[i].style.display = "none";
+                }
+            }
+        }
+
+        // Add event listeners to all select elements
+        const selectElements = document.querySelectorAll('.form-selector');
+        selectElements.forEach(select => {
+            select.addEventListener('change', () => {
+                const selectedOption = select.value;
+                const selectedTeamId = selectedOption.split('-')[3]; // Extract teamID
+
+                // Add to the selectedTeams Set if not already present
+                if (!selectedTeams.has(selectedTeamId)) {
+                    selectedTeams.add(selectedTeamId);
+                } else {
+                    // Team already selected, show an alert
+                    alert("You have already selected this team. Please choose a different one.");
+                    // Reset the dropdown to the default value
+                    select.value = "";
+                    // Remove the team from the selectedTeams set
+                    selectedTeams.delete(selectedTeamId);
+                }
+                // Update other dropdowns to hide the selected team
+                selectElements.forEach(otherSelect => {
+                    if (otherSelect !== select) {
+                        const otherOptions = otherSelect.getElementsByTagName('option');
+                        for (let i = 0; i < otherOptions.length; i++) {
+                            if (otherOptions[i].value.includes(selectedTeamId)) {
+                                if (selectedTeams2.has(selectedTeamId)) {
+                                    otherOptions[i].classList.add('disabled-option');
+                                } else {
+                                    otherOptions[i].classList.remove('disabled-option');
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+
+</html>

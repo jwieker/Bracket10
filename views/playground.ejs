@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <%- include('partials/header') %>
+    <link rel="stylesheet" href="/playground.css">
+</head>
+
+<body>
+  <!-- Sticky exit banner -->
+  <div class="playground-banner px-3 py-2 d-flex align-items-center justify-content-between gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-warning text-dark fw-bold">PLAYGROUND</span>
+      <span class="text-muted small d-none d-sm-inline">Hypothetical results — nothing is saved</span>
+    </div>
+    <form action="/getFullGrid" method="POST" class="m-0 flex-shrink-0">
+      <input type="hidden" name="gameName" value="<%= groupName %>">
+      <input type="hidden" name="gameYear" value="<%= gameYear %>">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">
+        &#8592; Back to <%= groupName %>
+      </button>
+    </form>
+  </div>
+
+  <div class="container-fluid pt-3 pb-5 px-2 px-md-4 px-xl-5">
+    <div class="d-flex justify-content-end mb-3">
+      <button class="btn btn-sm btn-outline-danger" id="clearAllBtn" onclick="clearAll()" style="display:none">
+        Clear All
+      </button>
+    </div>
+
+    <div class="row g-3">
+      <!-- LEFT panel: game controls -->
+      <div class="col-12 col-md-5 col-lg-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <strong class="small text-uppercase text-muted">Pick Hypothetical Winners</strong>
+          </div>
+
+          <!-- Round filter tabs -->
+          <div class="px-2 pt-2" id="roundTabsWrapper">
+            <div class="d-flex flex-wrap gap-1" id="roundFilterBtns">
+              <!-- populated by JS -->
+            </div>
+          </div>
+
+          <!-- Available games list -->
+          <div class="card-body p-2" id="gamesPanel">
+            <!-- populated by JS -->
+          </div>
+
+          <!-- Simulated picks section -->
+          <div id="simulatedSection" style="display:none">
+            <div class="border-top px-3 pt-2 pb-3">
+              <div class="small text-muted fw-semibold text-uppercase mb-2">Simulated Picks</div>
+              <div id="simulatedList"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT panel: standings impact -->
+      <div class="col-12 col-md-7 col-lg-8">
+        <div class="standings-panel">
+          <div class="card shadow-sm">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
+              <strong class="small text-uppercase text-muted">Standings Impact</strong>
+              <small class="text-muted" id="standingsSubtitle"></small>
+            </div>
+
+            <!-- Desktop table (md and up) -->
+            <div class="d-none d-md-block table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th class="ps-3" style="width:60px">Rank</th>
+                    <th>Person</th>
+                    <th class="text-center" style="width:60px">Pts</th>
+                    <th class="text-center" style="width:70px">Teams</th>
+                    <th class="text-center" style="width:70px">Sim Pts</th>
+                    <th class="text-center" style="width:80px">Sim Teams</th>
+                  </tr>
+                </thead>
+                <tbody id="standingsTbody"></tbody>
+              </table>
+            </div>
+
+            <!-- Mobile cards (below md) -->
+            <div class="d-md-none p-2" id="standingsMobile"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Embedded data for client-side simulation -->
+  <% const safeJson=obj=> JSON.stringify(obj).replace(/</g, '\\u003c' ); %>
+    <script>
+      const PLAYGROUND_DATA = {
+        entries:       <%- safeJson(entries) %>,
+        schoolRecords: <%- safeJson(schoolRecords) %>,
+        pendingGames:  <%- safeJson(pendingGames) %>,
+        allGames:      <%- safeJson(allGames) %>,
+        roundPoints:   <%- safeJson(roundPoints) %>,
+        roundNames:    <%- safeJson(roundNames) %>,
+      };
+    </script>
+
+    <%- include('partials/scripts') %>
+
+      <script>
+        // ─────────────────────────────────────────────────
+        // State
+        // ─────────────────────────────────────────────────
+        let simulatedWinners = []; // [{gameID, winnerSID, loserSID, round, winnerName, loserName}]
+        let currentFilter = 'all';
+        let lastDisplayGames = [];
+        let lastAppliedIDs = new Set();
+
+        // ─────────────────────────────────────────────────
+        // Core simulation logic
+        // ─────────────────────────────────────────────────
+
+        function deepCloneRecords(records) {
+          return records.map(r => ({ ...r, gameStatus: r.gameStatus ? [...r.gameStatus] : [] }));
+        }
+
+        function deepCloneGames(games) {
+          return games.map(g => ({ ...g }));
+        }
+
+        /**
+         * Applies a simulated winner to in-memory clones of the game and school record data.
+         * Returns true if the pick was valid and applied, false if the winner was not in this game
+         * (e.g. a cascade was broken by undoing an earlier pick).
+         */
+        function applySimulatedWinner(clonedGames, recordMap, gameID, winnerSID) {
+          const game = clonedGames.find(g => g.gameID === gameID);
+          if (!game) return false;
+
+          // Guard: the winner must actually be one of the teams in this game
+          if (game.team1ID !== winnerSID && game.team2ID !== winnerSID) return false;
+
+          const loserSID = game.team1ID === winnerSID ? game.team2ID : game.team1ID;
+
+          const winner = recordMap.get(winnerSID);
+          if (winner) winner.gameStatus.push('W');
+
+          const loser = recordMap.get(loserSID);
+          if (loser) loser.gameStatus.push('L');
+
+          game.winner = winnerSID;
+
+          // Advance winner into the next game slot
+          if (game.nextGameID) {
+            const nextGame = clonedGames.find(g => g.gameID === game.nextGameID);
+            if (nextGame) {
+              if (game.nextGameSpot === 1) nextGame.team1ID = winnerSID;
+              else nextGame.team2ID = winnerSID;
+            }
+          }
+
+          return true;
+        }
+
+        function calcEntrySimPoints(entry, recordMap) {
+          let total = 0;
+          for (const sID of entry.picks) {
+            const sr = recordMap.get(sID);
+            if (!sr || !sr.gameStatus) continue;
+            for (let i = 0; i < sr.gameStatus.length; i++) {
+              if (sr.gameStatus[i] === 'W') {
+                total += PLAYGROUND_DATA.roundPoints[i];
+              }
+            }
+          }
+          return total;
+        }
+
+        function calcSimTeamsRemaining(entry, recordMap) {
+          let remaining = entry.picks.length;
+          for (const sID of entry.picks) {
+            const sr = recordMap.get(sID);
+            if (sr && sr.gameStatus && sr.gameStatus.includes('L')) remaining--;
+          }
+          return remaining;
+        }
+
+        function runSimulation() {
+          const clonedRecords = deepCloneRecords(PLAYGROUND_DATA.schoolRecords);
+          const clonedGames = deepCloneGames(PLAYGROUND_DATA.allGames);
+          const recordMap = new Map(clonedRecords.map(r => [r.sID, r]));
+
+          // Apply picks in round order so game chain advancement is correct
+          const sortedWinners = [...simulatedWinners].sort((a, b) => a.round - b.round);
+          const appliedGameIDs = new Set();
+          for (const sw of sortedWinners) {
+            const applied = applySimulatedWinner(clonedGames, recordMap, sw.gameID, sw.winnerSID);
+            if (applied) appliedGameIDs.add(sw.gameID);
+          }
+
+          // Compute simulated standings
+          const simEntries = PLAYGROUND_DATA.entries.map(e => ({
+            ...e,
+            simPoints: calcEntrySimPoints(e, recordMap),
+            simTeamsRemaining: calcSimTeamsRemaining(e, recordMap),
+          }));
+
+          simEntries.sort((a, b) => {
+            if (a.simPoints !== b.simPoints) return b.simPoints - a.simPoints;
+            return b.simTeamsRemaining - a.simTeamsRemaining;
+          });
+
+          // Assign ranks (with ties)
+          let simRank = 0, prevPoints = -1, prevRank = 0, sameCount = 0;
+          simEntries.forEach(e => {
+            if (e.simPoints === prevPoints) {
+              sameCount++;
+              e.simRank = prevRank;
+            } else {
+              simRank += sameCount + 1;
+              sameCount = 0;
+              e.simRank = simRank;
+              prevRank = simRank;
+            }
+            prevPoints = e.simPoints;
+          });
+
+          // Games available to pick: both teams set, no winner, not yet simulated
+          const displayGames = clonedGames
+            .filter(g => g.team1ID && g.team2ID && !g.winner && !appliedGameIDs.has(g.gameID))
+            .sort((a, b) => a.round - b.round || a.gameID - b.gameID)
+            .map(g => {
+              // Try original pendingGames first (has pre-computed names), else look up from cloned records
+              const original = PLAYGROUND_DATA.pendingGames.find(p => p.gameID === g.gameID);
+              if (original) return original;
+              const t1 = recordMap.get(g.team1ID) || {};
+              const t2 = recordMap.get(g.team2ID) || {};
+              const roundMeta = PLAYGROUND_DATA.roundNames.find(r => r.round === g.round) || {};
+              return {
+                gameID: g.gameID,
+                round: g.round,
+                roundName: roundMeta.name || `Round ${g.round}`,
+                nextGameID: g.nextGameID,
+                nextGameSpot: g.nextGameSpot,
+                team1ID: g.team1ID,
+                team1Name: t1.nameNick || t1.name || `Team ${g.team1ID}`,
+                team1Seed: t1.seed ?? null,
+                team2ID: g.team2ID,
+                team2Name: t2.nameNick || t2.name || `Team ${g.team2ID}`,
+                team2Seed: t2.seed ?? null,
+              };
+            });
+
+          return { simEntries, displayGames, appliedGameIDs };
+        }
+
+        // ─────────────────────────────────────────────────
+        // User actions
+        // ─────────────────────────────────────────────────
+
+        function pickWinner(gameID, winnerSID, winnerName, loserSID, loserName, round) {
+          simulatedWinners = simulatedWinners.filter(sw => sw.gameID !== gameID);
+          simulatedWinners.push({ gameID, winnerSID, loserSID, round, winnerName, loserName });
+          updateUI();
+        }
+
+        function undoPick(gameID) {
+          simulatedWinners = simulatedWinners.filter(sw => sw.gameID !== gameID);
+          updateUI();
+        }
+
+        function clearAll() {
+          simulatedWinners = [];
+          updateUI();
+        }
+
+        function filterRound(round, btn) {
+          currentFilter = round;
+          document.querySelectorAll('#roundFilterBtns button').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderGames(lastDisplayGames);
+        }
+
+        // ─────────────────────────────────────────────────
+        // Rendering
+        // ─────────────────────────────────────────────────
+
+        function updateUI() {
+          const { simEntries, displayGames, appliedGameIDs } = runSimulation();
+          lastDisplayGames = displayGames;
+          lastAppliedIDs = appliedGameIDs;
+          renderRoundTabs(displayGames);
+          renderGames(displayGames);
+          renderSimulatedList(appliedGameIDs);
+          renderStandings(simEntries);
+          renderSimCount();
+          document.getElementById('clearAllBtn').style.display = simulatedWinners.length ? '' : 'none';
+        }
+
+        function renderRoundTabs(displayGames) {
+          const rounds = [...new Set(displayGames.map(g => g.round))].sort((a, b) => a - b);
+          const container = document.getElementById('roundFilterBtns');
+          const isAllActive = currentFilter === 'all';
+          container.innerHTML = `<button class="btn btn-sm btn-warning${isAllActive ? ' active' : ''}" data-action="filter" data-round="all">All</button>`;
+          rounds.forEach(r => {
+            const meta = PLAYGROUND_DATA.roundNames.find(rn => rn.round === r);
+            const rName = meta ? meta.name : `Round ${r}`;
+            const isActive = currentFilter == r;
+            const btn = document.createElement('button');
+            btn.className = `btn btn-sm btn-outline-secondary${isActive ? ' active' : ''}`;
+            btn.setAttribute('data-round', r);
+            btn.textContent = rName;
+            btn.setAttribute('data-action', 'filter');
+            container.appendChild(btn);
+          });
+        }
+
+        function renderGames(displayGames) {
+          const panel = document.getElementById('gamesPanel');
+
+          const filtered = currentFilter === 'all'
+            ? displayGames
+            : displayGames.filter(g => String(g.round) === String(currentFilter));
+
+          if (filtered.length === 0) {
+            const allDone = simulatedWinners.length > 0 && displayGames.length === 0;
+            panel.innerHTML = `<p class="text-muted small text-center py-2">${allDone ? 'All available games have been simulated.' : 'No games match this filter.'
+              }</p>`;
+            return;
+          }
+
+          // Group by round
+          const byRound = {};
+          filtered.forEach(g => {
+            if (!byRound[g.round]) byRound[g.round] = [];
+            byRound[g.round].push(g);
+          });
+
+          let html = '';
+          Object.keys(byRound).sort((a, b) => a - b).forEach(round => {
+            const games = byRound[round];
+            if (currentFilter === 'all') {
+              html += `<div class="small text-muted fw-semibold mb-1 mt-2 text-uppercase" style="letter-spacing:.04em">${escHtml(games[0].roundName)}</div>`;
+            }
+            games.forEach(g => {
+              html += `
+            <div class="game-card">
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <div class="d-flex align-items-center gap-2 me-2 overflow-hidden">
+                  <span class="badge bg-secondary flex-shrink-0">${g.team1Seed != null ? g.team1Seed : '?'}</span>
+                  <span class="fw-semibold text-truncate">${escHtml(g.team1Name)}</span>
+                </div>
+                <button class="btn btn-sm btn-outline-success flex-shrink-0"
+                  data-action="pick" data-game-id="${g.gameID}" data-winner-sid="${g.team1ID}" data-winner-name="${escHtml(g.team1Name)}" data-loser-sid="${g.team2ID}" data-loser-name="${escHtml(g.team2Name)}" data-round="${g.round}">
+                  Pick &nbsp;&#9654;
+                </button>
+              </div>
+              <div class="text-center text-muted" style="font-size:.75rem;margin:-2px 0">vs</div>
+              <div class="d-flex align-items-center justify-content-between mt-1">
+                <div class="d-flex align-items-center gap-2 me-2 overflow-hidden">
+                  <span class="badge bg-secondary flex-shrink-0">${g.team2Seed != null ? g.team2Seed : '?'}</span>
+                  <span class="fw-semibold text-truncate">${escHtml(g.team2Name)}</span>
+                </div>
+                <button class="btn btn-sm btn-outline-success flex-shrink-0"
+                  data-action="pick" data-game-id="${g.gameID}" data-winner-sid="${g.team2ID}" data-winner-name="${escHtml(g.team2Name)}" data-loser-sid="${g.team1ID}" data-loser-name="${escHtml(g.team1Name)}" data-round="${g.round}">
+                  Pick &nbsp;&#9654;
+                </button>
+              </div>
+            </div>`;
+            });
+          });
+
+          panel.innerHTML = html;
+        }
+
+        function renderSimulatedList(appliedGameIDs) {
+          const section = document.getElementById('simulatedSection');
+          const list = document.getElementById('simulatedList');
+
+          const applied = simulatedWinners.filter(sw => appliedGameIDs.has(sw.gameID));
+
+          if (applied.length === 0) {
+            section.style.display = 'none';
+            return;
+          }
+
+          section.style.display = '';
+          const sorted = [...applied].sort((a, b) => a.round - b.round);
+          list.innerHTML = sorted.map(sw => `
+        <div class="d-flex align-items-center justify-content-between mb-1 gap-2">
+          <span class="small text-truncate">
+            <span class="text-success fw-bold">&#10003;</span>
+            <strong>${escHtml(sw.winnerName)}</strong>
+            <span class="text-muted">beat ${escHtml(sw.loserName)}</span>
+          </span>
+          <button class="btn btn-link btn-sm text-danger p-0 flex-shrink-0" data-action="undo" data-game-id="${sw.gameID}">
+            &times; Undo
+          </button>
+        </div>`).join('');
+        }
+
+        function renderStandings(simEntries) {
+          const tbody = document.getElementById('standingsTbody');
+          const mobileDiv = document.getElementById('standingsMobile');
+          let tbodyHtml = '';
+          let mobileHtml = '';
+
+          simEntries.forEach(e => {
+            const rankChange = e.rank - e.simRank; // positive = moved up (rank number decreased)
+            const rowClass = rankChange > 0 ? 'row-up' : rankChange < 0 ? 'row-down' : '';
+            const cardClass = rankChange > 0 ? 'card-up' : rankChange < 0 ? 'card-down' : '';
+
+            const rankArrow = rankChange > 0
+              ? `<span class="rank-up me-1">&#8593;</span>`
+              : rankChange < 0
+                ? `<span class="rank-down me-1">&#8595;</span>`
+                : '';
+
+            const simPtsClass = e.simPoints > e.totalPoints ? 'delta-pos' : e.simPoints < e.totalPoints ? 'delta-neg' : '';
+            const simTeamsClass = e.simTeamsRemaining < e.teamsRemaining ? 'delta-neg' : '';
+
+            tbodyHtml += `
+          <tr class="${rowClass}">
+            <td class="ps-3">${rankArrow}${e.simRank}</td>
+            <td>
+              <div class="fw-semibold">${escHtml(e.person)}</div>
+              <div class="text-muted small">${escHtml(e.teamName)}</div>
+            </td>
+            <td class="text-center text-muted">${e.totalPoints}</td>
+            <td class="text-center text-muted">${e.teamsRemaining}</td>
+            <td class="text-center fw-semibold ${simPtsClass}">${e.simPoints}</td>
+            <td class="text-center fw-semibold ${simTeamsClass}">${e.simTeamsRemaining}</td>
+          </tr>`;
+
+            mobileHtml += `
+          <div class="card mb-2 ${cardClass}">
+            <div class="card-body py-2 px-3">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="overflow-hidden">
+                  <div class="fw-semibold">${rankArrow}#${e.simRank} ${escHtml(e.person)}</div>
+                  <div class="text-muted small">${escHtml(e.teamName)}</div>
+                </div>
+                <div class="text-end flex-shrink-0">
+                  <div class="text-muted small">Now: ${e.totalPoints} pts &middot; ${e.teamsRemaining} teams</div>
+                  <div class="fw-bold ${simPtsClass}">${e.simPoints} pts</div>
+                  <div class="small ${simTeamsClass}">${e.simTeamsRemaining} teams left</div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+          });
+
+          tbody.innerHTML = tbodyHtml;
+          mobileDiv.innerHTML = mobileHtml;
+        }
+
+        function renderSimCount() {
+          const subtitle = document.getElementById('standingsSubtitle');
+          const n = lastAppliedIDs.size;
+          if (n === 0) {
+            subtitle.textContent = '';
+          } else {
+            subtitle.textContent = `${n} game${n !== 1 ? 's' : ''} simulated`;
+          }
+        }
+
+        // ─────────────────────────────────────────────────
+        // Utilities
+        // ─────────────────────────────────────────────────
+
+        function escHtml(str) {
+          if (str == null) return '';
+          return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        }
+
+        function escJs(str) {
+          if (str == null) return '';
+          return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        // ─────────────────────────────────────────────────
+        // Event delegation (CSP blocks inline onclick attrs)
+        // ─────────────────────────────────────────────────
+
+        // Round filter buttons
+        document.getElementById('roundFilterBtns').addEventListener('click', function(e) {
+          const btn = e.target.closest('button[data-action="filter"]');
+          if (!btn) return;
+          const round = btn.dataset.round;
+          filterRound(round === 'all' ? 'all' : Number(round), btn);
+        });
+
+        // Pick buttons (delegated to gamesPanel which is re-rendered each time)
+        document.getElementById('gamesPanel').addEventListener('click', function(e) {
+          const btn = e.target.closest('button[data-action="pick"]');
+          if (!btn) return;
+          const d = btn.dataset;
+          pickWinner(Number(d.gameId), Number(d.winnerSid), d.winnerName, Number(d.loserSid), d.loserName, Number(d.round));
+        });
+
+        // Undo buttons (delegated to simulatedList)
+        document.getElementById('simulatedList').addEventListener('click', function(e) {
+          const btn = e.target.closest('button[data-action="undo"]');
+          if (!btn) return;
+          undoPick(Number(btn.dataset.gameId));
+        });
+
+        // Clear All button
+        document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+
+        updateUI();
+      </script>
+</body>
+
+</html>

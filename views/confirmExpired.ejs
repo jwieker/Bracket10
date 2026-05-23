@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+</head>
+
+<body>
+    <div class="container-lg pt-3">
+        <div class="row">
+            <div
+                class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-6 offset-lg-3 col-xl-4 offset-xl-4 border border-dark border-2 bg-white">
+                <div class="mb-2 pt-3 fs-3 fw-bold text-center">
+                    Confirmation Link Expired
+                </div>
+                <div class="mb-3 pb-3 text-center text-muted">
+                    This confirmation link has expired or has already been used.
+                    Please <a href="/">return to the home page</a> and submit your entry again.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <%- include('partials/rulesModal') %>
+        <%- include('partials/scripts') %>
+    </div>
+</body>
+
+</html>
