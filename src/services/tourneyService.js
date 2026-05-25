@@ -28,7 +28,7 @@ function setRepositories(newTourneyRepository, newGameRepository, newEntryReposi
 // West, R5 South-Midwest, R6 Championship) — represented in the four parallel
 // arrays BRACKET_R2PLUS_*. Indices in those four arrays MUST line up by game.
 //
-// gameID scheme (matches datafortests/games.json and the live data):
+// gameID scheme (matches data/seed/games.YYYY.json and the live data):
 //   Region 1: R1 = 1–8,   R2 = 9–12,   R3 = 13–14,  R4 = 15
 //   Region 2: R1 = 16–23, R2 = 24–27,  R3 = 28–29,  R4 = 30
 //   Region 3: R1 = 31–38, R2 = 39–42,  R3 = 43–44,  R4 = 45

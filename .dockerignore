@@ -34,7 +34,6 @@ dist/
 build/
 
 # Test data and local artifacts
-datafortests/
 backend/
 
 # PII / sensitive data — never in Docker image

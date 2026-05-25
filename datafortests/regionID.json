@@ -1,8 +1,0 @@
-[
-  {"regionID": 1, "regionName": "East"},
-  {"regionID": 2, "regionName": "West"},
-  {"regionID": 3, "regionName": "South"},
-  {"regionID": 4, "regionName": "Midwest"},
-  {"regionID": 5, "regionName": "Final Four"},
-  {"regionID": 6, "regionName": "Championship"}
-]

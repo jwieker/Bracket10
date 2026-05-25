@@ -61,7 +61,7 @@ npm run dev                # auto-reload on file changes
     *   `/js` - Client-side JavaScript
     *   `/admin` - Admin-specific static assets
 *   `/tests` - Vitest test suite (unit, integration, live E2E)
-*   `/datafortests` - JSON fixtures for integration tests (committed to git)
+*   `/data/seed` - NDJSON fixtures for integration tests and local-emulator seeding (committed to git)
 *   `/scripts` - One-off data migration and maintenance utilities
 *   `/ai` - AI assistant guidance (this folder)
     *   `/architecture` - Deployment, utilities, caching, security

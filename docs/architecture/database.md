@@ -39,11 +39,10 @@ FIRESTORE_EMULATOR_HOST=localhost:8085 GCP_PROJECT_ID=local-dev node scripts/res
 For a fresh environment clone where `databasebackup/` is missing (due to gitignore), you can seed your local Firestore emulator using `scripts/seed-emulator.mjs`:
 
 ```bash
-# Option A: Seed real NCAA D-I baseline data (from data/seed/ committed in Git)
+# Seeds real NCAA D-I baseline data plus any year-suffixed bracket fixtures
+# (e.g. games.2022.json, schoolRecord.2022.json) from data/seed/ into the
+# Firestore emulator.
 node scripts/seed-emulator.mjs
-
-# Option B: Seed synthetic integration test fixtures (from datafortests/ committed in Git)
-node scripts/seed-emulator.mjs --test
 ```
 
 

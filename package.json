@@ -11,6 +11,7 @@
     "test:coverage": "vitest run --coverage",
     "test:live-e2e": "LIVE_E2E=true vitest run tests/e2e-2020.live.test.js",
     "test:live-e2e-v2": "LIVE_E2E=true vitest run tests/e2e-v2.live.test.js",
+    "test:e2e-v2": "FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-localhost:8085} GCP_PROJECT_ID=${GCP_PROJECT_ID:-local-dev} vitest run tests/e2e-v2.live.test.js",
     "test:targeted-updates": "LIVE_E2E=true vitest run tests/targeted-updates.live.test.js",
     "preview-public": "git archive HEAD | tar -t --exclude=docs/private --exclude=scripts/private --exclude=ai_private --exclude=docs/plans --exclude=product-backlog --exclude=.claude --exclude=.skills --exclude=scripts/sync-public.sh | sort",
     "preview-public-branch": "bash scripts/private/preview-public-branch.sh"

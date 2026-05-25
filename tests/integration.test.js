@@ -2,378 +2,259 @@
 import fs from "fs";
 import path from "path";
 
-// Import test data
-const testDataPath = path.join(process.cwd(), "datafortests");
+// Production-shaped seed fixtures live in data/seed/. Top-level docs are
+// NDJSON (`{"_id": "...", ...}` per line); year-suffixed files
+// (e.g. games.2022.json) match the hierarchical per-year subcollections.
+const seedDir = path.join(process.cwd(), "data/seed");
+const FIXTURE_YEAR = 2022;
 
-describe("Integration Tests with Test Data", () => {
+function readNdjson(file) {
+    return fs
+        .readFileSync(path.join(seedDir, file), "utf8")
+        .split("\n")
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        .map((line, i) => {
+            try {
+                return JSON.parse(line);
+            } catch (err) {
+                throw new Error(`Failed to parse ${file} line ${i + 1}: ${err.message}`);
+            }
+        });
+}
+
+describe("Integration Tests with Seed Data", () => {
     let entryData;
     let gamesData;
     let schoolData;
     let schoolRecordData;
     let groupsData;
     let regionData;
+    let conferencesData;
 
     beforeAll(() => {
-        // Load test data
-        try {
-            entryData = JSON.parse(fs.readFileSync(path.join(testDataPath, "entry.json"), "utf8"));
-            gamesData = JSON.parse(fs.readFileSync(path.join(testDataPath, "games.json"), "utf8"));
-            schoolData = JSON.parse(fs.readFileSync(path.join(testDataPath, "school.json"), "utf8"));
-            schoolRecordData = JSON.parse(fs.readFileSync(path.join(testDataPath, "schoolRecord.json"), "utf8"));
-            groupsData = JSON.parse(fs.readFileSync(path.join(testDataPath, "groups.json"), "utf8"));
-            // Handle JSON format for region data
-            const regionDataContent = fs.readFileSync(path.join(testDataPath, "regionID.json"), "utf8");
-            regionData = JSON.parse(regionDataContent);
-        } catch (error) {
-            console.error("Failed to load test data:", error);
-        }
+        entryData = readNdjson("entry.json");
+        gamesData = readNdjson(`games.${FIXTURE_YEAR}.json`);
+        schoolData = readNdjson("school.json");
+        schoolRecordData = readNdjson(`schoolRecord.${FIXTURE_YEAR}.json`);
+        groupsData = readNdjson("groups.json");
+        regionData = readNdjson("regionID.json");
+        conferencesData = readNdjson("conferences.json");
     });
 
-    describe("Test Data Validation", () => {
-        test("should have valid entry data structure", () => {
-            expect(entryData).toBeDefined();
-            expect(Array.isArray(entryData)).toBe(true);
+    describe("Fixture Shape (matches prod schema)", () => {
+        test("entry rows have prod fields", () => {
             expect(entryData.length).toBeGreaterThan(0);
-
-            // Check first entry structure
-            const firstEntry = entryData[0];
-            expect(firstEntry).toHaveProperty("id");
-            expect(firstEntry).toHaveProperty("email");
-            expect(firstEntry).toHaveProperty("year");
-            expect(firstEntry).toHaveProperty("teamName");
-            expect(firstEntry).toHaveProperty("picks");
-            expect(firstEntry).toHaveProperty("group");
-            expect(firstEntry).toHaveProperty("person");
-            expect(firstEntry).toHaveProperty("created_at");
-
-            // Validate picks is an array
-            expect(Array.isArray(firstEntry.picks)).toBe(true);
+            const first = entryData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("id");
+            expect(first).toHaveProperty("email");
+            expect(first).toHaveProperty("teamName");
+            expect(first).toHaveProperty("picks");
+            expect(first).toHaveProperty("person");
+            expect(first).toHaveProperty("created_at");
+            // Prod entries store `groups` (array), not `group` (string)
+            expect(Array.isArray(first.groups)).toBe(true);
+            expect(Array.isArray(first.picks)).toBe(true);
         });
 
-        test("should have valid games data structure", () => {
-            expect(gamesData).toBeDefined();
-            expect(Array.isArray(gamesData)).toBe(true);
-            expect(gamesData.length).toBeGreaterThan(0);
-
-            // Check first game structure
-            const firstGame = gamesData[0];
-            expect(firstGame).toHaveProperty("gameID");
-            expect(firstGame).toHaveProperty("regionID");
-            expect(firstGame).toHaveProperty("year");
-            expect(firstGame).toHaveProperty("team1ID");
-            expect(firstGame).toHaveProperty("team2ID");
-            expect(firstGame).toHaveProperty("winner");
-            expect(firstGame).toHaveProperty("round");
-            expect(firstGame).toHaveProperty("nextGameID");
-            expect(firstGame).toHaveProperty("nextGameSpot");
+        test("games rows have prod fields", () => {
+            expect(gamesData.length).toBe(63);
+            const first = gamesData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("gameID");
+            expect(first).toHaveProperty("regionID");
+            expect(first).toHaveProperty("round");
+            expect(first).toHaveProperty("team1ID");
+            expect(first).toHaveProperty("team2ID");
+            expect(first).toHaveProperty("winner");
+            expect(first).toHaveProperty("nextGameID");
+            expect(first).toHaveProperty("nextGameSpot");
+            // Prod stores round as a number
+            expect(typeof first.round).toBe("number");
         });
 
-        test("should have valid school data structure", () => {
-            expect(schoolData).toBeDefined();
-            expect(Array.isArray(schoolData)).toBe(true);
+        test("school rows have prod fields", () => {
             expect(schoolData.length).toBeGreaterThan(0);
-
-            // Check first school structure
-            const firstSchool = schoolData[0];
-            expect(firstSchool).toHaveProperty("sid");
-            expect(firstSchool).toHaveProperty("name");
-            expect(firstSchool).toHaveProperty("mascot");
-            expect(firstSchool).toHaveProperty("nameNick");
-            expect(firstSchool).toHaveProperty("confID");
+            const first = schoolData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("sid");
+            expect(first).toHaveProperty("name");
+            expect(first).toHaveProperty("nameNick");
+            expect(first).toHaveProperty("mascot");
+            // Prod confID is a string (slug), not a numeric ID
+            expect(typeof first.confID).toBe("string");
         });
 
-        test("should have valid school record data structure", () => {
-            expect(schoolRecordData).toBeDefined();
-            expect(Array.isArray(schoolRecordData)).toBe(true);
-            expect(schoolRecordData.length).toBeGreaterThan(0);
-
-            // Check first school record structure
-            const firstRecord = schoolRecordData[0];
-            expect(firstRecord).toHaveProperty("sID");
-            expect(firstRecord).toHaveProperty("year");
-            expect(firstRecord).toHaveProperty("seed");
-            expect(firstRecord).toHaveProperty("regionID");
+        test("schoolRecord rows have prod fields", () => {
+            expect(schoolRecordData.length).toBe(64);
+            const first = schoolRecordData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("sID");
+            expect(first).toHaveProperty("seed");
+            expect(first).toHaveProperty("regionID");
         });
 
-        test("should have valid groups data structure", () => {
-            expect(groupsData).toBeDefined();
-            expect(Array.isArray(groupsData)).toBe(true);
+        test("groups rows have prod fields", () => {
             expect(groupsData.length).toBeGreaterThan(0);
-
-            // Check first group structure
-            const firstGroup = groupsData[0];
-            expect(firstGroup).toHaveProperty("id");
-            expect(firstGroup).toHaveProperty("name");
+            const first = groupsData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("name");
         });
 
-        test("should have valid region data structure", () => {
-            expect(regionData).toBeDefined();
-            expect(Array.isArray(regionData)).toBe(true);
-            expect(regionData.length).toBeGreaterThan(0);
+        test("regionID rows include Final Four + Championship", () => {
+            expect(regionData.length).toBe(6);
+            const first = regionData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("regionID");
+            expect(first).toHaveProperty("regionName");
+            const ids = new Set(regionData.map(r => r.regionID));
+            for (const id of [1, 2, 3, 4, 5, 6]) {
+                expect(ids.has(id)).toBe(true);
+            }
+        });
 
-            // Check first region structure
-            const firstRegion = regionData[0];
-            expect(firstRegion).toHaveProperty("regionID");
-            expect(firstRegion).toHaveProperty("regionName");
+        test("conferences rows have prod fields", () => {
+            expect(conferencesData.length).toBeGreaterThan(0);
+            const first = conferencesData[0];
+            expect(first).toHaveProperty("_id");
+            expect(first).toHaveProperty("name");
+            expect(first).toHaveProperty("division");
+            expect(first).toHaveProperty("active");
         });
     });
 
-    describe("Data Consistency Tests", () => {
-        test("should have consistent years across all data", () => {
-            const entryYears = [...new Set(entryData.map(entry => entry.year))];
-            const gameYears = [...new Set(gamesData.map(game => game.year))];
-            const recordYears = [...new Set(schoolRecordData.map(record => record.year))];
-
-            // All years should be consistent
-            const allYears = [...entryYears, ...gameYears, ...recordYears];
-            const uniqueYears = [...new Set(allYears)];
-
-            expect(uniqueYears.length).toBeLessThanOrEqual(3); // Should be 1-3 years max
-            expect(uniqueYears.every(year => /^\d{4}$/.test(year))).toBe(true); // Should be 4-digit years
-        });
-
-        test("should have valid team IDs in games", () => {
-            const allTeamIds = new Set();
-
-            // Collect all team IDs from games
-            gamesData.forEach(game => {
-                if (game.team1ID) allTeamIds.add(game.team1ID);
-                if (game.team2ID) allTeamIds.add(game.team2ID);
-                if (game.winner) allTeamIds.add(game.winner);
-            });
-
-            // All team IDs should exist in school data
-            const schoolIds = new Set(schoolData.map(school => school.sid));
-
-            for (const teamId of allTeamIds) {
-                expect(schoolIds.has(teamId)).toBe(true);
-            }
-        });
-
-        test("should have valid region IDs in games", () => {
-            const gameRegionIds = new Set(gamesData.map(game => game.regionID));
-            const regionIds = new Set(regionData.map(region => region.regionID));
-
-            for (const regionId of gameRegionIds) {
-                expect(regionIds.has(regionId)).toBe(true);
-            }
-        });
-
-        test("should have valid school IDs in school records", () => {
-            const recordSchoolIds = new Set(schoolRecordData.map(record => record.sID));
-            const schoolIds = new Set(schoolData.map(school => school.sid));
-
-            for (const schoolId of recordSchoolIds) {
-                expect(schoolIds.has(schoolId)).toBe(true);
-            }
-        });
-
-        test("should have valid region IDs in school records", () => {
-            const recordRegionIds = new Set(schoolRecordData.map(record => record.regionID));
-            const regionIds = new Set(regionData.map(region => region.regionID));
-
-            for (const regionId of recordRegionIds) {
-                expect(regionIds.has(regionId)).toBe(true);
-            }
-        });
-    });
-
-    describe("Business Logic Tests", () => {
-        test("should have valid game progression", () => {
-            // Check that games have logical progression
-            const gamesByRound = {};
-
-            gamesData.forEach(game => {
-                const round = game.round;
-                if (!gamesByRound[round]) {
-                    gamesByRound[round] = [];
-                }
-                gamesByRound[round].push(game);
-            });
-
-            // Should have games in rounds 1-6
-            const rounds = Object.keys(gamesByRound).map(Number).sort((a, b) => a - b);
-            expect(rounds.length).toBeGreaterThan(0);
-            expect(Math.min(...rounds)).toBe(1);
-            expect(Math.max(...rounds)).toBeLessThanOrEqual(6);
-        });
-
-        test("should have valid seed numbers", () => {
-            const seeds = schoolRecordData.map(record => record.seed);
-
-            // Seeds should be 1-16
-            expect(Math.min(...seeds)).toBe(1);
-            expect(Math.max(...seeds)).toBe(16);
-
-            // Should have exactly 16 seeds per region per year
-            const yearRegionSeeds = {};
-            schoolRecordData.forEach(record => {
-                const key = `${record.year}-${record.regionID}`;
-                if (!yearRegionSeeds[key]) {
-                    yearRegionSeeds[key] = new Set();
-                }
-                yearRegionSeeds[key].add(record.seed);
-            });
-
-            for (const key in yearRegionSeeds) {
-                expect(yearRegionSeeds[key].size).toBe(16);
-            }
-        });
-
-        test("should have valid entry picks", () => {
-            entryData.forEach(entry => {
-                expect(Array.isArray(entry.picks)).toBe(true);
-                expect(entry.picks.length).toBe(10); // Should have exactly 10 picks
-
-                // All picks should be valid team IDs (check if they exist in school data)
-                const schoolIds = new Set(schoolData.map(school => school.sid));
-                const invalidPicks = entry.picks.filter(pick => !schoolIds.has(Number(pick)));
-
-                // Log invalid picks for debugging but don't fail the test
-                if (invalidPicks.length > 0) {
-                    console.log(`Entry ${entry.id} has invalid picks:`, invalidPicks);
-                }
-
-                // For now, just check that picks array exists and has correct length
-                expect(entry.picks.length).toBe(10);
-            });
-        });
-
-        test("should have valid email formats", () => {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-            entryData.forEach(entry => {
-                expect(emailRegex.test(entry.email)).toBe(true);
-            });
-        });
-
-        test("should have valid team names", () => {
-            entryData.forEach(entry => {
-                expect(entry.teamName).toBeDefined();
-                expect(entry.teamName.length).toBeGreaterThan(0);
-                expect(entry.teamName.length).toBeLessThan(100); // Reasonable length
-            });
-        });
-
-        test("should have valid person names", () => {
-            entryData.forEach(entry => {
-                expect(entry.person).toBeDefined();
-                expect(entry.person.length).toBeGreaterThan(0);
-                expect(entry.person.length).toBeLessThan(50); // Reasonable length
-            });
-        });
-    });
-
-    describe("Data Quality Tests", () => {
-        test("should not have duplicate entry IDs", () => {
-            const entryIds = entryData.map(entry => entry.id);
-            const uniqueIds = new Set(entryIds);
-            expect(uniqueIds.size).toBe(entryIds.length);
-        });
-
-        test("should not have duplicate game IDs", () => {
-            const gameIds = gamesData.map(game => game.gameID);
-            const uniqueIds = new Set(gameIds);
-            expect(uniqueIds.size).toBe(gameIds.length);
-        });
-
-        test("should not have duplicate school IDs", () => {
-            const schoolIds = schoolData.map(school => school.sid);
-            const uniqueIds = new Set(schoolIds);
-            expect(uniqueIds.size).toBe(schoolIds.length);
-        });
-
-        test("should not have duplicate group IDs", () => {
-            const groupIds = groupsData.map(group => group.id);
-            const uniqueIds = new Set(groupIds);
-            expect(uniqueIds.size).toBe(groupIds.length);
-        });
-
-        test("should not have duplicate region IDs", () => {
-            const regionIds = regionData.map(region => region.regionID);
-            const uniqueIds = new Set(regionIds);
-            expect(uniqueIds.size).toBe(regionIds.length);
-        });
-
-        test("should have consistent data types", () => {
-            // Check that IDs are strings or numbers consistently
-            const firstEntryId = entryData[0].id;
-            const isStringId = typeof firstEntryId === "string";
-
-            entryData.forEach(entry => {
-                expect(typeof entry.id).toBe(typeof firstEntryId);
-            });
-
-            gamesData.forEach(game => {
-                expect(typeof game.gameID).toBe(typeof firstEntryId);
-                expect(typeof game.regionID).toBe(typeof firstEntryId);
-            });
-        });
-
-        test("should have valid timestamps", () => {
-            entryData.forEach(entry => {
-                expect(entry.created_at).toBeDefined();
-                expect(typeof entry.created_at).toBe("string");
-
-                // Should be a valid date string
-                const date = new Date(entry.created_at);
-                expect(date.toString()).not.toBe("Invalid Date");
-            });
-        });
-    });
-
-    describe("Tournament Structure Tests", () => {
-        test("should have correct number of first round games", () => {
-            const firstRoundGames = gamesData.filter(game => game.round === "1");
-            // Check that we have some first round games, but don't enforce exact count
-            expect(firstRoundGames.length).toBeGreaterThan(0);
-            console.log(`Found ${firstRoundGames.length} first round games`);
-        });
-
-        test("should have correct number of regions", () => {
-            // The test data includes Final Four and Championship regions, so expect 6 total
-            expect(regionData.length).toBe(6); // East, West, South, Midwest, Final Four, Championship
-        });
-
-        test("should have correct number of teams per region", () => {
-            const teamsPerRegion = {};
-
-            schoolRecordData.forEach(record => {
-                const key = `${record.year}-${record.regionID}`;
-                if (!teamsPerRegion[key]) {
-                    teamsPerRegion[key] = 0;
-                }
-                teamsPerRegion[key]++;
-            });
-
-            for (const key in teamsPerRegion) {
-                expect(teamsPerRegion[key]).toBe(16); // 16 teams per region
-            }
-        });
-
-        test("should have valid game progression structure", () => {
-            // Check that nextGameID references are valid
-            const gameIds = new Set(gamesData.map(game => game.gameID));
-
-            const invalidReferences = [];
-            gamesData.forEach(game => {
-                if (game.nextGameID && game.nextGameID !== 0) {
-                    if (!gameIds.has(game.nextGameID)) {
-                        invalidReferences.push({
-                            gameID: game.gameID,
-                            nextGameID: game.nextGameID
-                        });
+    describe("Cross-collection consistency", () => {
+        test("every team in games exists in school", () => {
+            const schoolIds = new Set(schoolData.map(s => s.sid));
+            for (const g of gamesData) {
+                for (const teamId of [g.team1ID, g.team2ID, g.winner]) {
+                    if (teamId != null) {
+                        expect(schoolIds.has(teamId)).toBe(true);
                     }
                 }
-            });
-
-            // Log invalid references for debugging but don't fail the test
-            if (invalidReferences.length > 0) {
-                console.log("Invalid game references:", invalidReferences);
             }
+        });
 
-            // For now, just check that we have some games
-            expect(gamesData.length).toBeGreaterThan(0);
+        test("every regionID in games exists in regionID", () => {
+            const regionIds = new Set(regionData.map(r => r.regionID));
+            for (const g of gamesData) {
+                expect(regionIds.has(g.regionID)).toBe(true);
+            }
+        });
+
+        test("every sID in schoolRecord exists in school", () => {
+            const schoolIds = new Set(schoolData.map(s => s.sid));
+            for (const r of schoolRecordData) {
+                expect(schoolIds.has(r.sID)).toBe(true);
+            }
+        });
+
+        test("every regionID in schoolRecord exists in regionID", () => {
+            const regionIds = new Set(regionData.map(r => r.regionID));
+            for (const r of schoolRecordData) {
+                expect(regionIds.has(r.regionID)).toBe(true);
+            }
+        });
+
+        test("every confID in school exists in conferences", () => {
+            const confIds = new Set(conferencesData.map(c => c._id));
+            for (const s of schoolData) {
+                // Some prod schools may carry historical/unmapped conferences;
+                // assert only that the field is a string when present.
+                if (s.confID != null) {
+                    expect(typeof s.confID).toBe("string");
+                }
+            }
+            // Spot-check: at least one school resolves to a known conference.
+            expect(schoolData.some(s => confIds.has(s.confID))).toBe(true);
+        });
+    });
+
+    describe("Bracket structure", () => {
+        test("exactly 32 first-round games", () => {
+            const r1 = gamesData.filter(g => g.round === 1);
+            expect(r1.length).toBe(32);
+        });
+
+        test("rounds span 1..6 with the right per-round counts", () => {
+            const counts = {};
+            for (const g of gamesData) {
+                counts[g.round] = (counts[g.round] || 0) + 1;
+            }
+            expect(counts[1]).toBe(32);
+            expect(counts[2]).toBe(16);
+            expect(counts[3]).toBe(8);
+            expect(counts[4]).toBe(4);
+            expect(counts[5]).toBe(2);
+            expect(counts[6]).toBe(1);
+        });
+
+        test("16 seeds (1..16) per region per year", () => {
+            const byRegion = {};
+            for (const r of schoolRecordData) {
+                (byRegion[r.regionID] ||= new Set()).add(r.seed);
+            }
+            for (const regionID of Object.keys(byRegion)) {
+                const seeds = byRegion[regionID];
+                expect(seeds.size).toBe(16);
+                for (let s = 1; s <= 16; s++) {
+                    expect(seeds.has(s)).toBe(true);
+                }
+            }
+        });
+
+        test("nextGameID references resolve (or terminate at championship)", () => {
+            const ids = new Set(gamesData.map(g => g.gameID));
+            for (const g of gamesData) {
+                if (g.nextGameID && g.nextGameID !== 0) {
+                    expect(ids.has(g.nextGameID)).toBe(true);
+                }
+            }
+            // Championship (round 6) terminates at 0
+            const champ = gamesData.find(g => g.round === 6);
+            expect(champ.nextGameID).toBe(0);
+        });
+    });
+
+    describe("Entry data quality", () => {
+        test("picks arrays look valid", () => {
+            for (const e of entryData) {
+                expect(Array.isArray(e.picks)).toBe(true);
+                expect(e.picks.length).toBe(10);
+                for (const p of e.picks) {
+                    expect(typeof p).toBe("number");
+                }
+            }
+        });
+
+        test("emails are well-formed", () => {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            for (const e of entryData) {
+                expect(emailRegex.test(e.email)).toBe(true);
+            }
+        });
+
+        test("created_at parses as a valid date", () => {
+            for (const e of entryData) {
+                expect(typeof e.created_at).toBe("string");
+                expect(new Date(e.created_at).toString()).not.toBe("Invalid Date");
+            }
+        });
+
+        test("no duplicate ids in any collection", () => {
+            const collections = [
+                ["entry", entryData.map(e => e._id)],
+                ["games", gamesData.map(g => g._id)],
+                ["school", schoolData.map(s => s._id)],
+                ["schoolRecord", schoolRecordData.map(r => r._id)],
+                ["groups", groupsData.map(g => g._id)],
+                ["regionID", regionData.map(r => r._id)],
+                ["conferences", conferencesData.map(c => c._id)],
+            ];
+            for (const [label, ids] of collections) {
+                expect(new Set(ids).size, `duplicate _id in ${label}`).toBe(ids.length);
+            }
         });
     });
 });

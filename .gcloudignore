@@ -19,7 +19,6 @@
 # Node.js dependencies:
 /node_modules/ *~
 
-datafortests/
 databasebackup/
 backend/
 

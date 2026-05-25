@@ -23,8 +23,13 @@ import {
 import { updatePossiblePoints, possibleRanking } from "../src/services/pointsService.js";
 import { db } from "../src/config/firestore.js";
 
-// Live E2E guard
+// E2E V2 runs against either the Firestore emulator (default for local dev —
+// just point `FIRESTORE_EMULATOR_HOST` at it and seed via
+// `node scripts/seed-emulator.mjs`) or live Firestore (opt-in with
+// `LIVE_E2E=true` for prod smoke tests).
+const RUN_EMULATOR = !!process.env.FIRESTORE_EMULATOR_HOST;
 const RUN_LIVE = process.env.LIVE_E2E === "true";
+const RUN_E2E = RUN_EMULATOR || RUN_LIVE;
 
 // ─── 2022 bracket data seeded into year 2020 ───────────────────────────────
 //
@@ -84,9 +89,9 @@ const FF_GAME_ID = 64;         // FF gameIDs start at 64
 const FF_NEXT_GAME_ID = 5;     // R1 game 5: seed 6 (78) vs seed 11 slot
 const FF_NEXT_GAME_SPOT = 2;   // spot 2 in game 5
 
-describe(`LIVE E2E V2 — real 2022 data into year 2020 (requires LIVE_E2E=true)`, () => {
-    if (!RUN_LIVE) {
-        test("skipped (set LIVE_E2E=true to run)", () => {
+describe(`E2E V2 — real 2022 data into year 2020 (emulator default; LIVE_E2E=true for prod)`, () => {
+    if (!RUN_E2E) {
+        test("skipped (set FIRESTORE_EMULATOR_HOST or LIVE_E2E=true to run)", () => {
             expect(true).toBe(true);
         });
         return;

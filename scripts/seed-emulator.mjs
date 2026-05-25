@@ -1,9 +1,17 @@
 /**
- * seed-emulator.mjs — Seeds the Firestore emulator with NCAA D-I teams or test fixtures
+ * seed-emulator.mjs — Seeds the Firestore emulator from data/seed/.
  *
  * Usage:
- *   node scripts/seed-emulator.mjs           # Seeds real NCAA D-I schools & conferences (PII-free)
- *   node scripts/seed-emulator.mjs --test    # Seeds synthetic mock fixtures (from datafortests/)
+ *   node scripts/seed-emulator.mjs           # Seeds everything in data/seed/
+ *
+ * Top-level NDJSON files (one document per line, each line carries an `_id`):
+ *   school.json, conferences.json, regionID.json, groups.json, entry.json
+ *     → written to the matching root collection.
+ *
+ * Year-suffixed NDJSON files (e.g. games.2022.json, schoolRecord.2022.json):
+ *   → written to the hierarchical per-year subcollections under tournaments/{year}/...
+ *     The year is parsed from the filename. The collection name is the prefix.
+ *     `schoolRecord` is pluralised to `schoolRecords` on write.
  */
 
 import { Firestore } from '@google-cloud/firestore';
@@ -13,7 +21,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── Set Emulator Default ──────────────────────────────────────────────────────
+// ── Emulator defaults ────────────────────────────────────────────────────────
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8085';
   console.log(`ℹ FIRESTORE_EMULATOR_HOST not set. Defaulting to: ${process.env.FIRESTORE_EMULATOR_HOST}`);
@@ -25,30 +33,23 @@ if (!process.env.GCP_PROJECT_ID) {
 
 const db = new Firestore({ projectId: process.env.GCP_PROJECT_ID });
 
-// ── Args ──────────────────────────────────────────────────────────────────────
-const isTestMode = process.argv.includes('--test');
-
-// ── Folders & Collections ─────────────────────────────────────────────────────
-const SEED_DIR = isTestMode 
-  ? path.join(__dirname, '../datafortests') 
-  : path.join(__dirname, '../data/seed');
+const SEED_DIR = path.join(__dirname, '../data/seed');
 
 console.log(`\n======================================================`);
 console.log(`Firestore Emulator Seeder`);
-console.log(`Target: ${isTestMode ? 'Synthetic Test Fixtures' : 'Real D-I NCAA Seed Data'}`);
 console.log(`Emulator Host: ${process.env.FIRESTORE_EMULATOR_HOST}`);
-console.log(`Project ID: ${process.env.GCP_PROJECT_ID}`);
-console.log(`Source Folder: ${SEED_DIR}`);
+console.log(`Project ID:    ${process.env.GCP_PROJECT_ID}`);
+console.log(`Source:        ${SEED_DIR}`);
 console.log(`======================================================\n`);
 
-// Helper to commit operations in safe chunks
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 async function commitBatch(operations, label) {
   if (operations.length === 0) return;
-  
+  const LIMIT = 400;
   let batch = db.batch();
   let count = 0;
   let totalBatches = 0;
-  const LIMIT = 400;
 
   for (const op of operations) {
     op(batch);
@@ -60,126 +61,115 @@ async function commitBatch(operations, label) {
       count = 0;
     }
   }
-
   if (count > 0) {
     await batch.commit();
     totalBatches++;
   }
-
   console.log(`  ✅ Loaded ${operations.length} document(s) in ${totalBatches} batch(es) for "${label}"`);
 }
 
-// ── Production Seed (NDJSON Format) ──────────────────────────────────────────
-async function seedProductionData() {
-  const collections = ['school', 'conferences', 'regionID', 'groups', 'entry'];
-
-  for (const col of collections) {
-    const filePath = path.join(SEED_DIR, `${col}.json`);
-    if (!fs.existsSync(filePath)) {
-      console.log(`  ⚠ Skipping "${col}": Seed file not found at ${filePath}`);
-      continue;
-    }
-
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split('\n').filter(l => l.trim().length > 0);
-    const ops = [];
-
-    for (const line of lines) {
-      let docData;
+function readNdjson(filePath) {
+  return fs.readFileSync(filePath, 'utf8')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map((line, i) => {
       try {
-        docData = JSON.parse(line);
+        return JSON.parse(line);
       } catch (err) {
-        console.error(`  ✗ Error parsing line in "${col}.json":`, err.message);
-        continue;
+        throw new Error(`Failed to parse ${path.basename(filePath)} line ${i + 1}: ${err.message}`);
       }
-
-      const { _id, ...cleanData } = docData;
-      if (!_id) {
-        console.error(`  ✗ Missing "_id" in seed record for "${col}". Skipping.`);
-        continue;
-      }
-
-      ops.push((batch) => {
-        batch.set(db.collection(col).doc(String(_id)), cleanData);
-      });
-    }
-
-    await commitBatch(ops, col);
-  }
+    });
 }
 
-// ── Test Fixtures Seed (Standard JSON Array Format) ──────────────────────────
-async function seedTestFixtures() {
-  const files = ['school', 'regionID', 'groups', 'entry', 'games', 'schoolRecord'];
+// ── Top-level (root collection) seed ─────────────────────────────────────────
 
-  for (const name of files) {
-    const filePath = path.join(SEED_DIR, `${name}.json`);
-    if (!fs.existsSync(filePath)) {
-      console.log(`  ⚠ Skipping "${name}": Fixture file not found at ${filePath}`);
+const ROOT_COLLECTIONS = ['school', 'conferences', 'regionID', 'groups', 'entry'];
+
+async function seedRootCollection(collection) {
+  const filePath = path.join(SEED_DIR, `${collection}.json`);
+  if (!fs.existsSync(filePath)) {
+    console.log(`  ⚠ Skipping "${collection}": ${filePath} not found`);
+    return;
+  }
+  const rows = readNdjson(filePath);
+  const ops = [];
+  for (const row of rows) {
+    const { _id, ...payload } = row;
+    if (!_id) {
+      console.error(`  ✗ Missing "_id" in ${collection}.json. Skipping row.`);
       continue;
     }
-
-    const items = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    const ops = [];
-
-    for (const doc of items) {
-      let collectionName = name;
-      let docId;
-
-      // Map file to correct collection and document ID
-      if (name === 'school') {
-        docId = String(doc.sid);
-      } else if (name === 'regionID') {
-        docId = String(doc.regionName);
-      } else if (name === 'groups') {
-        docId = String(doc.name);
-      } else if (name === 'entry') {
-        // Test entries use "year:entryId" hierarchical or "entryId" flat
-        docId = String(doc.id);
-      } else if (name === 'games') {
-        // Write to both tournaments hierarchical collection and root legacy games collection
-        const year = doc.year || 2024;
-        ops.push((batch) => {
-          batch.set(db.collection('tournaments').doc(String(year)).collection('games').doc(String(doc.gameID)), doc);
-        });
-        collectionName = 'games';
-        docId = `${year}_${doc.gameID}`;
-      } else if (name === 'schoolRecord') {
-        const year = doc.year || 2024;
-        const regionID = doc.regionID || 1;
-        const seed = doc.seed || 16;
-        const canonicalId = `${regionID}_${seed}`;
-        
-        ops.push((batch) => {
-          batch.set(db.collection('tournaments').doc(String(year)).collection('schoolRecords').doc(canonicalId), doc);
-        });
-        collectionName = 'schoolRecord';
-        docId = `${year}_${canonicalId}`;
-      }
-
-      if (!docId) {
-        console.error(`  ✗ Could not determine document ID for fixture "${name}". Skipping.`);
-        continue;
-      }
-
-      ops.push((batch) => {
-        batch.set(db.collection(collectionName).doc(docId), doc);
-      });
-    }
-
-    await commitBatch(ops, name);
+    ops.push((batch) => {
+      batch.set(db.collection(collection).doc(String(_id)), payload);
+    });
   }
+  await commitBatch(ops, collection);
 }
+
+// ── Year-suffixed (hierarchical subcollection) seed ──────────────────────────
+//
+// Filename convention: `<collection>.<year>.json` (e.g. games.2022.json).
+// `schoolRecord` pluralises to `schoolRecords` on write (matches prod path).
+// `games`       → tournaments/{year}/games/{_id}
+// `schoolRecord`→ tournaments/{year}/schoolRecords/{_id}
+// Other prefixes are written as-is under tournaments/{year}/{prefix}.
+
+const SUBCOLLECTION_ALIASES = {
+  schoolRecord: 'schoolRecords',
+};
+
+function discoverYearSuffixedFiles() {
+  if (!fs.existsSync(SEED_DIR)) return [];
+  const files = fs.readdirSync(SEED_DIR);
+  const out = [];
+  for (const f of files) {
+    const m = f.match(/^([a-zA-Z]+)\.(\d{4})\.json$/);
+    if (!m) continue;
+    const [, prefix, year] = m;
+    out.push({ file: f, prefix, year });
+  }
+  return out;
+}
+
+async function seedYearSuffixedFile({ file, prefix, year }) {
+  const filePath = path.join(SEED_DIR, file);
+  const rows = readNdjson(filePath);
+  const collection = SUBCOLLECTION_ALIASES[prefix] || prefix;
+  const ops = [];
+
+  // Ensure the parent tournaments/{year} doc exists so years are queryable.
+  ops.push((batch) => {
+    batch.set(db.collection('tournaments').doc(String(year)), { year: Number(year) }, { merge: true });
+  });
+
+  for (const row of rows) {
+    const { _id, ...payload } = row;
+    if (!_id) {
+      console.error(`  ✗ Missing "_id" in ${file}. Skipping row.`);
+      continue;
+    }
+    ops.push((batch) => {
+      batch.set(
+        db.collection('tournaments').doc(String(year)).collection(collection).doc(String(_id)),
+        payload,
+      );
+    });
+  }
+  await commitBatch(ops, `tournaments/${year}/${collection}`);
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  if (isTestMode) {
-    await seedTestFixtures();
-  } else {
-    await seedProductionData();
+  for (const c of ROOT_COLLECTIONS) {
+    await seedRootCollection(c);
   }
-
+  for (const entry of discoverYearSuffixedFiles()) {
+    await seedYearSuffixedFile(entry);
+  }
   console.log(`\n======================================================`);
-  console.log(`✅ Emulator seeding operation completed successfully!`);
+  console.log(`✅ Emulator seeding completed successfully!`);
   console.log(`======================================================\n`);
   process.exit(0);
 }

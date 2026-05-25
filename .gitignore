@@ -97,9 +97,6 @@ lerna-debug.log
 .DS_Store
 Thumbs.db
 
-#datafortests folder
-# datafortests/
-
 # Council reports and AI session files (private, local only)
 ai_private/council-reports/
 docs/private/council-reports/

@@ -159,18 +159,13 @@ Most of the GCP / OAuth / Cloud Run config is mechanical busywork. If you're usi
 
 To populate your local Firestore emulator for development or testing, use the emulator seeding utility script. It automatically targets `localhost:8085` and `local-dev` by default:
 
-- **Option A — Seed Real NCAA D-I Baseline (Recommended for UI & Playground testing):**
-  Loads all ~360+ real D-I schools, active conferences, region mappings, mock groups, and PII-free mock bracket entries (from `/data/seed/` committed in Git) into the emulator:
+Loads all ~360+ real D-I schools, active conferences, region mappings, mock groups, PII-free mock bracket entries, and the 2022 bracket (games + school records) from `/data/seed/` (committed in Git) into the emulator:
 
-  ```bash
-  node scripts/seed-emulator.mjs
-  ```
+```bash
+node scripts/seed-emulator.mjs
+```
 
-- **Option B — Seed Test Fixtures (Recommended for running integration tests):**
-  Loads a 64-team synthetic bracket layout and integration test fixtures (from `/datafortests/` committed in Git):
-  ```bash
-  node scripts/seed-emulator.mjs --test
-  ```
+The seeder picks up every NDJSON file in `data/seed/`. Top-level files (e.g. `school.json`) write to root collections; year-suffixed files (e.g. `games.2022.json`, `schoolRecord.2022.json`) write to the hierarchical `tournaments/{year}/...` subcollections. Drop a `<collection>.<year>.json` file in `data/seed/` to seed a new year.
 
 #### 2. Production seeding (All D-I teams & conferences)
 
