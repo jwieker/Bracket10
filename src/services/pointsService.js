@@ -145,16 +145,17 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
 
   const totalStartTime = Date.now();
 
-  for (let index = 0; index < chunks.length; index++) {
-    const chunk = chunks[index];
-    const startTime = Date.now();
-    Logger.info(
-      `Updating chunk number ${index} of total chunks ${chunks.length} for year ${year}`
-    );
-    await entryRepository.updateMultipleEntryPoints(chunk, year);
-    const duration = Date.now() - startTime;
-    Logger.performance(`Chunk update`, duration);
-  }
+  await Promise.all(
+    chunks.map(async (chunk, index) => {
+      const startTime = Date.now();
+      Logger.info(
+        `Updating chunk number ${index} of total chunks ${chunks.length} for year ${year}`
+      );
+      await entryRepository.updateMultipleEntryPoints(chunk, year);
+      const duration = Date.now() - startTime;
+      Logger.performance(`Chunk update`, duration);
+    })
+  );
 
   const totalEndTime = Date.now();
   const totalDuration = totalEndTime - totalStartTime;
@@ -193,8 +194,9 @@ function enrichEntriesWithPotentialRankings(
   });
 
   // Calculate highest possible place for each entry
+  const otherMinCaches = new Map();
   for (const entry of enrichedEntries) {
-    const { highestPlace, ties } = getHighestPlace(entry, enrichedEntries);
+    const { highestPlace, ties } = getHighestPlace(entry, enrichedEntries, otherMinCaches);
     entry.highestPlace = highestPlace;
     entry.ties = ties;
   }
@@ -230,7 +232,7 @@ async function possibleRanking(year = thisYear, group = APP_CONFIG.tournament.de
   });
 }
 
-function getHighestPlace(entry, allBobEntries) {
+function getHighestPlace(entry, allBobEntries, otherMinCaches = null) {
   let highestPlace = 1;
   let ties = 0;
 
@@ -238,11 +240,13 @@ function getHighestPlace(entry, allBobEntries) {
   const entryMaxPoints = entry.maxPoints;
   const entryCurrentPoints = entry.points;
 
-  // Memoize potentialFromUniquePicks for this entry's pick subsets.
-  // Many 'other' entries will share the same set of overlapping picks.
-  // JS bitwise operators are 32-bit; limit cache to 31 picks to avoid overflow.
-  const canUseCache = entry.picks.length <= 31;
-  const uniquePotentialCache = canUseCache ? new Map() : null;
+  // Memoize potentialFromUniquePicks keyed by the bitmask of entry-picks that
+  // are unique vs. each otherEntry. Many otherEntries share the same overlap
+  // subset, so the cache turns the hot O(N²) inner work into O(distinct-masks).
+  // maxPicksPerEntry is 10, so a 32-bit signed int is plenty (bit 30 max).
+  const picksLen = entry.picks.length;
+  console.assert(picksLen < 32, `getHighestPlace: picks.length=${picksLen} exceeds 32-bit mask`);
+  const uniquePotentialCache = new Map();
 
   for (const otherEntry of allBobEntries) {
     if (otherEntry.entryID === entry.entryID) continue;
@@ -264,48 +268,62 @@ function getHighestPlace(entry, allBobEntries) {
 
     const otherPickSet = otherEntry.pickSet ?? new Set(otherEntry.picks);
 
-    let potentialFromUniquePicks;
-
-    if (canUseCache) {
-      // Identify which of our picks are unique compared to this otherEntry.
-      let mask = 0;
-      for (let i = 0; i < entry.picks.length; i++) {
-        if (!otherPickSet.has(entry.picks[i])) {
-          mask |= (1 << i);
-        }
+    // A's ceiling: unique future potential only (picks not shared with B).
+    // Build a mask of which entry picks are unique vs. this otherEntry, then
+    // look up (or compute and cache) the resulting future points.
+    let uniqueMask = 0;
+    for (let i = 0; i < picksLen; i++) {
+      if (!otherPickSet.has(entry.picks[i])) {
+        uniqueMask |= (1 << i);
       }
+    }
 
-      if (uniquePotentialCache.has(mask)) {
-        potentialFromUniquePicks = uniquePotentialCache.get(mask);
-      } else {
-        const uniqueToEntryPaths = [];
-        for (let i = 0; i < entry.picks.length; i++) {
-          if (mask & (1 << i)) {
-            uniqueToEntryPaths.push(entry.futureGames[i]);
-          }
-        }
-        potentialFromUniquePicks = getFuturePoints(uniqueToEntryPaths, entry.points);
-        uniquePotentialCache.set(mask, potentialFromUniquePicks);
-      }
-    } else {
-      // Fallback for > 31 picks
+    let potentialFromUniquePicks = uniquePotentialCache.get(uniqueMask);
+    if (potentialFromUniquePicks === undefined) {
       const uniqueToEntryPaths = [];
-      for (let i = 0; i < entry.picks.length; i++) {
-        if (!otherPickSet.has(entry.picks[i])) {
+      for (let i = 0; i < picksLen; i++) {
+        if (uniqueMask & (1 << i)) {
           uniqueToEntryPaths.push(entry.futureGames[i]);
         }
       }
       potentialFromUniquePicks = getFuturePoints(uniqueToEntryPaths, entry.points);
+      uniquePotentialCache.set(uniqueMask, potentialFromUniquePicks);
     }
 
-    // B's relative floor: only clashes among B's UNIQUE picks (shared picks excluded)
-    const otherUniquePaths = [];
-    for (let i = 0; i < otherEntry.picks.length; i++) {
+    // B's relative floor: only clashes among B's UNIQUE picks (shared picks excluded).
+    // We bitmask the unique-picks subset of B (otherEntry) and use it as a cache
+    // key (per otherEntry) for otherRelativeMin. Across the O(N²) outer pairing,
+    // most (otherEntry, mask) pairs recur, so the cache turns repeat minPoints
+    // calls into O(1) lookups.
+    const otherPicksLen = otherEntry.picks.length;
+    let otherUniqueMask = 0;
+    for (let i = 0; i < otherPicksLen; i++) {
       if (!entryPickSet.has(otherEntry.picks[i])) {
-        otherUniquePaths.push(otherEntry.futureGames[i]);
+        otherUniqueMask |= (1 << i);
       }
     }
-    const otherRelativeMin = minPoints(otherUniquePaths, otherEntry.points);
+
+    let otherRelativeMin;
+    let otherCacheForEntry = otherMinCaches?.get(otherEntry.entryID);
+    if (otherCacheForEntry) {
+      otherRelativeMin = otherCacheForEntry.get(otherUniqueMask);
+    } else if (otherMinCaches) {
+      otherCacheForEntry = new Map();
+      otherMinCaches.set(otherEntry.entryID, otherCacheForEntry);
+    }
+
+    if (otherRelativeMin === undefined) {
+      const otherUniquePaths = [];
+      for (let i = 0; i < otherPicksLen; i++) {
+        if (otherUniqueMask & (1 << i)) {
+          otherUniquePaths.push(otherEntry.futureGames[i]);
+        }
+      }
+      otherRelativeMin = minPoints(otherUniquePaths, otherEntry.points);
+      if (otherCacheForEntry) {
+        otherCacheForEntry.set(otherUniqueMask, otherRelativeMin);
+      }
+    }
 
     // Use epsilon-tolerant equality for the tie branch. Point values are
     // integers today, but `points` reads from Firestore which has no integer
@@ -328,36 +346,22 @@ function getHighestPlace(entry, allBobEntries) {
  */
 function minPoints(futureGames, currentPoints = 0) {
   let guaranteedRoundPointsFromClashes = 0;
-  const nextGameSlotsForPicks = [];
+  const slotCounts = new Map();
 
   for (const pickPath of futureGames) {
     for (let roundIndex = 0; roundIndex < pickPath.length; roundIndex++) {
       if (pickPath[roundIndex] !== "W") {
-        nextGameSlotsForPicks.push({
-          gameId: pickPath[roundIndex],
-          round: roundIndex + 1,
-        });
-        break;
-      }
-    }
-  }
-
-  const countedClashSlots = new Set();
-
-  for (let i = 0; i < nextGameSlotsForPicks.length; i++) {
-    for (let j = i + 1; j < nextGameSlotsForPicks.length; j++) {
-      const slotA = nextGameSlotsForPicks[i];
-      const slotB = nextGameSlotsForPicks[j];
-
-      if (slotA.gameId === slotB.gameId && slotA.round === slotB.round) {
-        const gameSlotKey = `${slotA.gameId}-${slotA.round}`;
-        if (!countedClashSlots.has(gameSlotKey)) {
-          const roundConfig = TOURNAMENT_ROUNDS[slotA.round];
+        const gameId = pickPath[roundIndex];
+        const prev = slotCounts.get(gameId) || 0;
+        if (prev === 1) {
+          const round = roundIndex + 1;
+          const roundConfig = TOURNAMENT_ROUNDS[round];
           if (roundConfig && roundConfig.roundPoints) {
             guaranteedRoundPointsFromClashes += roundConfig.roundPoints;
           }
-          countedClashSlots.add(gameSlotKey);
         }
+        slotCounts.set(gameId, prev + 1);
+        break;
       }
     }
   }
@@ -422,6 +426,10 @@ function getFuturePoints(futureGames, currentPoints) {
   // input shape and rethrow so the boundary (controller / job) can decide
   // whether to fail the request or skip the entry explicitly.
   try {
+    // Single pass: walk each pick's projected path and accumulate round points
+    // for games we haven't already credited. When two picks collide on the same
+    // future game, only the first path through it scores — subsequent paths
+    // stop at the collision (the team would be knocked out there).
     let totalPoints = currentPoints;
     const seenGames = new Set();
 
@@ -430,7 +438,6 @@ function getFuturePoints(futureGames, currentPoints) {
         const game = path[i];
         if (game === "W") continue;
         if (seenGames.has(game)) break;
-
         seenGames.add(game);
         const roundConfig = TOURNAMENT_ROUNDS[i + 1];
         if (roundConfig) {
@@ -447,41 +454,6 @@ function getFuturePoints(futureGames, currentPoints) {
     });
     throw error;
   }
-}
-
-function calculateTeamFuturePoints(teamGames) {
-  let points = 0;
-  for (let index = 0; index < teamGames.length; index++) {
-    const game = teamGames[index];
-    const roundConfig = TOURNAMENT_ROUNDS[index + 1];
-    if (game !== "W" && roundConfig) {
-      points += roundConfig.roundPoints || 0;
-    }
-  }
-  return Number(points);
-}
-
-function removeDuplicateGames(futureGames) {
-  const seenGames = new Set();
-  const cleanedGames = [];
-
-  for (const path of futureGames) {
-    const cleanedPath = [];
-    for (const game of path) {
-      if (game === "W") {
-        cleanedPath.push(game);
-      } else {
-        if (seenGames.has(game)) {
-          break;
-        }
-        seenGames.add(game);
-        cleanedPath.push(game);
-      }
-    }
-    cleanedGames.push(cleanedPath);
-  }
-
-  return cleanedGames;
 }
 
 async function updatePointsForAffectedEntries(year, affectedSIDs) {
@@ -509,9 +481,14 @@ async function updatePointsForAffectedEntries(year, affectedSIDs) {
   });
 
   const chunkSize = APP_CONFIG.tournament.chunkSize;
+  const chunks = [];
   for (let i = 0; i < pointsArray.length; i += chunkSize) {
-    await entryRepository.updateMultipleEntryPoints(pointsArray.slice(i, i + chunkSize), year);
+    chunks.push(pointsArray.slice(i, i + chunkSize));
   }
+
+  await Promise.all(
+    chunks.map((chunk) => entryRepository.updateMultipleEntryPoints(chunk, year))
+  );
 }
 
 export {
@@ -524,8 +501,6 @@ export {
   calculateEntryPointsAndPaths,
   enrichEntriesWithPotentialRankings,
   getNextFutureGame,
-  removeDuplicateGames,
-  calculateTeamFuturePoints,
   minPoints,
   getHighestPlace,
 };

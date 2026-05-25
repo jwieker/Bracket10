@@ -2,7 +2,6 @@
 import {
     getFuturePoints,
     calculateEntryPointsAndPaths,
-    removeDuplicateGames,
     updatePossiblePoints,
     possibleRanking,
     setRepositories as setPointsServiceRepositories,
@@ -124,40 +123,6 @@ describe("TourneyService", () => {
     });
 
     describe("PointsService", () => {
-        describe("removeDuplicateGames", () => {
-            test("should remove duplicates correctly", () => {
-                const input = [
-                    ["W", "W", 13, 15, 61, 63],
-                    ["W", "W", 59, 60, 62, 63],
-                    ["W", "W", 28, 30, 61, 63],
-                ];
-
-                const result = removeDuplicateGames(input);
-                expect(result).toEqual([
-                    ["W", "W", 13, 15, 61, 63],
-                    ["W", "W", 59, 60, 62],
-                    ["W", "W", 28, 30],
-                ]);
-            });
-
-            test("should handle arrays with no duplicates", () => {
-                const input = [
-                    ["W", "W", 13, 15],
-                    ["W", "W", 59, 60],
-                    ["W", "W", 28, 30],
-                ];
-
-                const result = removeDuplicateGames(input);
-                expect(result).toEqual(input);
-            });
-
-            test("should handle empty arrays", () => {
-                const input = [];
-                const result = removeDuplicateGames(input);
-                expect(result).toEqual([]);
-            });
-        });
-
         describe("getFuturePoints", () => {
             test("should calculate future points for team with partial tournament", async () => {
                 const futureGames = [

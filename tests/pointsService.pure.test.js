@@ -1,6 +1,4 @@
 import {
-  removeDuplicateGames,
-  calculateTeamFuturePoints,
   getFuturePoints,
   minPoints,
   getHighestPlace,
@@ -10,95 +8,52 @@ import {
 } from '../src/services/pointsService.js';
 import { TOURNAMENT_ROUNDS } from '../src/config/app.js';
 
+const R = (n) => TOURNAMENT_ROUNDS[n].roundPoints || 0;
+
 describe('Points Service Pure Functions', () => {
-  describe('removeDuplicateGames', () => {
-    it('should not remove games when paths do not intersect', () => {
+  describe('getFuturePoints', () => {
+    it('aggregates points across two paths that collide at round 2', () => {
+      // path2 advances through g2 (R1) then collides with path1 at g3, so it
+      // stops contributing after round 1. path1 scores R1 + R2.
       const futureGames = [
         ['g1', 'g3', 'W'],
-        ['g2', 'g4', 'W']
+        ['g2', 'g3', 'W'],
       ];
-      const result = removeDuplicateGames(futureGames);
-      expect(result).toEqual([
-        ['g1', 'g3', 'W'],
-        ['g2', 'g4', 'W']
-      ]);
+      const currentPoints = 10;
+      expect(getFuturePoints(futureGames, currentPoints))
+        .toBe(currentPoints + R(1) + R(2) + R(1));
     });
 
-    it('should halt paths when two picks meet in the same game', () => {
-      const futureGames = [
-        ['g1', 'g3', 'W'], // Path A
-        ['g2', 'g3', 'W']  // Path B, meets Path A at 'g3'
-      ];
-      const result = removeDuplicateGames(futureGames);
-      expect(result).toEqual([
-        ['g1', 'g3', 'W'], // First pick gets to advance
-        ['g2']             // Second pick is halted at 'g3'
-      ]);
-    });
-
-    it('should handle "W" gracefully', () => {
-      const futureGames = [
-        ['W'],
-        ['W']
-      ];
-      const result = removeDuplicateGames(futureGames);
-      expect(result).toEqual([
-        ['W'],
-        ['W']
-      ]);
-    });
-
-    it('should handle complex intersections (large test case)', () => {
+    it('does not double-count games shared across paths', () => {
+      // Without dedup, g5 and g7 would be credited multiple times.
       const futureGames = [
         ['g1', 'g5', 'g7', 'W'],
         ['g2', 'g5', 'g7', 'W'],
         ['g3', 'g6', 'g7', 'W'],
-        ['g4', 'g6', 'g7', 'W']
+        ['g4', 'g6', 'g7', 'W'],
       ];
-      const result = removeDuplicateGames(futureGames);
-      expect(result).toEqual([
-        ['g1', 'g5', 'g7', 'W'], // 1st gets full path
-        ['g2'],                  // 2nd hits 'g5' already taken
-        ['g3', 'g6'],            // 3rd hits 'g7' already taken 
-        ['g4']                   // 4th hits 'g6' already taken
-      ]);
-    });
-  });
-
-  describe('calculateTeamFuturePoints', () => {
-    it('should calculate points based on TOURNAMENT_ROUNDS config, excluding "W"', async () => {
-      // Assuming round 1 is points 10, round 2 is points 20...
-      const teamGames = ['g1', 'g2', 'W'];
-      // index 0 -> Round 1 config
-      // index 1 -> Round 2 config
-      const expectedPoints = (TOURNAMENT_ROUNDS[1].roundPoints || 0) + (TOURNAMENT_ROUNDS[2].roundPoints || 0);
-      const result = calculateTeamFuturePoints(teamGames);
-      expect(result).toBe(expectedPoints);
+      // path1: R1 + R2 + R3. path2 collides at g5 -> R1 only.
+      // path3: R1 + R2 (g7 already credited by path1). path4 collides at g6 -> R1 only.
+      const expected = (R(1) + R(2) + R(3)) + R(1) + (R(1) + R(2)) + R(1);
+      expect(getFuturePoints(futureGames, 0)).toBe(expected);
     });
 
-    it('should return 0 for just ["W"]', async () => {
-      const result = calculateTeamFuturePoints(['W']);
-      expect(result).toBe(0);
+    it('treats "W" slots as zero-point but does not stop the path', () => {
+      // W means "already won and credited" — skip without halting traversal,
+      // so the later g1 still scores.
+      const futureGames = [['W', 'g1', 'W']];
+      expect(getFuturePoints(futureGames, 0)).toBe(R(2));
     });
-  });
 
-  describe('getFuturePoints', () => {
-    it('should aggregate points correctly across multiple cleaned paths', async () => {
-      const futureGames = [
-        ['g1', 'g3', 'W'],
-        ['g2', 'g3', 'W'] 
-      ];
-      // cleaned: path1 = ['g1', 'g3', 'W'], path2 = ['g2']
-      // path1 points = R1 + R2
-      // path2 points = R1
-      const path1Points = (TOURNAMENT_ROUNDS[1].roundPoints || 0) + (TOURNAMENT_ROUNDS[2].roundPoints || 0);
-      const path2Points = (TOURNAMENT_ROUNDS[1].roundPoints || 0);
-      
-      const currentPoints = 10;
-      const expectedTotal = currentPoints + path1Points + path2Points;
+    it('returns currentPoints when futureGames is empty', () => {
+      expect(getFuturePoints([], 42)).toBe(42);
+    });
 
-      const result = getFuturePoints(futureGames, currentPoints);
-      expect(result).toBe(expectedTotal);
+    it('rethrows on bad input rather than silently returning currentPoints', () => {
+      // Passing a non-iterable triggers a TypeError inside the try block.
+      // The catch logs context and rethrows so the boundary can decide whether
+      // to fail the request or skip the entry — never silently corrupt ranks.
+      expect(() => getFuturePoints(null, 7)).toThrow();
     });
 
     // E2 regression: getFuturePoints previously swallowed errors and returned
@@ -934,5 +889,255 @@ describe('getHighestPlace — early-exit bounds optimization', () => {
     const { highestPlace, ties } = getHighestPlace(entryA, [entryA, entryB]);
     expect(highestPlace).toBe(1);
     expect(ties).toBe(1);
+  });
+});
+
+describe('getHighestPlace — bitmask memoization parity', () => {
+  // When the cache is hit (multiple others produce the same overlap mask
+  // against entry.picks), the result must match the value computed without
+  // the cache. This guards against bitmask bugs (wrong index, off-by-one,
+  // sign-bit overflow) that would silently corrupt the ranking.
+  it('produces identical ranking whether the cache is hit or not', () => {
+    const entryPicks = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+    const entryFutures = entryPicks.map((_, i) => [`e${i}a`, `e${i}b`, 'W']);
+    const entry = {
+      entryID: 1,
+      name: 'Entry',
+      points: 0,
+      maxPoints: null,
+      picks: entryPicks,
+      futureGames: entryFutures,
+      pickSet: new Set(entryPicks),
+    };
+
+    // Build 20 other entries. Half share picks [10,11] with entry (same mask),
+    // the other half share [10,11,12] (different mask). For a given mask the
+    // value of A's potentialFromUniquePicks must be identical, so cache reuse
+    // must not change the final rank.
+    const others = [];
+    for (let k = 0; k < 20; k++) {
+      const sharedTwo = k % 2 === 0;
+      const sharedPicks = sharedTwo ? [10, 11] : [10, 11, 12];
+      const ownPicks = [100 + k, 200 + k, 300 + k];
+      const picks = [...sharedPicks, ...ownPicks];
+      others.push({
+        entryID: 100 + k,
+        name: `O${k}`,
+        points: 0,
+        maxPoints: null,
+        picks,
+        futureGames: picks.map((_, i) => [`o${k}_${i}`, 'W']),
+        pickSet: new Set(picks),
+      });
+    }
+
+    const all = [entry, ...others];
+    const withCache = getHighestPlace(entry, all);
+
+    // Recompute one-other-at-a-time so each call sees a fresh, empty cache.
+    let highestPlaceUncached = 1;
+    let tiesUncached = 0;
+    for (const o of others) {
+      const sub = getHighestPlace(entry, [entry, o]);
+      if (sub.highestPlace > 1) highestPlaceUncached++;
+      tiesUncached += sub.ties;
+    }
+
+    expect(withCache.highestPlace).toBe(highestPlaceUncached);
+    expect(withCache.ties).toBe(tiesUncached);
+  });
+
+  it('produces identical ranking when passing a shared otherMinCaches Map, and verifies caching occurred', () => {
+    const entryPicks = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+    const entryFutures = entryPicks.map((_, i) => [`e${i}a`, `e${i}b`, 'W']);
+    const entry1 = {
+      entryID: 1,
+      name: 'E1',
+      points: 10,
+      maxPoints: 50,
+      picks: entryPicks,
+      futureGames: entryFutures,
+      pickSet: new Set(entryPicks),
+    };
+
+    const entry2 = {
+      entryID: 2,
+      name: 'E2',
+      points: 12,
+      maxPoints: 50,
+      picks: entryPicks,
+      futureGames: entryFutures,
+      pickSet: new Set(entryPicks),
+    };
+
+    const others = [];
+    for (let k = 0; k < 50; k++) {
+      const sharedPicks = [10, 11, 12];
+      const ownPicks = [100 + k, 200 + k];
+      const picks = [...sharedPicks, ...ownPicks];
+      others.push({
+        entryID: 100 + k,
+        name: `O${k}`,
+        points: 8,
+        maxPoints: 40,
+        picks,
+        futureGames: picks.map((_, i) => [`o${k}_${i}`, 'W']),
+        pickSet: new Set(picks),
+      });
+    }
+
+    const all = [entry1, entry2, ...others];
+
+    const otherMinCaches = new Map();
+
+    const res1Cached = getHighestPlace(entry1, all, otherMinCaches);
+    const res2Cached = getHighestPlace(entry2, all, otherMinCaches);
+
+    const res1Uncached = getHighestPlace(entry1, all);
+    const res2Uncached = getHighestPlace(entry2, all);
+
+    // Verify cache correctness
+    expect(res1Cached.highestPlace).toBe(res1Uncached.highestPlace);
+    expect(res1Cached.ties).toBe(res1Uncached.ties);
+    expect(res2Cached.highestPlace).toBe(res2Uncached.highestPlace);
+    expect(res2Cached.ties).toBe(res2Uncached.ties);
+
+    // Verify that otherMinCaches was populated
+    expect(otherMinCaches.size).toBeGreaterThan(0);
+    // Each otherEntry's cache entry should map its unique picks bitmask to its relative floor points
+    for (const o of others) {
+      const cache = otherMinCaches.get(o.entryID);
+      expect(cache).toBeDefined();
+      expect(cache.size).toBeGreaterThan(0);
+    }
+  });
+
+  // Stronger parity test. The previous test gave entry1 and entry2 identical
+  // picksets and clash-free futureGames, which meant (a) the cache key's mask
+  // dimension was never exercised, and (b) every cached value was equal to
+  // otherEntry.points, so a buggy cache that ignored the mask would still
+  // pass. This test fixes both: entry1 and entry2 have DIFFERENT picksets so
+  // they produce different bitmasks against the same `other`, and each
+  // `other` has a real clash among its own picks so minPoints returns a
+  // non-trivial value that varies by which picks are masked in.
+  it('cached otherRelativeMin values are correct for every (otherEntry, mask) the cache stores', () => {
+    const r1 = TOURNAMENT_ROUNDS[1].roundPoints || 0;
+
+    // entry1 and entry2 share only some picks — picking 10/11 is the overlap.
+    // entry1 also shares pick 500 with other k=0 (one of its clashing picks),
+    // so for that other, entry1's mask excludes a clashing-pair index → its
+    // subset loses the clash → its cached value is r1 less than entry2's
+    // value for the same `other`. Without this asymmetry, both entries'
+    // bitmasks (though different) would yield the same minPoints result
+    // and a wrong-mask cache bug could not be detected.
+    const entry1 = {
+      entryID: 1, name: 'E1', points: 10, maxPoints: 100,
+      picks: [10, 11, 12, 13, 500],
+      futureGames: [10, 11, 12, 13, 500].map((_, i) => [`e1_${i}`, 'W']),
+      pickSet: new Set([10, 11, 12, 13, 500]),
+    };
+    const entry2 = {
+      entryID: 2, name: 'E2', points: 12, maxPoints: 100,
+      picks: [10, 11, 20, 21, 22],
+      futureGames: [10, 11, 20, 21, 22].map((_, i) => [`e2_${i}`, 'W']),
+      pickSet: new Set([10, 11, 20, 21, 22]),
+    };
+
+    // Each `other` has a clash among picks at indices 2 and 3: both paths
+    // converge on gameId `clash_${k}` in round 1. minPoints credits r1
+    // when both clashing picks are present in the masked subset, and zero
+    // when either is masked out — so the cached value depends on the mask.
+    const others = [];
+    for (let k = 0; k < 12; k++) {
+      // Pick layout chosen so entry1 and entry2 produce DIFFERENT bitmasks
+      // against this other:
+      //   - shared with entry1 only: 12   (index 0)
+      //   - shared with entry2 only: 20   (index 1)
+      //   - the clashing pair (own): 500+k (idx 2), 600+k (idx 3)
+      //   - own non-clashing pick:   700+k (index 4)
+      const picks = [12, 20, 500 + k, 600 + k, 700 + k];
+      others.push({
+        entryID: 1000 + k, name: `O${k}`, points: 5, maxPoints: 50,
+        picks,
+        futureGames: [
+          [`o${k}_idx0`, 'W'],
+          [`o${k}_idx1`, 'W'],
+          [`clash_${k}`, 'W'],   // clashes with idx 3
+          [`clash_${k}`, 'W'],   // clashes with idx 2
+          [`o${k}_idx4`, 'W'],
+        ],
+        pickSet: new Set(picks),
+      });
+    }
+
+    const all = [entry1, entry2, ...others];
+    const otherMinCaches = new Map();
+
+    const res1Cached = getHighestPlace(entry1, all, otherMinCaches);
+    const res2Cached = getHighestPlace(entry2, all, otherMinCaches);
+    const res1Uncached = getHighestPlace(entry1, all);
+    const res2Uncached = getHighestPlace(entry2, all);
+
+    // End-to-end parity.
+    expect(res1Cached.highestPlace).toBe(res1Uncached.highestPlace);
+    expect(res1Cached.ties).toBe(res1Uncached.ties);
+    expect(res2Cached.highestPlace).toBe(res2Uncached.highestPlace);
+    expect(res2Cached.ties).toBe(res2Uncached.ties);
+
+    // The two entries produce DIFFERENT bitmasks against each other (entry1
+    // shares pick 12; entry2 shares pick 20), so each other must have at
+    // least two distinct mask entries in its cache. This is what the
+    // previous test failed to exercise.
+    for (const o of others) {
+      const oCache = otherMinCaches.get(o.entryID);
+      expect(oCache).toBeDefined();
+      expect(oCache.size).toBeGreaterThanOrEqual(2);
+    }
+
+    // The strongest check: every cached (otherEntry, mask) -> value must
+    // equal what minPoints returns when called fresh on the corresponding
+    // subset of futureGames. A buggy cache that returned the wrong-mask
+    // value would diverge here even though end-to-end parity holds (when
+    // bugs happen to cancel).
+    for (const o of others) {
+      const oCache = otherMinCaches.get(o.entryID);
+      for (const [mask, cachedValue] of oCache) {
+        const subsetPaths = [];
+        for (let i = 0; i < o.picks.length; i++) {
+          if (mask & (1 << i)) subsetPaths.push(o.futureGames[i]);
+        }
+        const fresh = minPoints(subsetPaths, o.points);
+        expect(cachedValue).toBe(fresh);
+      }
+    }
+
+    // Sanity: the clash mechanism is actually exercised. At least one
+    // cached value must exceed otherEntry.points by r1 — otherwise the
+    // futureGames setup is too trivial and we are back to the weak test.
+    let sawClashCredit = false;
+    for (const o of others) {
+      for (const v of otherMinCaches.get(o.entryID).values()) {
+        if (v >= o.points + r1) { sawClashCredit = true; break; }
+      }
+      if (sawClashCredit) break;
+    }
+    expect(sawClashCredit).toBe(true);
+
+    // Discrimination check: for at least one `other`, the two stored mask
+    // entries must hold DIFFERENT values. Without this, a buggy cache that
+    // returned the wrong-mask value could still pass the per-(mask, value)
+    // recomputation check, because the recomputed value on the wrong mask's
+    // subset coincidentally equals the cached value. entry1 shares one of
+    // other k=0's clashing picks (500), so for that other the two masks
+    // produce different minPoints values.
+    let sawMaskDiscrimination = false;
+    for (const o of others) {
+      const vals = [...otherMinCaches.get(o.entryID).values()];
+      if (vals.length >= 2 && vals.some((v, i) => vals.slice(i + 1).some((w) => v !== w))) {
+        sawMaskDiscrimination = true;
+        break;
+      }
+    }
+    expect(sawMaskDiscrimination).toBe(true);
   });
 });

@@ -89,7 +89,7 @@ Key benefits: no `where('year', '==', ...)` filters needed, `getTournamentTeams`
 | `primaryColor` | `school.espn.primaryColor` | denormalized at setup — hex without leading `#` |
 | `conferenceName` | `conferences/{school.confID}.shortName` | denormalized at setup |
 
-`insertMultipleSchoolRecords` and `updateMultipleSchoolRecords` in `TourneyRepository` write all of these in one shot by fetching schools, regions, and conferences in parallel at tournament setup time. The game view render path (`buildGameViewData`) therefore needs no joins and no separate `allSchools`/`allConferences` fetches.
+`insertMultipleSchoolRecords` and `updateMultipleSchoolRecords` in `TourneyRepository` write all of these in one shot by reading schools, regions, and conferences in parallel at tournament setup time. Those joins go through the shared `_getCachedSchools` / `_getCachedConferences` / `_getCachedRegions` helpers — same 24h cache keys as `getAllSchools` / `getAllConferences` / `getAllRegions`, so already-warmed reference data is reused for free. The game view render path (`buildGameViewData`) therefore needs no joins and no separate `allSchools`/`allConferences` fetches.
 
 #### `schoolRecords` Document IDs
 - **Canonical:** `{regionID}_{seed}` (e.g. `1_16`).
@@ -140,6 +140,24 @@ school/{sID} {
 **Logo URL pattern:** `https://a.espncdn.com/i/teamlogos/ncaa/500/{espnID}.png` — stable CDN URLs. Dark variants at `.../500-dark/{espnID}.png`.
 
 **ESPN conference group ID** does **not** map to our `legacyNumericID` on the conferences collection. They are separate numbering systems.
+
+## Database Query Optimization Patterns
+
+The repository layer enforces three patterns to keep DB cost low and avoid race conditions under heavy load.
+
+### 1. Cached reference-data reads
+Bulk setup / migration methods (`insertFirstFourGames`, `insertFirstFourSchoolRecords`, `insertMultipleSchoolRecords`, `updateMultipleSchoolRecords`, `insertMultipleGamesWithTeams`, `updateMultipleGamesWithTeams`, `insertRegionsForYear`) and admin typeaheads (`findSchoolsByName`, `findGroupByName` fallback, `findEntriesByName`) must not call `db.collection('school' | 'conferences' | 'regionID' | 'groups').get()` directly. They read through the module-private helpers in `hierarchicalRepository.js` — `_getCachedSchools`, `_getCachedConferences`, `_getCachedRegions`, `_getCachedGroupNames` — which share the same 24h cache keys as `getAllSchools` / `getAllConferences` / `getAllRegions` / `getAllGroups`, so an already-warmed cache yields zero DB reads. See `docs/architecture/caching.md` for the full cached-method table.
+
+### 2. Atomic Firestore transactions on read-then-write
+Any method that reads a record and writes back based on what it read must use `db.runTransaction` so concurrent writers (e.g. parallel ESPN poll resolutions) can't race. Methods using this pattern today:
+- `GameRepository.updateNextGameTeam` — reads winner's `schoolRecords` row, writes the next game's team1/team2 slot.
+- `TeamRepository.updateTeamRecord` and `updateTeamRecordWithNulls` — read all `schoolRecords` matching `sID`, write points/gameStatus.
+- `TeamRepository.createCanonicalSchoolRecord` and `deleteCanonicalSchoolRecord` — read the ff_ doc's `canonicalDocId`, write/delete the canonical record.
+
+Cache invalidation is gated on whether the transaction actually wrote (`if (updated)`) to avoid invalidation storms when nothing matched.
+
+### 3. `array-contains-any` chunking
+Firestore caps `array-contains-any` at 30 disjuncts. `GameRepository.getEntriesContainingTeams` can be called with more than 30 affected team sIDs after a bulk ESPN resolution, so it chunks the sID list into batches of 30, fires the queries in parallel, then dedupes results by entry id. Any future method that filters on an unbounded sID/value array must follow the same chunking pattern.
 
 ## Related Files
 

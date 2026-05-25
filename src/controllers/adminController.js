@@ -77,7 +77,7 @@ const changeYear = controllerWrapper(async (req, res) => {
 const adminCloudPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
   const budget = await getBudgetStatus();
-  const links = getCloudConsoleLinks();
+  const links = await getCloudConsoleLinks();
   res.render("adminCloud", { year, budget, links });
 }, "adminCloudPage");
 

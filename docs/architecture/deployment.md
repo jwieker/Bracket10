@@ -7,7 +7,7 @@ updated: 2026-05-20
 
 The application runs on **Google Cloud Run**, deployed automatically when a commit is pushed to `main` via Cloud Build.
 
-- **GCP Project ID:** set by `GOOGLE_CLOUD_PROJECT` (auto-set on Cloud Run; set explicitly for local).
+- **GCP Project ID:** resolved dynamically via `google-auth-library` credentials (from the metadata server on Cloud Run) or fallback to `GOOGLE_CLOUD_PROJECT` / `GCP_PROJECT_ID` environment variables.
 - **Cloud Run service name:** your choice — examples below use `<SERVICE_NAME>` as the placeholder, region `us-central1`.
 
 ## Required Environment Variables
@@ -19,7 +19,7 @@ The application runs on **Google Cloud Run**, deployed automatically when a comm
 | `ADMIN_EMAILS` | Comma-separated list of authorized admin Google email addresses |
 | `SESSION_SECRET` | Secret for `express-session` — **required or server crashes on startup** |
 | `NODE_ENV` | Set to `production` to enable `secure` cookie flag (HTTPS-only sessions) |
-| `GOOGLE_CLOUD_PROJECT` | Firestore project ID. Cloud Run sets this automatically; set it explicitly in `.env` for local dev (or run `gcloud auth application-default login`). `GCP_PROJECT_ID` is also accepted as an alternative name (used by some maintenance scripts). |
+| `GOOGLE_CLOUD_PROJECT` | (Optional in production) GCP project ID. In production (Cloud Run), the SDK resolves this automatically via the metadata server/application credentials; set it explicitly in `.env` for local dev. `GCP_PROJECT_ID` is also accepted as an alternative name. |
 | `APP_HOST` | (Optional) Apex domain the app is served from in production (e.g. `bracket.example.com`). Drives (1) the `www.<host>` → `<host>` 308 redirect in `server.js`, and (2) the default OAuth callback URL when `REDIRECT_URI` is unset. Leave unset locally. |
 | `REDIRECT_URI` | (Optional) Explicit OAuth callback URL. Takes precedence over `APP_HOST` derivation. Use this for tunnels, preview envs, or any deployment where the callback isn't `https://<APP_HOST>/auth/google/callback`. |
 | `GA_MEASUREMENT_ID` | (Optional) Google Analytics 4 measurement ID (e.g. `G-XXXXXXXXXX`). When set, the gtag snippet is rendered by `views/partials/header.ejs` on all user-facing pages. Leave unset to omit GA entirely — the default for forks. |

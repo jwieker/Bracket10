@@ -32,6 +32,7 @@ const {
   cacheSet,
   cacheDel,
   invalidateCache,
+  runTransactionMock,
 } = vi.hoisted(() => {
   const docGetMock = vi.fn();
   const queryGetMock = vi.fn();
@@ -88,17 +89,32 @@ const {
   const cacheDel = vi.fn();
   const invalidateCache = vi.fn();
 
+  // Tests verify atomicity by counting runTransaction invocations and inspecting
+  // the per-call transaction.get/update/set/delete arguments. The fake tx
+  // delegates back to the underlying mocks so existing assertions on
+  // updateMock/setMock/deleteMock continue to work for transactional methods.
+  const runTransactionMock = vi.fn().mockImplementation(async (cb) => {
+    const tx = {
+      get: vi.fn().mockImplementation((queryOrRef) => queryOrRef.get()),
+      update: vi.fn().mockImplementation((_ref, data) => updateMock(data)),
+      set: vi.fn().mockImplementation((_ref, data) => setMock(data)),
+      delete: vi.fn().mockImplementation((_ref) => deleteMock()),
+    };
+    return await cb(tx);
+  });
+
   return {
     collectionMock, docMock, docGetMock, queryGetMock,
     updateMock, setMock, deleteMock,
     whereMock, orderByMock, limitMock,
     batchMock, batchUpdateMock, batchSetMock, batchDeleteMock, batchCommitMock,
     cacheGet, cacheSet, cacheDel, invalidateCache,
+    runTransactionMock,
   };
 });
 
 vi.mock("../src/config/firestore.js", () => ({
-  db: { collection: collectionMock, batch: batchMock },
+  db: { collection: collectionMock, batch: batchMock, runTransaction: runTransactionMock },
 }));
 
 vi.mock("../src/utils/cacheUtils.js", () => ({
@@ -188,6 +204,45 @@ describe("EntryRepository", () => {
       id: 2, teamName: "alice's", person: "Bob", year: 2024,
       groups: ["B"], hasPaid: false, paymentNote: "", payByCheck: false,
     });
+    // Populates the entriesByNameRaw cache so repeated typeahead keystrokes
+    // skip the DB read.
+    expect(cacheSet).toHaveBeenCalledWith(
+      "entriesByNameRaw_2024",
+      expect.any(Array),
+      300,
+    );
+  });
+
+  test("findEntriesByName cache hit filters the cached list without a DB read", async () => {
+    cacheGet.mockReturnValue([
+      { id: 1, person: "Alice", teamName: "Wildcats", year: 2024, groups: ["A"], hasPaid: true,  paymentNote: "", payByCheck: false },
+      { id: 2, person: "Bob",   teamName: "Other",    year: 2024, groups: ["B"], hasPaid: false, paymentNote: "", payByCheck: false },
+    ]);
+
+    const results = await repo.findEntriesByName("alice", 2024);
+
+    expect(cacheGet).toHaveBeenCalledWith("entriesByNameRaw_2024");
+    expect(queryGetMock).not.toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(1);
+  });
+
+  test("entry-write methods invalidate entriesByNameRaw_{year} alongside allEntries_{year}", async () => {
+    // createEntry
+    await repo.createEntry(7, "x@y.com", "Team X", [1, 2], ["A"], "Alice", "2024-03-01", 2024, 0);
+    expect(cacheDel).toHaveBeenCalledWith("entriesByNameRaw_2024");
+
+    cacheDel.mockClear();
+    await repo.deleteEntry("42", 2024);
+    expect(cacheDel).toHaveBeenCalledWith("entriesByNameRaw_2024");
+
+    cacheDel.mockClear();
+    await repo.updateEntryPicks("5", [10], 2024);
+    expect(cacheDel).toHaveBeenCalledWith("entriesByNameRaw_2024");
+
+    cacheDel.mockClear();
+    await repo.updateMultipleEntryPicks([{ entryId: "1", picks: [9] }], 2024);
+    expect(cacheDel).toHaveBeenCalledWith("entriesByNameRaw_2024");
   });
 
   test("getUnpaidEntriesForGroup queries by array-contains and filters out paid + payByCheck", async () => {
@@ -390,7 +445,7 @@ describe("GameRepository", () => {
     expect(invalidateCache).toHaveBeenCalledWith("gameViewData_2024_");
   });
 
-  test("updateNextGameTeam denormalizes team name+seed from schoolRecords for slot 1", async () => {
+  test("updateNextGameTeam denormalizes team name+seed from schoolRecords for slot 1 inside a transaction", async () => {
     queryGetMock.mockResolvedValue({
       empty: false,
       docs: [makeDoc("rec", { sID: 101, nameNick: "Blue Devils", seed: 2 })],
@@ -398,6 +453,7 @@ describe("GameRepository", () => {
 
     await repo.updateNextGameTeam("33", 1, 101, 2024);
 
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
     expect(whereMock).toHaveBeenCalledWith("sID", "==", 101);
     expect(limitMock).toHaveBeenCalledWith(1);
     expect(updateMock).toHaveBeenCalledWith({
@@ -481,6 +537,52 @@ describe("GameRepository", () => {
     expect(entries.map(e => e.id)).toEqual([1, 3]);
     // Legacy single-group string is normalized into groups[]
     expect(entries.find(e => e.id === 3).groups).toEqual(["Legacy"]);
+  });
+
+  test("getEntriesContainingTeams empty input short-circuits with zero queries", async () => {
+    const entries = await repo.getEntriesContainingTeams(2024, []);
+    expect(entries).toEqual([]);
+    expect(queryGetMock).not.toHaveBeenCalled();
+    expect(whereMock).not.toHaveBeenCalled();
+  });
+
+  test("getEntriesContainingTeams chunks sID lists >30 into batches of 30 and dedupes by entry id", async () => {
+    // 65 sIDs → 3 chunks: 30 + 30 + 5
+    const sIDs = Array.from({ length: 65 }, (_, i) => 1000 + i);
+
+    // Same entry id "shared" returned in all three chunks must collapse to one
+    // result. Each chunk also returns a chunk-unique entry to verify merge.
+    const shared = makeDoc("shared", { id: 7777, teamName: "Shared", picks: [1000], totalPoints: 0, person: "S", groups: ["Good"] });
+    queryGetMock
+      .mockResolvedValueOnce({ docs: [shared, makeDoc("a", { id: 1, teamName: "A", picks: [1000], totalPoints: 0, person: "Pa", groups: ["Good"] })] })
+      .mockResolvedValueOnce({ docs: [shared, makeDoc("b", { id: 2, teamName: "B", picks: [1030], totalPoints: 0, person: "Pb", groups: ["Good"] })] })
+      .mockResolvedValueOnce({ docs: [shared, makeDoc("c", { id: 3, teamName: "C", picks: [1060], totalPoints: 0, person: "Pc", groups: ["Good"] })] });
+
+    const entries = await repo.getEntriesContainingTeams(2024, sIDs);
+
+    // One Firestore query per chunk
+    expect(queryGetMock).toHaveBeenCalledTimes(3);
+
+    // Each chunk used array-contains-any with ≤30 disjuncts
+    const arrayContainsAnyCalls = whereMock.mock.calls.filter(c => c[0] === "picks" && c[1] === "array-contains-any");
+    expect(arrayContainsAnyCalls).toHaveLength(3);
+    expect(arrayContainsAnyCalls[0][2]).toHaveLength(30);
+    expect(arrayContainsAnyCalls[1][2]).toHaveLength(30);
+    expect(arrayContainsAnyCalls[2][2]).toHaveLength(5);
+
+    // Shared entry collapses to a single result; chunk-unique entries all kept
+    expect(entries.map(e => e.id).sort()).toEqual([1, 2, 3, 7777]);
+  });
+
+  test("getEntriesContainingTeams dedupes duplicate sIDs in the input before chunking", async () => {
+    queryGetMock.mockResolvedValue({ docs: [] });
+    // 60 entries but only 5 distinct → 1 chunk of 5
+    const sIDs = Array.from({ length: 60 }, () => 101);
+    sIDs[10] = 102; sIDs[20] = 103; sIDs[30] = 104; sIDs[40] = 105;
+    await repo.getEntriesContainingTeams(2024, sIDs);
+    expect(queryGetMock).toHaveBeenCalledTimes(1);
+    const arrayContainsAnyCalls = whereMock.mock.calls.filter(c => c[1] === "array-contains-any");
+    expect(arrayContainsAnyCalls[0][2].sort()).toEqual([101, 102, 103, 104, 105]);
   });
 
   test("getEntriesForGroup sorts by entry id ascending", async () => {
@@ -710,7 +812,7 @@ describe("TourneyRepository", () => {
 describe("TeamRepository", () => {
   const repo = new TeamRepository();
 
-  test("updateTeamRecordWithNulls finds record by sID and batches a points=null+gameStatus=[] update", async () => {
+  test("updateTeamRecordWithNulls finds record by sID and updates points=null+gameStatus=[] inside a transaction", async () => {
     queryGetMock.mockResolvedValue({
       empty: false,
       docs: [makeDoc("rec", { sID: 101 })],
@@ -718,7 +820,8 @@ describe("TeamRepository", () => {
     await repo.updateTeamRecordWithNulls(101, 2024);
 
     expect(whereMock).toHaveBeenCalledWith("sID", "==", 101);
-    expect(batchUpdateMock).toHaveBeenCalledWith(expect.anything(), { points: null, gameStatus: [] });
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith({ points: null, gameStatus: [] });
     expect(cacheDel).toHaveBeenCalledWith("allTeamNames_2024");
     expect(cacheDel).toHaveBeenCalledWith("tournamentDetails_2024");
   });
@@ -726,21 +829,31 @@ describe("TeamRepository", () => {
   test("updateTeamRecordWithNulls no-ops + skips cache bust when no records match", async () => {
     queryGetMock.mockResolvedValue({ empty: true, docs: [] });
     await repo.updateTeamRecordWithNulls(999, 2024);
-    expect(batchMock).not.toHaveBeenCalled();
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).not.toHaveBeenCalled();
     expect(cacheDel).not.toHaveBeenCalled();
   });
 
-  test("updateTeamRecord writes provided points + gameStatus to all matched records", async () => {
+  test("updateTeamRecord writes provided points + gameStatus to all matched records inside a transaction", async () => {
     queryGetMock.mockResolvedValue({
       empty: false,
       docs: [makeDoc("rec1", { sID: 101 }), makeDoc("rec2", { sID: 101 })], // canonical + ff_ pair
     });
     await repo.updateTeamRecord(101, 4, ["W", "W"], 2024);
-    expect(batchUpdateMock).toHaveBeenCalledTimes(2);
-    expect(batchUpdateMock).toHaveBeenNthCalledWith(1, expect.anything(), { points: 4, gameStatus: ["W", "W"] });
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledTimes(2);
+    expect(updateMock).toHaveBeenNthCalledWith(1, { points: 4, gameStatus: ["W", "W"] });
   });
 
-  test("createCanonicalSchoolRecord clones the ff_ doc into canonicalDocId, strips canonicalDocId field", async () => {
+  test("updateTeamRecord no-ops + skips cache bust when no records match", async () => {
+    queryGetMock.mockResolvedValue({ empty: true, docs: [] });
+    await repo.updateTeamRecord(999, 0, [], 2024);
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(cacheDel).not.toHaveBeenCalled();
+  });
+
+  test("createCanonicalSchoolRecord clones the ff_ doc into canonicalDocId inside a transaction, strips canonicalDocId field", async () => {
     queryGetMock.mockResolvedValue({
       empty: false,
       docs: [makeDoc("ff_64_t1", {
@@ -752,6 +865,7 @@ describe("TeamRepository", () => {
 
     await repo.createCanonicalSchoolRecord(101, 2024);
 
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
     expect(docMock).toHaveBeenCalledWith("1_16");
     const payload = setMock.mock.calls[0][0];
     expect(payload).not.toHaveProperty("canonicalDocId");
@@ -770,12 +884,13 @@ describe("TeamRepository", () => {
     expect(setMock).not.toHaveBeenCalled();
   });
 
-  test("deleteCanonicalSchoolRecord deletes the canonical doc when ff_ pair exists", async () => {
+  test("deleteCanonicalSchoolRecord deletes the canonical doc inside a transaction when ff_ pair exists", async () => {
     queryGetMock.mockResolvedValue({
       empty: false,
       docs: [makeDoc("ff_64_t1", { sID: 101, canonicalDocId: "1_16" })],
     });
     await repo.deleteCanonicalSchoolRecord(101, 2024);
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
     expect(docMock).toHaveBeenCalledWith("1_16");
     expect(deleteMock).toHaveBeenCalledTimes(1);
   });
@@ -799,6 +914,32 @@ describe("TeamRepository", () => {
       name: "Duke", mascot: "Blue Devils", nameNick: "Duke", confID: "acc",
     });
     expect(cacheDel).toHaveBeenCalledWith("allSchools");
+  });
+
+  test("getAllSchools orders by name asc so the cached list is alphabetical for admin <select> dropdowns", async () => {
+    queryGetMock.mockResolvedValue({
+      docs: [makeDoc("z", { sid: 9, name: "Zaga" }), makeDoc("a", { sid: 1, name: "Alpha" })],
+    });
+    await repo.getAllSchools();
+    expect(orderByMock).toHaveBeenCalledWith("name", "asc");
+    expect(cacheSet).toHaveBeenCalledWith("allSchools", expect.any(Array), 86400);
+  });
+
+  test("findSchoolsByName reuses the allSchools cache without a DB read", async () => {
+    // Simulate a warm allSchools cache (populated earlier by e.g. getAllSchools
+    // or a TourneyRepository batch method).
+    cacheGet.mockImplementation((k) => k === "allSchools" ? [
+      { sid: 1, name: "Duke",     mascot: "Blue Devils", nameNick: "Duke",    confID: "acc" },
+      { sid: 2, name: "Kansas",   mascot: "Jayhawks",    nameNick: "Kansas",  confID: "b12" },
+    ] : undefined);
+
+    const results = await repo.findSchoolsByName("blue");
+
+    expect(cacheGet).toHaveBeenCalledWith("allSchools");
+    expect(queryGetMock).not.toHaveBeenCalled();
+    expect(results).toEqual([
+      { sid: 1, name: "Duke", mascot: "Blue Devils", nameNick: "Duke", confID: "acc" },
+    ]);
   });
 
   test("findSchoolsByName matches on name/mascot/nameNick case-insensitively", async () => {

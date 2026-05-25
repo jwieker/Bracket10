@@ -14,7 +14,7 @@
  *   - GCP_CLOUD_BUILD_TRIGGER_ID  trigger UUID (see cloudbuild.yaml _TRIGGER_ID)
  * Optional:
  *   - GCP_DEPLOY_BRANCH        defaults to "main"
- *   - GOOGLE_CLOUD_PROJECT     required — your GCP project ID
+ *   - GOOGLE_CLOUD_PROJECT     optional in production (automatically resolved on Cloud Run via metadata server)
  */
 import { GoogleAuth } from "google-auth-library";
 import Logger from "../utils/logger.js";
@@ -33,8 +33,29 @@ function getAuth() {
   return _auth;
 }
 
+let projectIdPromise = null;
 function getProjectId() {
-  return process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT_ID || "";
+  if (!projectIdPromise) {
+    projectIdPromise = (async () => {
+      const fromEnv = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT_ID;
+      if (fromEnv) {
+        return fromEnv;
+      }
+      try {
+        const auth = getAuth();
+        const projectId = await auth.getProjectId();
+        if (projectId) {
+          return projectId;
+        }
+      } catch (err) {
+        Logger.error("Failed to dynamically resolve GCP project ID", err);
+      }
+      // Clear the cached promise on failure so that transient errors can be retried on next call
+      projectIdPromise = null;
+      return "";
+    })();
+  }
+  return projectIdPromise;
 }
 
 async function gcpRequest(url, options = {}) {
@@ -64,7 +85,16 @@ export async function getMonthToDateSpend() {
     return { configured: false, spent: null, currency: "USD" };
   }
 
-  const projectId = getProjectId();
+  const projectId = await getProjectId();
+  if (!projectId) {
+    return {
+      configured: true,
+      spent: null,
+      currency: "USD",
+      error: "GCP project ID could not be determined. Please configure GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID.",
+    };
+  }
+
   const url = `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(
     projectId
   )}/queries`;
@@ -157,7 +187,16 @@ export async function getDailySpend() {
     return { configured: false, days: [], currency: "USD" };
   }
 
-  const projectId = getProjectId();
+  const projectId = await getProjectId();
+  if (!projectId) {
+    return {
+      configured: true,
+      days: [],
+      currency: "USD",
+      error: "GCP project ID could not be determined. Please configure GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID.",
+    };
+  }
+
   const url = `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(
     projectId
   )}/queries`;
@@ -331,7 +370,10 @@ export async function triggerProductionDeploy() {
     return { ok: false, error: "GCP_CLOUD_BUILD_TRIGGER_ID is not set" };
   }
   const branch = process.env.GCP_DEPLOY_BRANCH || "main";
-  const projectId = getProjectId();
+  const projectId = await getProjectId();
+  if (!projectId) {
+    return { ok: false, error: "GCP project ID could not be determined. Please configure GOOGLE_CLOUD_PROJECT or GCP_PROJECT_ID." };
+  }
 
   try {
     const url = `https://cloudbuild.googleapis.com/v1/projects/${encodeURIComponent(
@@ -362,26 +404,27 @@ export async function triggerProductionDeploy() {
   }
 }
 
-export function getCloudConsoleLinks() {
-  const projectId = getProjectId();
-  const enc = encodeURIComponent(projectId);
+export async function getCloudConsoleLinks() {
+  const projectId = await getProjectId();
+  const enc = encodeURIComponent(projectId || "");
   return {
     projectId,
     deployBranch: process.env.GCP_DEPLOY_BRANCH || "main",
-    firestore: `https://console.cloud.google.com/firestore/databases/-default-/data?project=${enc}`,
-    cloudRun: `https://console.cloud.google.com/run?project=${enc}`,
-    cloudBuild: `https://console.cloud.google.com/cloud-build/builds?project=${enc}`,
-    cloudBuildTriggers: `https://console.cloud.google.com/cloud-build/triggers?project=${enc}`,
-    logs: `https://console.cloud.google.com/logs/query?project=${enc}`,
-    billing: `https://console.cloud.google.com/billing?project=${enc}`,
-    budgets: `https://console.cloud.google.com/billing/budgets?project=${enc}`,
-    artifactRegistry: `https://console.cloud.google.com/artifacts?project=${enc}`,
-    iam: `https://console.cloud.google.com/iam-admin/iam?project=${enc}`,
-    secrets: `https://console.cloud.google.com/security/secret-manager?project=${enc}`,
+    firestore: projectId ? `https://console.cloud.google.com/firestore/databases/-default-/data?project=${enc}` : "#",
+    cloudRun: projectId ? `https://console.cloud.google.com/run?project=${enc}` : "#",
+    cloudBuild: projectId ? `https://console.cloud.google.com/cloud-build/builds?project=${enc}` : "#",
+    cloudBuildTriggers: projectId ? `https://console.cloud.google.com/cloud-build/triggers?project=${enc}` : "#",
+    logs: projectId ? `https://console.cloud.google.com/logs/query?project=${enc}` : "#",
+    billing: projectId ? `https://console.cloud.google.com/billing?project=${enc}` : "#",
+    budgets: projectId ? `https://console.cloud.google.com/billing/budgets?project=${enc}` : "#",
+    artifactRegistry: projectId ? `https://console.cloud.google.com/artifacts?project=${enc}` : "#",
+    iam: projectId ? `https://console.cloud.google.com/iam-admin/iam?project=${enc}` : "#",
+    secrets: projectId ? `https://console.cloud.google.com/security/secret-manager?project=${enc}` : "#",
   };
 }
 
-// Test seam: clear the in-process budget cache.
+// Test seam: clear the in-process budget cache and project ID promise.
 export function _clearBudgetCacheForTests() {
   budgetCache = { value: null, expiresAt: 0 };
+  projectIdPromise = null;
 }

@@ -1,6 +1,7 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 
 const mockRequest = vi.fn();
+let mockProjectIdValue = 'my-project';
 
 vi.mock('google-auth-library', () => {
   return {
@@ -10,6 +11,12 @@ vi.mock('google-auth-library', () => {
         return Promise.resolve({
           request: mockRequest,
         });
+      }
+      getProjectId() {
+        if (mockProjectIdValue === 'throw') {
+          return Promise.reject(new Error('Transient metadata server error'));
+        }
+        return Promise.resolve(mockProjectIdValue);
       }
     }
   };
@@ -29,6 +36,7 @@ describe('cloudService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _clearBudgetCacheForTests();
+    mockProjectIdValue = 'my-project';
     // Reset env vars to clean state
     process.env = { ...originalEnv };
     delete process.env.GCP_BILLING_EXPORT_TABLE;
@@ -422,6 +430,45 @@ describe('cloudService', () => {
         ok: false,
         error: 'GCP API ?: Trigger Not Found',
       });
+    });
+  });
+
+  describe('GCP Project ID resolution resilience', () => {
+    test('handles unresolved project ID gracefully by returning error configuration on services', async () => {
+      mockProjectIdValue = ''; // Unresolved / empty
+      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_CLOUD_BUILD_TRIGGER_ID = 'trigger-uuid-123';
+
+      const spend = await getMonthToDateSpend();
+      expect(spend.error).toContain('GCP project ID could not be determined');
+
+      const daily = await getDailySpend();
+      expect(daily.error).toContain('GCP project ID could not be determined');
+
+      const deploy = await triggerProductionDeploy();
+      expect(deploy.error).toContain('GCP project ID could not be determined');
+    });
+
+    test('recovers from transient resolution errors and retries on subsequent requests', async () => {
+      mockProjectIdValue = 'throw'; // First attempt throws/fails transiently
+      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+
+      const firstAttempt = await getMonthToDateSpend();
+      expect(firstAttempt.error).toContain('GCP project ID could not be determined');
+
+      // Now resolve the transient issue
+      mockProjectIdValue = 'my-project'; // Next attempt resolves successfully
+      mockRequest.mockResolvedValue({
+        data: {
+          rows: [
+            { f: [{ v: '124.50' }, { v: 'USD' }] }
+          ]
+        }
+      });
+
+      const secondAttempt = await getMonthToDateSpend();
+      expect(secondAttempt.error).toBeUndefined();
+      expect(secondAttempt.spent).toBe(124.50);
     });
   });
 });

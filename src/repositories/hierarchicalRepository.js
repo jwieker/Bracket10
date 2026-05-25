@@ -25,6 +25,83 @@ function yearDoc(year, sub, docId) {
     return yearCol(year, sub).doc(String(docId));
 }
 
+// ─── Cached reference-data helpers ────────────────────────────────
+// These share cache keys with the public TeamRepository.getAllSchools,
+// ConferenceRepository.getAllConferences, TourneyRepository.getAllRegions, and
+// ViewRepository.getAllGroups methods (24h TTL, invalidated by the same writes),
+// so any code path that has already warmed those caches makes subsequent calls
+// here free. Used internally by batch insert/update methods that previously
+// re-fetched the full school / conference / region collections on every call.
+
+async function _getCachedSchools() {
+    const cacheKey = 'allSchools';
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+    Logger.debug('DB CALL: H._getCachedSchools');
+    // Order by name asc so the admin tournament-setup <select> dropdowns
+    // (newTourneyComplete.ejs / editTourneyGames.ejs / newTourneyGames.ejs)
+    // render in alphabetical order. Previously getAllTeams sorted but
+    // getAllSchools did not — both share the allSchools cache, so order
+    // depended on whichever warmed the cache first.
+    const snap = await db.collection('school').orderBy('name', 'asc').get();
+    const result = snap.docs.map(doc => doc.data());
+    cacheSet(cacheKey, result, 86400);
+    return result;
+}
+
+async function _getCachedConferences() {
+    const cacheKey = 'allConferences';
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+    Logger.debug('DB CALL: H._getCachedConferences');
+    const snap = await db.collection('conferences').orderBy('name', 'asc').get();
+    const result = snap.docs.map(doc => ({ slug: doc.id, ...doc.data() }));
+    cacheSet(cacheKey, result, 86400);
+    return result;
+}
+
+async function _getCachedRegions(year) {
+    const cacheKey = `allRegions_${year}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+    Logger.debug('DB CALL: H._getCachedRegions');
+    const snap = await yearCol(year, 'regions').orderBy('__name__', 'asc').get();
+    const result = snap.docs.map(doc => doc.data());
+    cacheSet(cacheKey, result, 86400);
+    return result;
+}
+
+// Map builders over the cached arrays — kept inline-like so callsites don't
+// rebuild the same Map shape over and over inside the same request.
+function _buildSchoolsBySid(schools) {
+    const m = new Map();
+    for (const s of schools) m.set(String(s.sid), s);
+    return m;
+}
+
+function _buildConfNameMap(conferences) {
+    const m = new Map();
+    for (const c of conferences) m.set(c.slug, c.shortName || c.name || null);
+    return m;
+}
+
+function _buildRegionNameMap(regions) {
+    const m = new Map();
+    for (const r of regions) m.set(String(r.regionID), r.regionName);
+    return m;
+}
+
+async function _getCachedGroupNames() {
+    const cacheKey = 'allGroups';
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+    Logger.debug('DB CALL: H._getCachedGroupNames');
+    const snap = await db.collection('groups').orderBy('name', 'asc').get();
+    const result = snap.docs.map(doc => doc.data().name);
+    cacheSet(cacheKey, result, 86400);
+    return result;
+}
+
 // ─── EntryRepository ──────────────────────────────────────────────
 
 export class EntryRepository {
@@ -66,29 +143,40 @@ export class EntryRepository {
             cacheDel(`gameViewData_${year}_${g}`);
         });
         cacheDel(`allEntries_${year}`);
+        cacheDel(`entriesByNameRaw_${year}`);
     }
 
     async findEntriesByName(name, year = thisYear) {
-        Logger.debug('DB CALL: H.EntryRepository.findEntriesByName');
-        // No year filter needed — scoped by path
-        const snapshot = await yearCol(year, 'entries').get();
+        // The admin typeahead hits this on every keystroke; without a shared
+        // cache, an N-letter search costs N full reads of the year's entries
+        // subcollection. Cache the unfiltered slim-shape list and filter in
+        // memory. Cache is busted alongside allEntries_{year} on every entry
+        // create/update/delete so it stays consistent.
+        const cacheKey = `entriesByNameRaw_${year}`;
+        let all = cacheGet(cacheKey);
+        if (!all) {
+            Logger.debug('DB CALL: H.EntryRepository.findEntriesByName');
+            const snapshot = await yearCol(year, 'entries').get();
+            all = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: data.id,
+                    teamName: data.teamName,
+                    person: data.person,
+                    year: toNum(year),
+                    groups: data.groups || [data.group].filter(Boolean),
+                    hasPaid: data.hasPaid || false,
+                    paymentNote: data.paymentNote || '',
+                    payByCheck: data.payByCheck || false,
+                };
+            });
+            cacheSet(cacheKey, all, 300);
+        }
         const lowerName = name.toLowerCase();
-        return snapshot.docs
-            .map(doc => doc.data())
-            .filter(data =>
-                (data.person && data.person.toLowerCase().includes(lowerName)) ||
-                (data.teamName && data.teamName.toLowerCase().includes(lowerName))
-            )
-            .map(data => ({
-                id: data.id,
-                teamName: data.teamName,
-                person: data.person,
-                year: toNum(year),
-                groups: data.groups || [data.group].filter(Boolean),
-                hasPaid: data.hasPaid || false,
-                paymentNote: data.paymentNote || '',
-                payByCheck: data.payByCheck || false
-            }));
+        return all.filter(e =>
+            (e.person && e.person.toLowerCase().includes(lowerName)) ||
+            (e.teamName && e.teamName.toLowerCase().includes(lowerName))
+        );
     }
 
     async getUnpaidEntriesForGroup(groupName, year = thisYear) {
@@ -116,6 +204,7 @@ export class EntryRepository {
         invalidateCache('groupTeams_');
         invalidateCache('entriesForGroup_');
         cacheDel(`allEntries_${year}`);
+        cacheDel(`entriesByNameRaw_${year}`);
     }
 
     async updateEntryPicks(entryId, newPicks, year) {
@@ -123,6 +212,7 @@ export class EntryRepository {
         await yearDoc(year, 'entries', entryId).update({ picks: newPicks });
         invalidateCache('entriesForGroup_');
         cacheDel(`allEntries_${year}`);
+        cacheDel(`entriesByNameRaw_${year}`);
     }
 
     async updateMultipleEntryPicks(updates, year) {
@@ -139,6 +229,7 @@ export class EntryRepository {
         }
         invalidateCache('entriesForGroup_');
         cacheDel(`allEntries_${year}`);
+        cacheDel(`entriesByNameRaw_${year}`);
     }
 
     async getUnsentEmailEntries(groupName, year = thisYear) {
@@ -189,13 +280,14 @@ export class ViewRepository {
             cacheSet(cacheKey, result, 86400); // 24 hours — group names never change
             return result;
         }
-        // Fall back to case-insensitive search
-        const snapshot = await db.collection('groups').get();
+        // Fall back to case-insensitive search — reuse the cached groups list
+        // (24h TTL, shared with getAllGroups) so this doesn't re-read the
+        // groups collection on every miss.
+        const allGroupNames = await _getCachedGroupNames();
         const lowerName = name.toLowerCase();
-        const found = snapshot.docs.find(d => d.data().name && d.data().name.toLowerCase() === lowerName);
-        const result = found ? found.data().name : null;
-        cacheSet(cacheKey, result, 86400);
-        return result;
+        const found = allGroupNames.find(n => n && n.toLowerCase() === lowerName) || null;
+        cacheSet(cacheKey, found, 86400);
+        return found;
     }
 
     async getGroupTeams(groupName, year = thisYear) {
@@ -238,15 +330,7 @@ export class ViewRepository {
 
     async getAllGroups() {
         Logger.debug('DB CALL: H.ViewRepository.getAllGroups');
-        const cacheKey = 'allGroups';
-        const cached = cacheGet(cacheKey);
-        if (cached) return cached;
-
-        const snapshot = await db.collection('groups').orderBy('name', 'asc').get();
-        const result = snapshot.docs.map(doc => doc.data().name);
-
-        cacheSet(cacheKey, result, 86400); // 24 hours
-        return result;
+        return _getCachedGroupNames();
     }
 }
 
@@ -266,27 +350,32 @@ export class GameRepository {
         Logger.debug('DB CALL: H.GameRepository.updateNextGameTeam');
         const prefix = nextGameSpot === 1 ? "team1" : "team2";
 
-        let teamName = null;
-        let teamSeed = null;
-        if (winner) {
-            const recSnap = await yearCol(year, 'schoolRecords').where('sID', '==', winner).limit(1).get();
-            if (!recSnap.empty) {
-                const recData = recSnap.docs[0].data();
-                teamName = recData.nameNick || recData.schoolName || null;
-                teamSeed = recData.seed ?? null;
+        // Atomic so concurrent ESPN poll resolutions can't race on the
+        // schoolRecord lookup + game update.
+        await db.runTransaction(async (transaction) => {
+            let teamName = null;
+            let teamSeed = null;
+            if (winner) {
+                const recQuery = yearCol(year, 'schoolRecords').where('sID', '==', toNum(winner)).limit(1);
+                const recSnap = await transaction.get(recQuery);
+                if (!recSnap.empty) {
+                    const recData = recSnap.docs[0].data();
+                    teamName = recData.nameNick || recData.schoolName || null;
+                    teamSeed = recData.seed ?? null;
+                }
             }
-        }
 
-        await yearDoc(year, 'games', nextGame).update({
-            [`${prefix}ID`]: winner,
-            [`${prefix}Name`]: teamName,
-            [`${prefix}Seed`]: teamSeed
+            transaction.update(yearDoc(year, 'games', nextGame), {
+                [`${prefix}ID`]: winner,
+                [`${prefix}Name`]: teamName,
+                [`${prefix}Seed`]: teamSeed
+            });
         });
+
         cacheDel(`tournamentDetails_${year}`);
         cacheDel(`activeGames_${year}`);
         cacheDel(`activeFutureGames_${year}`);
         invalidateCache(`gameViewData_${year}_`);
-
     }
 
     async getActiveAndFutureGames(year = thisYear) {
@@ -322,20 +411,45 @@ export class GameRepository {
 
     async getEntriesContainingTeams(year, teamSIDs) {
         Logger.debug('DB CALL: H.GameRepository.getEntriesContainingTeams');
-        const snapshot = await yearCol(year, 'entries')
-            .where('picks', 'array-contains-any', teamSIDs.map(Number))
-            .get();
-        return snapshot.docs
-            .map(doc => doc.data())
-            .filter(data => {
+        // Firestore caps `array-contains-any` at 30 disjuncts. Bulk ESPN
+        // resolutions can affect more than 30 teams (FF + multiple rounds),
+        // so chunk into parallel sub-queries and dedupe by entry id.
+        const numericSIDs = [...new Set(teamSIDs.map(Number))];
+        if (numericSIDs.length === 0) return [];
+
+        const ARRAY_CONTAINS_ANY_LIMIT = 30;
+        const snapshots = await Promise.all(
+            Array.from(
+                { length: Math.ceil(numericSIDs.length / ARRAY_CONTAINS_ANY_LIMIT) },
+                (_, i) => {
+                    const chunk = numericSIDs.slice(
+                        i * ARRAY_CONTAINS_ANY_LIMIT,
+                        (i + 1) * ARRAY_CONTAINS_ANY_LIMIT
+                    );
+                    return yearCol(year, 'entries')
+                        .where('picks', 'array-contains-any', chunk)
+                        .get();
+                }
+            )
+        );
+
+        const seenIds = new Set();
+        const result = [];
+        for (const snap of snapshots) {
+            for (const doc of snap.docs) {
+                const data = doc.data();
+                if (seenIds.has(data.id)) continue;
+                seenIds.add(data.id);
                 const groups = data.groups || (data.group ? [data.group] : []);
-                return !isExcludedOnlyGroup(groups);
-            })
-            .map(data => ({
-                id: data.id, teamName: data.teamName, picks: data.picks,
-                totalPoints: data.totalPoints, person: data.person,
-                groups: data.groups || (data.group ? [data.group] : [])
-            }));
+                if (isExcludedOnlyGroup(groups)) continue;
+                result.push({
+                    id: data.id, teamName: data.teamName, picks: data.picks,
+                    totalPoints: data.totalPoints, person: data.person,
+                    groups,
+                });
+            }
+        }
+        return result;
     }
 
     async getEntriesForGroup(year, groupName) {
@@ -632,6 +746,7 @@ export class GameRepository {
         await ref.update(updatePayload);
         invalidateCache('entriesForGroup_');
         cacheDel(`allEntries_${entry.year}`);
+        cacheDel(`entriesByNameRaw_${entry.year}`);
     }
 }
 
@@ -640,15 +755,7 @@ export class GameRepository {
 export class TourneyRepository {
     async getAllRegions(year = thisYear) {
         Logger.debug('DB CALL: H.TourneyRepository.getAllRegions');
-        const cacheKey = `allRegions_${year}`;
-        const cached = cacheGet(cacheKey);
-        if (cached) return cached;
-
-        const snapshot = await yearCol(year, 'regions').orderBy('__name__', 'asc').get();
-        const result = snapshot.docs.map(doc => doc.data());
-
-        cacheSet(cacheKey, result, 86400); // 24 hours
-        return result;
+        return _getCachedRegions(year);
     }
 
     async getAllRegionTypes() {
@@ -666,11 +773,10 @@ export class TourneyRepository {
 
     async insertRegionsForYear(year, regionIDs) {
         Logger.debug('DB CALL: H.TourneyRepository.insertRegionsForYear');
-        // Load master region definitions
-        const masterSnap = await db.collection('regionID').get();
+        // Load master region definitions — reuse the 24h-cached allRegionTypes list.
+        const masterList = await this.getAllRegionTypes();
         const masterMap = new Map();
-        masterSnap.docs.forEach(doc => {
-            const d = doc.data();
+        masterList.forEach(d => {
             masterMap.set(Number(d.regionID), d);
         });
         const batch = db.batch();
@@ -689,16 +795,7 @@ export class TourneyRepository {
 
     async getAllTeams() {
         Logger.debug('DB CALL: H.TourneyRepository.getAllTeams');
-        const cacheKey = 'allSchools';
-        const cached = cacheGet(cacheKey);
-        if (cached) return cached;
-
-        // Schools stay top-level
-        const snapshot = await db.collection('school').orderBy('name', 'asc').get();
-        const result = snapshot.docs.map(doc => doc.data());
-
-        cacheSet(cacheKey, result, 86400); // 24 hours
-        return result;
+        return _getCachedSchools();
     }
 
     async getSchoolRecordsForYear(year) {
@@ -759,9 +856,7 @@ export class TourneyRepository {
         Logger.debug('DB CALL: H.TourneyRepository.insertFirstFourGames');
         if (games.length === 0) return;
 
-        const schoolsSnap = await db.collection('school').get();
-        const schoolsMap = new Map();
-        schoolsSnap.docs.forEach(doc => schoolsMap.set(String(doc.data().sid), doc.data()));
+        const schoolsMap = _buildSchoolsBySid(await _getCachedSchools());
 
         const batch = db.batch();
         for (const game of games) {
@@ -792,29 +887,17 @@ export class TourneyRepository {
         Logger.debug('DB CALL: H.TourneyRepository.insertFirstFourSchoolRecords');
         if (records.length === 0) return;
 
-        const [schoolsSnap, regionsSnap, conferencesSnap] = await Promise.all([
-            db.collection('school').get(),
-            yearCol(year, 'regions').get(),
-            db.collection('conferences').get(),
+        // Reuse the 24h-cached reference data (allSchools, allRegions_{year},
+        // allConferences). Previously this issued 3 full-collection reads on
+        // every tournament setup.
+        const [schools, regions, conferences] = await Promise.all([
+            _getCachedSchools(),
+            _getCachedRegions(year),
+            _getCachedConferences(),
         ]);
-
-        const schoolsMap = new Map();
-        schoolsSnap.docs.forEach(doc => {
-            const d = doc.data();
-            schoolsMap.set(String(d.sid), d);
-        });
-
-        const regionsMap = new Map();
-        regionsSnap.docs.forEach(doc => {
-            const d = doc.data();
-            regionsMap.set(String(d.regionID), d.regionName);
-        });
-
-        const confNameMap = new Map();
-        conferencesSnap.docs.forEach(doc => {
-            const d = doc.data();
-            confNameMap.set(doc.id, d.shortName || d.name || null);
-        });
+        const schoolsMap = _buildSchoolsBySid(schools);
+        const regionsMap = _buildRegionNameMap(regions);
+        const confNameMap = _buildConfNameMap(conferences);
 
         const batch = db.batch();
         for (const record of records) {
@@ -880,9 +963,7 @@ export class TourneyRepository {
 
         const yearStr = String(gamesWithTeams[0][2]);
 
-        const schoolsSnap = await db.collection('school').get();
-        const schoolsMap = new Map();
-        schoolsSnap.docs.forEach(doc => schoolsMap.set(String(doc.data().sid), doc.data()));
+        const schoolsMap = _buildSchoolsBySid(await _getCachedSchools());
 
         const batch = db.batch();
         // Ensure the tournament parent doc exists so years queryable
@@ -918,9 +999,7 @@ export class TourneyRepository {
         Logger.debug('DB CALL: H.TourneyRepository.updateMultipleGamesWithTeams');
         if (gamesWithTeams.length === 0) return;
 
-        const schoolsSnap = await db.collection('school').get();
-        const schoolsMap = new Map();
-        schoolsSnap.docs.forEach(doc => schoolsMap.set(String(doc.data().sid), doc.data()));
+        const schoolsMap = _buildSchoolsBySid(await _getCachedSchools());
 
         const batch = db.batch();
         for (const game of gamesWithTeams) {
@@ -951,31 +1030,17 @@ export class TourneyRepository {
         Logger.debug('DB CALL: H.TourneyRepository.insertMultipleSchoolRecords');
         if (schoolRecords.length === 0) return;
 
-        // Fetch school data, region names, and conferences in parallel to denormalize
-        const [schoolsSnap, regionsSnap, conferencesSnap] = await Promise.all([
-            db.collection('school').get(),
-            yearCol(schoolRecords[0].year, 'regions').get(),
-            db.collection('conferences').get(),
+        // Reuse 24h-cached reference data (allSchools, allRegions_{year},
+        // allConferences) for the denormalization joins. Previously this issued
+        // 3 full-collection reads on every tournament setup.
+        const [schools, regions, conferences] = await Promise.all([
+            _getCachedSchools(),
+            _getCachedRegions(schoolRecords[0].year),
+            _getCachedConferences(),
         ]);
-
-        const schoolsMap = new Map();
-        schoolsSnap.docs.forEach(doc => {
-            const d = doc.data();
-            schoolsMap.set(String(d.sid), d);
-        });
-
-        const regionsMap = new Map();
-        regionsSnap.docs.forEach(doc => {
-            const d = doc.data();
-            regionsMap.set(String(d.regionID), d.regionName);
-        });
-
-        // Map conference slug → display name (prefer shortName)
-        const confNameMap = new Map();
-        conferencesSnap.docs.forEach(doc => {
-            const d = doc.data();
-            confNameMap.set(doc.id, d.shortName || d.name || null);
-        });
+        const schoolsMap = _buildSchoolsBySid(schools);
+        const regionsMap = _buildRegionNameMap(regions);
+        const confNameMap = _buildConfNameMap(conferences);
 
         const batch = db.batch();
         for (const record of schoolRecords) {
@@ -1014,23 +1079,14 @@ export class TourneyRepository {
         Logger.debug('DB CALL: H.TourneyRepository.updateMultipleSchoolRecords');
         if (!schoolRecords || schoolRecords.length === 0) return;
 
-        // Look up school data and conferences to keep all denormalized fields fresh
-        const [schoolsSnap, conferencesSnap] = await Promise.all([
-            db.collection('school').get(),
-            db.collection('conferences').get(),
+        // Reuse the 24h-cached allSchools / allConferences lists to keep
+        // denormalized fields fresh without re-reading both collections.
+        const [schools, conferences] = await Promise.all([
+            _getCachedSchools(),
+            _getCachedConferences(),
         ]);
-
-        const schoolsMap = new Map();
-        schoolsSnap.docs.forEach(doc => {
-            const d = doc.data();
-            schoolsMap.set(String(d.sid), d);
-        });
-
-        const confNameMap = new Map();
-        conferencesSnap.docs.forEach(doc => {
-            const d = doc.data();
-            confNameMap.set(doc.id, d.shortName || d.name || null);
-        });
+        const schoolsMap = _buildSchoolsBySid(schools);
+        const confNameMap = _buildConfNameMap(conferences);
 
         const batch = db.batch();
         for (const record of schoolRecords) {
@@ -1062,13 +1118,17 @@ export class TourneyRepository {
 export class TeamRepository {
     async updateTeamRecordWithNulls(schoolId, year = thisYear) {
         Logger.debug('DB CALL: H.TeamRepository.updateTeamRecordWithNulls');
-        const snapshot = await yearCol(year, 'schoolRecords')
-            .where('sID', '==', toNum(schoolId))
-            .get();
-        if (!snapshot.empty) {
-            const batch = db.batch();
-            snapshot.docs.forEach(doc => batch.update(doc.ref, { points: null, gameStatus: [] }));
-            await batch.commit();
+        // Atomic read-then-write; cache bust only fires on real updates.
+        const updated = await db.runTransaction(async (transaction) => {
+            const query = yearCol(year, 'schoolRecords').where('sID', '==', toNum(schoolId));
+            const snapshot = await transaction.get(query);
+            if (snapshot.empty) return false;
+            snapshot.docs.forEach(doc => {
+                transaction.update(doc.ref, { points: null, gameStatus: [] });
+            });
+            return true;
+        });
+        if (updated) {
             cacheDel(`allTeamNames_${year}`);
             cacheDel(`tournamentDetails_${year}`);
         }
@@ -1076,13 +1136,16 @@ export class TeamRepository {
 
     async updateTeamRecord(schoolId, points, gameStatus, year = thisYear) {
         Logger.debug('DB CALL: H.TeamRepository.updateTeamRecord');
-        const snapshot = await yearCol(year, 'schoolRecords')
-            .where('sID', '==', toNum(schoolId))
-            .get();
-        if (!snapshot.empty) {
-            const batch = db.batch();
-            snapshot.docs.forEach(doc => batch.update(doc.ref, { points, gameStatus }));
-            await batch.commit();
+        const updated = await db.runTransaction(async (transaction) => {
+            const query = yearCol(year, 'schoolRecords').where('sID', '==', toNum(schoolId));
+            const snapshot = await transaction.get(query);
+            if (snapshot.empty) return false;
+            snapshot.docs.forEach(doc => {
+                transaction.update(doc.ref, { points, gameStatus });
+            });
+            return true;
+        });
+        if (updated) {
             cacheDel(`allTeamNames_${year}`);
             cacheDel(`tournamentDetails_${year}`);
         }
@@ -1090,17 +1153,17 @@ export class TeamRepository {
 
     async createCanonicalSchoolRecord(winnerSID, year = thisYear) {
         Logger.debug('DB CALL: H.TeamRepository.createCanonicalSchoolRecord');
-        const snapshot = await yearCol(year, 'schoolRecords')
-            .where('sID', '==', toNum(winnerSID))
-            .limit(1)
-            .get();
-        if (snapshot.empty) return;
-        const data = snapshot.docs[0].data();
-        const docId = data.canonicalDocId;
-        if (!docId) return;
-        // Strip ff_-only fields so the canonical doc is indistinguishable from a regular school record
-        const { canonicalDocId: _cid, ...canonicalData } = data;
-        await yearDoc(year, 'schoolRecords', docId).set(canonicalData);
+        await db.runTransaction(async (transaction) => {
+            const query = yearCol(year, 'schoolRecords').where('sID', '==', toNum(winnerSID)).limit(1);
+            const snapshot = await transaction.get(query);
+            if (snapshot.empty) return;
+            const data = snapshot.docs[0].data();
+            const docId = data.canonicalDocId;
+            if (!docId) return;
+            // Strip ff_-only fields so the canonical doc is indistinguishable from a regular school record
+            const { canonicalDocId: _cid, ...canonicalData } = data;
+            transaction.set(yearDoc(year, 'schoolRecords', docId), canonicalData);
+        });
         cacheDel(`tournamentDetails_${year}`);
         cacheDel(`allTeamNames_${year}`);
         cacheDel(`activeGames_${year}`);
@@ -1108,15 +1171,15 @@ export class TeamRepository {
 
     async deleteCanonicalSchoolRecord(winnerSID, year = thisYear) {
         Logger.debug('DB CALL: H.TeamRepository.deleteCanonicalSchoolRecord');
-        const snapshot = await yearCol(year, 'schoolRecords')
-            .where('sID', '==', toNum(winnerSID))
-            .limit(1)
-            .get();
-        if (snapshot.empty) return;
-        const data = snapshot.docs[0].data();
-        const docId = data.canonicalDocId;
-        if (!docId) return;
-        await yearDoc(year, 'schoolRecords', docId).delete();
+        await db.runTransaction(async (transaction) => {
+            const query = yearCol(year, 'schoolRecords').where('sID', '==', toNum(winnerSID)).limit(1);
+            const snapshot = await transaction.get(query);
+            if (snapshot.empty) return;
+            const data = snapshot.docs[0].data();
+            const docId = data.canonicalDocId;
+            if (!docId) return;
+            transaction.delete(yearDoc(year, 'schoolRecords', docId));
+        });
         cacheDel(`tournamentDetails_${year}`);
         cacheDel(`allTeamNames_${year}`);
         cacheDel(`activeGames_${year}`);
@@ -1124,15 +1187,7 @@ export class TeamRepository {
 
     async getAllSchools() {
         Logger.debug('DB CALL: H.TeamRepository.getAllSchools');
-        const cacheKey = 'allSchools';
-        const cached = cacheGet(cacheKey);
-        if (cached) return cached;
-
-        const snapshot = await db.collection('school').get();
-        const result = snapshot.docs.map(doc => doc.data());
-
-        cacheSet(cacheKey, result, 86400); // 24 hours
-        return result;
+        return _getCachedSchools();
     }
 
     /**
@@ -1164,10 +1219,12 @@ export class TeamRepository {
 
     async findSchoolsByName(name) {
         Logger.debug('DB CALL: H.TeamRepository.findSchoolsByName');
-        const snapshot = await db.collection('school').get();
+        // Reuse the 24h-cached allSchools list — admin typeahead hits this
+        // on every keystroke and previously did a full school collection
+        // read each time.
+        const allSchools = await _getCachedSchools();
         const lowerName = name.toLowerCase();
-        return snapshot.docs
-            .map(doc => doc.data())
+        return allSchools
             .filter(data =>
                 (data.name && data.name.toLowerCase().includes(lowerName)) ||
                 (data.mascot && data.mascot.toLowerCase().includes(lowerName)) ||
@@ -1203,15 +1260,7 @@ export class TeamRepository {
 export class ConferenceRepository {
     async getAllConferences() {
         Logger.debug('DB CALL: H.ConferenceRepository.getAllConferences');
-        const cacheKey = `allConferences`;
-        const cached = cacheGet(cacheKey);
-        if (cached) return cached;
-
-        const snapshot = await db.collection('conferences').orderBy('name', 'asc').get();
-        const result = snapshot.docs.map(doc => ({ slug: doc.id, ...doc.data() }));
-
-        cacheSet(cacheKey, result, 86400); // 24 hours
-        return result;
+        return _getCachedConferences();
     }
 
     async getConferenceBySlug(slug) {

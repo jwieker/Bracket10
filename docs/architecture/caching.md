@@ -40,10 +40,13 @@ Follow these precisely:
 | `getAllGroups` (repo) | `allGroups` | 24 hours | group add |
 | `getAllSchools` (repo) | `allSchools` | 24 hours | school write |
 | `getAllConferences` (repo) | `allConferences` | 24 hours | conference write |
+| `findEntriesByName` (repo) | `entriesByNameRaw_{year}` | 5 min | entry write |
+
+**Cross-class cache sharing:** `hierarchicalRepository.js` defines module-private helpers `_getCachedSchools`, `_getCachedConferences`, `_getCachedRegions`, `_getCachedGroupNames` that read/write the *same* cache keys (`allSchools`, `allConferences`, `allRegions_{year}`, `allGroups`) as the public `getAllSchools` / `getAllConferences` / `getAllRegions` / `getAllGroups` methods. This lets the heavy `TourneyRepository` batch insert/update methods (`insertMultipleSchoolRecords`, `updateMultipleSchoolRecords`, `insertMultipleGamesWithTeams`, `updateMultipleGamesWithTeams`, `insertFirstFourGames`, `insertFirstFourSchoolRecords`, `insertRegionsForYear`) and the admin-typeahead reads (`findSchoolsByName`, `findGroupByName` fallback) reuse already-warmed reference data instead of re-fetching `school` / `conferences` / `regions` collections on every call. When adding a new method that joins on reference data, prefer the `_getCached*` helpers over a direct `db.collection(...).get()`.
 
 **Service-level cache (`gameViewData_{year}_{group}`):** Set in `buildGameViewData` in `viewService.js`. Caches the fully assembled game view payload (group standings, enriched games, team data). Key order is `year_group` so `invalidateCache('gameViewData_{year}_')` busts all groups for a given year after a game score change.
 
-**Intentionally uncached** (need real-time data): `getUnpaidEntriesForGroup`, `getUnsentEmailEntries`.
+**Intentionally uncached** (need real-time data): `getUnpaidEntriesForGroup`, `getUnsentEmailEntries`, `getEntriesContainingTeams`.
 
 ## Related Files
 

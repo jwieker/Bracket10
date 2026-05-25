@@ -11,8 +11,6 @@ export {
     calculateEntryPointsAndPaths,
     enrichEntriesWithPotentialRankings,
     getNextFutureGame,
-    removeDuplicateGames,
-    calculateTeamFuturePoints,
 } from './pointsService.js';
 
 // Game Service

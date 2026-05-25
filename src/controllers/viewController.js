@@ -332,11 +332,25 @@ const entryUpdate = controllerWrapper(async (req, res) => {
 
   for (let i = 1; i <= 10; i++) {
     const key = `teamSelect${i}`;
-    if (req.body[key]) {
-      const [id, name] = req.body[key].split(", ").map((s) => s.trim());
-      picksIds.push(Number(id));
-      picksNames.push(name);
+    const raw = req.body[key];
+    if (!raw) continue;
+    if (typeof raw !== 'string') {
+      throw new ValidationError(`Pick ${i} must be a string.`, key);
     }
+    const parts = raw.split(", ").map((s) => s.trim());
+    if (parts.length !== 2) {
+      throw new ValidationError(`Pick ${i} is malformed.`, key);
+    }
+    const [idStr, name] = parts;
+    const id = Number(idStr);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new ValidationError(`Pick ${i} has an invalid team ID.`, key);
+    }
+    if (!name || name.length > 128) {
+      throw new ValidationError(`Pick ${i} has an invalid team name.`, key);
+    }
+    picksIds.push(id);
+    picksNames.push(name);
   }
 
   // groups[] comes as an array from multi-checkbox form, or a single string as fallback
@@ -663,11 +677,25 @@ const myEntryUpdate = controllerWrapper(async (req, res) => {
 
   for (let i = 1; i <= 10; i++) {
     const key = `teamSelect${i}`;
-    if (req.body[key]) {
-      const [id, name] = req.body[key].split(', ').map((s) => s.trim());
-      picksIds.push(Number(id));
-      picksNames.push(name);
+    const raw = req.body[key];
+    if (!raw) continue;
+    if (typeof raw !== 'string') {
+      throw new ValidationError(`Pick ${i} must be a string.`, key);
     }
+    const parts = raw.split(', ').map((s) => s.trim());
+    if (parts.length !== 2) {
+      throw new ValidationError(`Pick ${i} is malformed.`, key);
+    }
+    const [idStr, name] = parts;
+    const id = Number(idStr);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new ValidationError(`Pick ${i} has an invalid team ID.`, key);
+    }
+    if (!name || name.length > 128) {
+      throw new ValidationError(`Pick ${i} has an invalid team name.`, key);
+    }
+    picksIds.push(id);
+    picksNames.push(name);
   }
 
   const storedGroups = Array.isArray(storedEntry.groups)

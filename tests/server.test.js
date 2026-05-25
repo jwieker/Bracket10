@@ -1,6 +1,5 @@
 import {
   getFuturePoints,
-  removeDuplicateGames,
 } from "../src/services/pointsService.js";
 
 
@@ -8,26 +7,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-
-// need to put in test to remove games properly
-// const futureGames = [
-//      input needs to be fixed W,W,W,13,15,61,63,W,W,W,59,60,62,63,W,W,W,28,30,61,63
-//      output = ["W", "W", "W", 13, 15, 61, 63], ["W", "W", "W", 59, 60, 62], ["W", "W", "W", 28, 30]
-// ];
-test("removeDuplicateGames removes duplicates correctly", () => {
-  const input1 = [
-    ["W", "W", 13, 15, 61, 63],
-    ["W", "W", 59, 60, 62, 63],
-    ["W", "W", 28, 30, 61, 63],
-  ];
-  const expectedOutput1 = [
-    ["W", "W", 13, 15, 61, 63],
-    ["W", "W", 59, 60, 62],
-    ["W", "W", 28, 30],
-  ];
-
-  expect(removeDuplicateGames(input1)).toEqual(expectedOutput1);
-});
 
 test("getFuturePoints for an array that does not need any games removed", async () => {
   const futureGames = [
