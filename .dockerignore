@@ -35,6 +35,7 @@ build/
 
 # Test data and local artifacts
 backend/
+data/seed/
 
 # PII / sensitive data — never in Docker image
 databasebackup/

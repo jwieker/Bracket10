@@ -21,6 +21,7 @@
 
 databasebackup/
 backend/
+data/seed/
 
 GEMINI.md
 gemini.md
