@@ -50,6 +50,7 @@
                                         id="toggleNewGroupFormBtn">New
                                         Group</button>
                                     <form action="/updateTotalPoints" method="post" class="d-inline">
+                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                                         <input type="hidden" name="year" value="<%= year %>">
                                         <button class="btn btn-outline-secondary mb-2 text-start" type="submit">Update
                                             Total
@@ -64,7 +65,7 @@
                                     <button class="btn btn-outline-warning mb-2 text-start"
                                         type="button" id="espnPollBtn">Poll ESPN</button>
                                     <button id="pwaRefreshBtn" class="btn btn-outline-secondary mb-2 text-start d-none"
-                                        onclick="location.reload()" title="Refresh page">
+                                        data-act="reloadPage" title="Refresh page">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                                             viewBox="0 0 16 16">
                                             <path fill-rule="evenodd"
@@ -74,7 +75,7 @@
                                         </svg>
                                         Refresh
                                     </button>
-                                    <script>
+                                    <script nonce="<%= cspNonce %>">
                                         if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
                                             document.getElementById('pwaRefreshBtn').classList.remove('d-none');
                                         }
@@ -92,6 +93,7 @@
                 </div>
 
                 <form action="/changeYear" method="post" id="updateYearForm">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="container pt-1 pb-1" id="innercontViewYear">
                         <div class="row">
                             <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
@@ -108,6 +110,7 @@
                 </form>
 
                 <form action="/editTournament" method="post" id="editTournamentForm">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="container pt-1 pb-1" id="innercontEditTournament">
                         <div class="row">
                             <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
@@ -125,6 +128,7 @@
 
                 <% if (typeof isNewTournament !=='undefined' && isNewTournament) { %>
                     <form action="/setupNewTourney" method="post" id="createTournamentForm" style="display: none;">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                         <div class="container pt-1 pb-1" id="innercontCreateTournament">
                             <div class="row">
                                 <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
@@ -227,6 +231,7 @@
                         </form>
 
                         <form action="/newGroup" method="post" id="newGroupForm" style="display: none;">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                             <div class="container pt-1 pb-1" id="innercontNewGroup">
                                 <div class="row">
                                     <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3">
@@ -541,7 +546,7 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         function esc(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -649,22 +654,64 @@
                         const entries = await response.json();
 
                         const modalBody = document.getElementById('findEntryModalBody');
-                        modalBody.innerHTML = ''; // Clear previous results
+                        modalBody.replaceChildren(); // Clear previous results
 
                         if (entries.length === 0) {
-                            modalBody.innerHTML = '<p>No entries found matching that name.</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'No entries found matching that name.';
+                            modalBody.replaceChildren(p);
                         } else {
                             entries.forEach(entry => {
                                 const entryDiv = document.createElement('div');
-                                entryDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
-                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
-                                    <strong>Person:</strong> ${esc(entry.person)}<br>
-                                    <strong>Email:</strong> ${esc(entry.email)}<br>
-                                    <strong>Group:</strong> ${esc((entry.groups || [entry.group]).filter(Boolean).join(', '))}<br>
-                                    <strong>Paid:</strong> ${entry.payByCheck ? 'Paid by Check' : (entry.hasPaid ? 'Yes' : 'No')}${entry.paymentNote ? ' — ' + esc(entry.paymentNote) : ''}<br>
-                                    <strong>Year:</strong> ${esc(String(entry.year ?? year))}
-                                </p><hr>`;
+                                const p = document.createElement('p');
+
+                                const strongId = document.createElement('strong');
+                                strongId.textContent = 'ID: ';
+                                const aId = document.createElement('a');
+                                aId.href = '/viewEntry?year=' + encodeURIComponent(year) + '&entryId=' + encodeURIComponent(String(entry.id)) + '&fromAdmin=true';
+                                aId.textContent = String(entry.id);
+                                p.appendChild(strongId);
+                                p.appendChild(aId);
+                                p.appendChild(document.createElement('br'));
+
+                                const strongTeam = document.createElement('strong');
+                                strongTeam.textContent = 'Team Name: ';
+                                p.appendChild(strongTeam);
+                                p.appendChild(document.createTextNode(entry.teamName));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongPerson = document.createElement('strong');
+                                strongPerson.textContent = 'Person: ';
+                                p.appendChild(strongPerson);
+                                p.appendChild(document.createTextNode(entry.person));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongEmail = document.createElement('strong');
+                                strongEmail.textContent = 'Email: ';
+                                p.appendChild(strongEmail);
+                                p.appendChild(document.createTextNode(entry.email || ''));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongGroup = document.createElement('strong');
+                                strongGroup.textContent = 'Group: ';
+                                p.appendChild(strongGroup);
+                                p.appendChild(document.createTextNode((entry.groups || [entry.group]).filter(Boolean).join(', ')));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongPaid = document.createElement('strong');
+                                strongPaid.textContent = 'Paid: ';
+                                p.appendChild(strongPaid);
+                                const paidText = (entry.payByCheck ? 'Paid by Check' : (entry.hasPaid ? 'Yes' : 'No')) + (entry.paymentNote ? ' — ' + entry.paymentNote : '');
+                                p.appendChild(document.createTextNode(paidText));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongYear = document.createElement('strong');
+                                strongYear.textContent = 'Year: ';
+                                p.appendChild(strongYear);
+                                p.appendChild(document.createTextNode(String(entry.year ?? year)));
+
+                                entryDiv.appendChild(p);
+                                entryDiv.appendChild(document.createElement('hr'));
                                 modalBody.appendChild(entryDiv);
                             });
                         }
@@ -692,19 +739,45 @@
                         const entries = await response.json();
 
                         const modalBody = document.getElementById('unpaidEntriesModalBody');
-                        modalBody.innerHTML = '';
+                        modalBody.replaceChildren();
 
                         if (entries.length === 0) {
-                            modalBody.innerHTML = '<p>Everyone in Bob has paid!</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'Everyone in Bob has paid!';
+                            modalBody.replaceChildren(p);
                         } else {
                             entries.forEach(entry => {
                                 const entryDiv = document.createElement('div');
-                                entryDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
-                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
-                                    <strong>Person:</strong> ${esc(entry.person)}<br>
-                                    <strong>Group:</strong> ${esc((entry.groups || []).join(', '))}
-                                </p><hr>`;
+                                const p = document.createElement('p');
+
+                                const strongId = document.createElement('strong');
+                                strongId.textContent = 'ID: ';
+                                const aId = document.createElement('a');
+                                aId.href = '/viewEntry?year=' + encodeURIComponent(year) + '&entryId=' + encodeURIComponent(String(entry.id)) + '&fromAdmin=true';
+                                aId.textContent = String(entry.id);
+                                p.appendChild(strongId);
+                                p.appendChild(aId);
+                                p.appendChild(document.createElement('br'));
+
+                                const strongTeam = document.createElement('strong');
+                                strongTeam.textContent = 'Team Name: ';
+                                p.appendChild(strongTeam);
+                                p.appendChild(document.createTextNode(entry.teamName));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongPerson = document.createElement('strong');
+                                strongPerson.textContent = 'Person: ';
+                                p.appendChild(strongPerson);
+                                p.appendChild(document.createTextNode(entry.person));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongGroup = document.createElement('strong');
+                                strongGroup.textContent = 'Group: ';
+                                p.appendChild(strongGroup);
+                                p.appendChild(document.createTextNode((entry.groups || []).join(', ')));
+
+                                entryDiv.appendChild(p);
+                                entryDiv.appendChild(document.createElement('hr'));
                                 modalBody.appendChild(entryDiv);
                             });
                         }
@@ -730,6 +803,7 @@
                             const response = await fetch('/clearCache', {
                                 method: 'POST',
                                 headers: {
+                                    'x-csrf-token': '<%= csrfToken %>',
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
                                 },
@@ -760,41 +834,71 @@
                     resultsWrapper.style.display = 'none';
 
                     try {
-                        const response = await fetch('/admin/trigger-espn-poll', { method: 'POST', headers: { 'Accept': 'application/json' } });
+                        const response = await fetch('/admin/trigger-espn-poll', { method: 'POST', headers: { 'x-csrf-token': '<%= csrfToken %>', 'Accept': 'application/json' } });
                         const data = await response.json();
 
-                        let html = '';
+                        resultsInner.replaceChildren();
                         if (!response.ok) {
-                            html = `<span class="text-danger">Error: ${esc(data.error || 'Unknown error')}</span>`;
+                            const span = document.createElement('span');
+                            span.className = 'text-danger';
+                            span.textContent = `Error: ${data.error || 'Unknown error'}`;
+                            resultsInner.appendChild(span);
                         } else if (data.games.length === 0) {
-                            html = '<span class="text-muted">No new completed games found.</span>';
+                            const span = document.createElement('span');
+                            span.className = 'text-muted';
+                            span.textContent = 'No new completed games found.';
+                            resultsInner.appendChild(span);
                         } else {
                             const roundLabel = (r) => ['','R1','R2','Sweet 16','Elite 8','Final Four','Championship'][r] || `R${r}`;
-                            html = '<strong>ESPN says these games are done:</strong><ul class="mb-1 mt-1 list-unstyled">';
+
+                            const strongHeader = document.createElement('strong');
+                            strongHeader.textContent = 'ESPN says these games are done:';
+                            resultsInner.appendChild(strongHeader);
+
+                            const ul = document.createElement('ul');
+                            ul.className = 'mb-1 mt-1 list-unstyled';
+
                             data.games.forEach((g, i) => {
-                                html += `<li class="d-flex align-items-center gap-2 mb-1">
-                                    <span>${esc(roundLabel(g.round))} · Game ${esc(g.gameID)}: <strong>${esc(g.winnerDisplayName)}</strong> wins</span>
-                                    <button class="btn btn-sm btn-success espn-submit-btn"
-                                        data-game-id="${esc(g.gameID)}"
-                                        data-round="${esc(g.round)}"
-                                        data-winner-id="${esc(g.winnerSID)}"
-                                        data-winner-name="${esc(g.winnerDisplayName)}"
-                                        data-team1-id="${esc(g.team1ID)}"
-                                        data-team2-id="${esc(g.team2ID)}"
-                                        data-next-game-id="${esc(g.nextGameID ?? '')}"
-                                        data-next-game-spot="${esc(g.nextGameSpot ?? '')}">Submit</button>
-                                </li>`;
+                                const li = document.createElement('li');
+                                li.className = 'd-flex align-items-center gap-2 mb-1';
+
+                                const spanText = document.createElement('span');
+                                spanText.textContent = `${roundLabel(g.round)} · Game ${g.gameID}: `;
+                                const strongWinner = document.createElement('strong');
+                                strongWinner.textContent = g.winnerDisplayName;
+                                spanText.appendChild(strongWinner);
+                                spanText.appendChild(document.createTextNode(' wins'));
+
+                                const btn = document.createElement('button');
+                                btn.className = 'btn btn-sm btn-success espn-submit-btn';
+                                btn.textContent = 'Submit';
+                                btn.dataset.gameId = g.gameID;
+                                btn.dataset.round = g.round;
+                                btn.dataset.winnerId = g.winnerSID;
+                                btn.dataset.winnerName = g.winnerDisplayName;
+                                btn.dataset.team1Id = g.team1ID;
+                                btn.dataset.team2Id = g.team2ID;
+                                btn.dataset.nextGameId = g.nextGameID ?? '';
+                                btn.dataset.nextGameSpot = g.nextGameSpot ?? '';
+
+                                li.appendChild(spanText);
+                                li.appendChild(btn);
+                                ul.appendChild(li);
                             });
-                            html += '</ul>';
+                            resultsInner.appendChild(ul);
                         }
                         if (data.unmapped && data.unmapped.length > 0) {
-                            html += `<span class="text-warning">Unmapped teams (update espnTeamMap.json): ${data.unmapped.map(esc).join(', ')}</span>`;
+                            const spanUnmapped = document.createElement('span');
+                            spanUnmapped.className = 'text-warning';
+                            spanUnmapped.textContent = `Unmapped teams (update espnTeamMap.json): ${data.unmapped.join(', ')}`;
+                            resultsInner.appendChild(spanUnmapped);
                         }
-
-                        resultsInner.innerHTML = html;
                         resultsWrapper.style.display = 'block';
                     } catch (error) {
-                        resultsInner.innerHTML = '<span class="text-danger">Failed to reach server.</span>';
+                        const span = document.createElement('span');
+                        span.className = 'text-danger';
+                        span.textContent = 'Failed to reach server.';
+                        resultsInner.replaceChildren(span);
                         resultsWrapper.style.display = 'block';
                     } finally {
                         espnPollBtn.disabled = false;
@@ -824,30 +928,60 @@
                         const markSentBtn = document.getElementById('markAllSentBtn');
 
                         if (unsentEmailData.length === 0) {
-                            modalBody.innerHTML = '<p class="text-success mb-0">✓ All entries have been emailed!</p>';
+                            const p = document.createElement('p');
+                            p.className = 'text-success mb-0';
+                            p.textContent = '✓ All entries have been emailed!';
+                            modalBody.replaceChildren(p);
                             copyBtn.style.display = 'none';
                             markSentBtn.style.display = 'none';
                         } else {
-                            let html = `<p class="mb-2"><strong>${unsentEmailData.length}</strong> entr${unsentEmailData.length === 1 ? 'y needs' : 'ies need'} a bracket email:</p>`;
-                            html += '<div class="list-group">';
+                            modalBody.replaceChildren();
+                            const headerP = document.createElement('p');
+                            headerP.className = 'mb-2';
+                            const strongCount = document.createElement('strong');
+                            strongCount.textContent = unsentEmailData.length;
+                            headerP.appendChild(strongCount);
+                            headerP.appendChild(document.createTextNode(` entr${unsentEmailData.length === 1 ? 'y needs' : 'ies need'} a bracket email:`));
+                            modalBody.appendChild(headerP);
+
+                            const listGroup = document.createElement('div');
+                            listGroup.className = 'list-group';
                             unsentEmailData.forEach(entry => {
                                 const picks = (entry.pickNames || []).join(', ') || '—';
-                                html += `
-                                    <div class="list-group-item py-2">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <strong>${esc(entry.person)}</strong>
-                                                <span class="text-muted ms-2">${esc(entry.teamName)}</span>
-                                            </div>
-                                            <small class="text-muted ms-2">${esc(entry.email || '—')}</small>
-                                        </div>
-                                        <div class="mt-1 text-muted" style="font-size:0.82rem;">
-                                            Picks: ${esc(picks)}
-                                        </div>
-                                    </div>`;
+
+                                const itemDiv = document.createElement('div');
+                                itemDiv.className = 'list-group-item py-2';
+
+                                const flexDiv = document.createElement('div');
+                                flexDiv.className = 'd-flex justify-content-between align-items-start';
+
+                                const innerDiv = document.createElement('div');
+                                const strongPerson = document.createElement('strong');
+                                strongPerson.textContent = entry.person;
+                                const spanTeam = document.createElement('span');
+                                spanTeam.className = 'text-muted ms-2';
+                                spanTeam.textContent = entry.teamName;
+                                innerDiv.appendChild(strongPerson);
+                                innerDiv.appendChild(spanTeam);
+
+                                const smallEmail = document.createElement('small');
+                                smallEmail.className = 'text-muted ms-2';
+                                smallEmail.textContent = entry.email || '—';
+
+                                flexDiv.appendChild(innerDiv);
+                                flexDiv.appendChild(smallEmail);
+                                itemDiv.appendChild(flexDiv);
+
+                                const picksDiv = document.createElement('div');
+                                picksDiv.className = 'mt-1 text-muted';
+                                picksDiv.style.fontSize = '0.82rem';
+                                picksDiv.textContent = `Picks: ${picks}`;
+                                itemDiv.appendChild(picksDiv);
+
+                                listGroup.appendChild(itemDiv);
                             });
-                            html += '</div>';
-                            modalBody.innerHTML = html;
+                            modalBody.appendChild(listGroup);
+
                             copyBtn.style.display = 'inline-block';
                             markSentBtn.style.display = 'inline-block';
                         }
@@ -890,14 +1024,22 @@
                     try {
                         const response = await fetch('/admin/mark-emails-sent', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                             body: JSON.stringify({ year: Number(year), entryIds })
                         });
                         if (!response.ok) throw new Error('Failed to mark emails sent.');
                         const result = await response.json();
 
-                        document.getElementById('bracketEmailsModalBody').innerHTML =
-                            `<p class="text-success mb-0">✓ Marked <strong>${result.data.marked}</strong> entr${result.data.marked === 1 ? 'y' : 'ies'} as sent.</p>`;
+                        const modalBody = document.getElementById('bracketEmailsModalBody');
+                        modalBody.replaceChildren();
+                        const p = document.createElement('p');
+                        p.className = 'text-success mb-0';
+                        p.textContent = '✓ Marked ';
+                        const strong = document.createElement('strong');
+                        strong.textContent = result.data.marked;
+                        p.appendChild(strong);
+                        p.appendChild(document.createTextNode(` entr${result.data.marked === 1 ? 'y' : 'ies'} as sent.`));
+                        modalBody.appendChild(p);
                         copyEmailDataBtn.style.display = 'none';
                         markAllSentBtn.style.display = 'none';
                         unsentEmailData = [];
@@ -933,7 +1075,7 @@
                 try {
                     const response = await fetch('/updateWinner', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                         body: JSON.stringify(gameData)
                     });
                     if (response.ok) {
@@ -970,20 +1112,51 @@
                         const teams = await response.json();
 
                         const modalBody = document.getElementById('findTeamModalBody');
-                        modalBody.innerHTML = ''; // Clear previous results
+                        modalBody.replaceChildren(); // Clear previous results
 
                         if (teams.length === 0) {
-                            modalBody.innerHTML = '<p>No schools found matching that name.</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'No schools found matching that name.';
+                            modalBody.replaceChildren(p);
                         } else {
                             teams.forEach(team => {
                                 const teamDiv = document.createElement('div');
-                                teamDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewTeam?teamId=${esc(String(team.sid))}">${esc(String(team.sid))}</a><br>
-                                    <strong>Name:</strong> ${esc(team.name)}<br>
-                                    <strong>Mascot:</strong> ${esc(team.mascot)}<br>
-                                    <strong>Short Name:</strong> ${esc(team.nameNick)}<br>
-                                    <strong>Conference ID:</strong> ${esc(String(team.confID))}
-                                </p><hr>`;
+                                const p = document.createElement('p');
+
+                                const strongId = document.createElement('strong');
+                                strongId.textContent = 'ID: ';
+                                const aId = document.createElement('a');
+                                aId.href = '/viewTeam?teamId=' + encodeURIComponent(String(team.sid));
+                                aId.textContent = String(team.sid);
+                                p.appendChild(strongId);
+                                p.appendChild(aId);
+                                p.appendChild(document.createElement('br'));
+
+                                const strongName = document.createElement('strong');
+                                strongName.textContent = 'Name: ';
+                                p.appendChild(strongName);
+                                p.appendChild(document.createTextNode(team.name));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongMascot = document.createElement('strong');
+                                strongMascot.textContent = 'Mascot: ';
+                                p.appendChild(strongMascot);
+                                p.appendChild(document.createTextNode(team.mascot || ''));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongShort = document.createElement('strong');
+                                strongShort.textContent = 'Short Name: ';
+                                p.appendChild(strongShort);
+                                p.appendChild(document.createTextNode(team.nameNick || ''));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongConf = document.createElement('strong');
+                                strongConf.textContent = 'Conference ID: ';
+                                p.appendChild(strongConf);
+                                p.appendChild(document.createTextNode(String(team.confID || '')));
+
+                                teamDiv.appendChild(p);
+                                teamDiv.appendChild(document.createElement('hr'));
                                 modalBody.appendChild(teamDiv);
                             });
                         }
@@ -1138,6 +1311,7 @@
                             const response = await fetch('/updateWinner', {
                                 method: 'POST',
                                 headers: {
+                                    'x-csrf-token': '<%= csrfToken %>',
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
                                 },
@@ -1204,6 +1378,7 @@
                             const response = await fetch('/undoGame', {
                                 method: 'POST',
                                 headers: {
+                                    'x-csrf-token': '<%= csrfToken %>',
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
                                 },

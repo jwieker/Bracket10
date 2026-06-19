@@ -6,7 +6,7 @@
     "@google-cloud/firestore": "^8.5.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.1"
   },
   "overrides": {
     "minimatch": "^10.2.1",

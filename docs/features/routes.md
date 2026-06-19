@@ -1,15 +1,16 @@
 ---
 tags: [features, routes, api]
-updated: 2026-05-09
+updated: 2026-06-09
 ---
 
 # API Routes Overview
 
 ## Game Routes (`/src/routes/gameRoutes.js`)
 
-*   `POST /updateWinner`: Updates the winner of a game.
-*   `POST /undoGame`: Undoes a game update.
-*   `POST /admin/trigger-espn-poll`: Admin UI dry-run endpoint (protected by `requireAdminSession`). Same matching logic but **does not write to DB** — returns a preview. Called by the "Poll ESPN" button on the admin console.
+*   `POST /updateWinner`: Updates the winner of a game (also releases any `manualHold`).
+*   `POST /undoGame`: Undoes a game update. Clears the winner AND sets `manualHold: true` so the ESPN poll cannot immediately re-apply the result from its feed. For First Four games, also repicks affected entries back to the combined option.
+*   `POST /releaseGameHold`: Clears the `manualHold` set by an undo, letting the poll resolve the game again on its next run. Body: `gameID`, `year`. Triggered by the "Release Hold" button on `/admin/tournament`.
+*   `POST /admin/trigger-espn-poll`: Admin UI dry-run endpoint (protected by `requireSiteAdmin`). Same matching logic but **does not write to DB** — returns a preview. Called by the "Poll ESPN" button on the admin console.
 
 ## Index Routes (`/src/routes/indexRoutes.js`)
 
@@ -28,6 +29,8 @@ The home page (`views/index.ejs`) is a single template with server-side conditio
 
 **Updating tournament dates:** `bracketLaunchDate` and `tourneyStartDate` are defined once in `src/config/app.js`. Do not hardcode these dates in controllers. Also exported: `isRegistrationOpen()` — returns `true` during the registration window (or always in `development`/`test`).
 
+**Participant sign-in entry point:** the home page also includes `views/partials/userSignIn.ejs` in every state, which renders a "Sign in with Google" button (→ `GET /auth/google/user/start`) — or a "My Brackets" link when `req.session.userEmail` is set (passed through by `indexController`). See § "My Brackets — Participant Sign-In" under View Routes.
+
 ## Results Page Architecture & Mobile Layout
 
 The results page (`views/results.ejs`) handles both a traditional desktop table and a responsive mobile card list (hidden/shown via CSS media queries in `public/table-styles.css`).
@@ -42,8 +45,8 @@ The results page (`views/results.ejs`) handles both a traditional desktop table 
 
 ## Email Routes (`/src/routes/viewRoutes.js` — admin-only)
 
-*   `GET /admin/unsent-emails?year=<year>`: Returns all entries where `emailSent` is not `true`. Protected by `requireAdminSession`.
-*   `POST /admin/mark-emails-sent`: Accepts `{ year, entryIds[] }` and batch-updates entries with `emailSent: true`. Protected by `requireAdminSession`.
+*   `GET /admin/unsent-emails?year=<year>`: Returns all entries where `emailSent` is not `true`. Protected by `requireSiteAdmin`.
+*   `POST /admin/mark-emails-sent`: Accepts `{ year, entryIds[] }` and batch-updates entries with `emailSent: true`. Protected by `requireSiteAdmin`.
 
 ## Admin Routes (`/src/routes/adminRoutes.js`)
 
@@ -65,8 +68,10 @@ All admin GET routes protected by `requireSiteAdmin`. `POST /admin/cloud/deploy`
 ## Points Routes (`/src/routes/pointsRoutes.js`)
 
 *   `GET /updates`: Renders the admin login page (Google Sign-In button/form).
-*   `GET /auth/google/start`: Starts Google OAuth. Generates and saves a random session-backed `oauthState`, preserves remember-me preference in the session, then redirects to Google with `state`.
-*   `GET /auth/google/callback`: Google OAuth callback. Consumes and validates session-backed `state` before token exchange, verifies the ID token, checks email allowlist, regenerates the session, sets admin session flags, and redirects to `GET /admin/tournament`.
+*   `GET /auth/google/start`: Starts **admin** Google OAuth. Tags `req.session.oauthRole = "admin"`, generates and saves a random session-backed `oauthState`, preserves remember-me preference, then redirects to Google with `state`.
+*   `GET /auth/google/user/start`: Starts **participant** Google OAuth ("My Brackets"). Mirrors the admin start but tags `req.session.oauthRole = "user"`. Reuses the same OAuth client and registered redirect URI. Login-rate-limited.
+*   `GET /auth/google/callback`: **Shared** Google OAuth callback. Consumes and validates session-backed `state` before token exchange, verifies the ID token (audience-pinned), then **branches on `req.session.oauthRole`** (defaults to `admin`): admin → email allowlist check → `siteAdmin` session → `/admin/tournament`; user → any verified email → `userEmail` session (never `siteAdmin`) → `/my-brackets`. Both branches regenerate the session first. See `docs/architecture/security.md`.
+*   `POST /user/logout`: Participant sign-out. `requireUser`-guarded; destroys the session and redirects to `/`.
 *   `POST /updateTotalPoints`: Updates total points for all groups.
 *   `POST /possibleRank`: Gets possible ranking for current year.
 *   `POST /changeYear`: Admin-only; redirects to `GET /admin/tournament?year=<year>`.
@@ -85,10 +90,27 @@ All admin GET routes protected by `requireSiteAdmin`. `POST /admin/cloud/deploy`
 *   `POST /my-entry/update` — updates the entry. Requires exact `year:entryId` session verification and `isRegistrationOpen()`; redirects to `/my-entry` if either fails. Re-reads the stored entry before writing and preserves server-owned fields (`email`, `groups`, payment metadata, email-sent metadata) instead of trusting hidden form fields.
 *   `GET /playground`: Ephemeral "what-if" simulation. Accepts `?group=<name>&year=<year>`. No DB writes — all simulation runs client-side.
 
+### My Brackets — Participant Sign-In (`requireUser`)
+
+Google-authenticated alternative to the Entry-ID lookup above; coexists with it. Identity is `req.session.userEmail` (set by the participant OAuth flow — see Points Routes). All three routes use `publicLimiter` + `requireUser`.
+
+*   `GET /my-brackets` — dashboard listing every entry whose `email` matches the signed-in Google email, **across all tournament years**, grouped by year with groups/points (`views/myBrackets.ejs`). Built by `getEntriesForUser` → `gameRepository.getEntriesByEmail` (mirrors the cross-year `getAllYearsForGroup` pattern). Current-year entries show an **Edit** button during the window; others show a read-only **View bracket** link (POST `/gameView`).
+*   `GET /my-brackets/edit?entryId=&year=` — renders the shared `myEditEntry.ejs` editor (form posts to `/my-brackets/update`). Authorized by **email ownership** (`storedEntry.email === session userEmail`, case-insensitive) instead of the `/my-entry` verification token; 403s on mismatch. Gated by `isRegistrationOpen()` **and** current-year (`canEditYear`).
+*   `POST /my-brackets/update` — same ownership + window/year gate, then reuses the exact pick-parsing/write of `myEntryUpdate` (preserving server-owned fields). 403 on mismatch, redirect to `/my-brackets` if the entry is gone.
+
 ## Tourney Routes (`/src/routes/tourneyRoutes.js` — admin-only)
 
-*   `POST /createTournament`: Creates a new tournament bracket, including optional First Four games.
-*   `POST /admin/poll-espn-scheduled`: Fetches scheduled ESPN games for a given date for auto-populating the creation form.
+All routes guarded by `requireSiteAdmin`.
+
+*   `POST /createTournament`: Creates a new tournament bracket, including optional First Four games. Single-page creation flow.
+*   `POST /setupNewTourney`: Renders the single-page creation form (`newTourneyComplete.ejs`).
+*   `POST /admin/poll-espn-scheduled`: Fetches *scheduled* ESPN games for given date(s) to auto-populate the creation form. Read-only helper — does not poll scores and is unrelated to the Cloud Run poll job.
+*   `POST /regionVerify` → `POST /gamesVerify`: Legacy two-step creation flow (no First Four support).
+*   `POST /tournamentGames` / `POST /editTournament`: Both render the edit-tournament page (`editTourneyGames.ejs`) via the same `viewTournament` controller — one is a legacy alias.
+*   `POST /tournamentGamesUpdate`: Applies bracket edits; school changes are propagated into entry picks via `updateEntrywithNewSchools`.
+*   `POST /deleteTournament`: Deletes a tournament year.
+
+See `docs/architecture/request-flows.md` for the end-to-end creation/edit traces.
 
 ## Conference Routes (`/src/routes/conferenceRoutes.js`)
 

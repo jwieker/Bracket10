@@ -16,8 +16,11 @@ import {
   getGroupTeamDetails,
   buildFullGridData,
   buildGameViewData,
+  getEntriesForUser,
+  getEntryIdsForUserInGroup,
   setRepositories,
 } from '../src/services/viewService.js';
+import { thisYear } from '../src/config/app.js';
 
 // Mock pointsService so buildFullGridData does not need real game data to compute
 // potential rankings. enrichEntriesWithPotentialRankings is configured per-test.
@@ -48,6 +51,83 @@ const TEAMS = [
   { sID: 3, name: 'UNC',     seed: 3, gameStatus: null },
   { sID: 4, name: 'Gonzaga', seed: 4, gameStatus: null },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getEntriesForUser — "My Brackets" dashboard shaping
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getEntriesForUser', () => {
+  let mockGameRepo;
+
+  beforeEach(() => {
+    mockGameRepo = { getEntriesByEmail: vi.fn() };
+    setRepositories({}, mockGameRepo, {}, {});
+  });
+
+  it('normalizes legacy singular `group`, derives viewGroup, and marks only the current year editable', async () => {
+    // isRegistrationOpen() is true in the test env, so editability turns on the year.
+    mockGameRepo.getEntriesByEmail.mockResolvedValue([
+      { id: 'a', year: thisYear, email: 'u@g.com', person: 'P1', teamName: 'T1', groups: ['G1'], totalPoints: 5, possPoints: 50 },
+      { id: 'b', year: thisYear - 1, email: 'u@g.com', person: 'P2', teamName: 'T2', group: 'G2', totalPoints: 3 },
+    ]);
+
+    const result = await getEntriesForUser('u@g.com');
+
+    expect(mockGameRepo.getEntriesByEmail).toHaveBeenCalledWith('u@g.com');
+    expect(result).toHaveLength(2);
+
+    // Current-year entry: editable, groups passed through, viewGroup from groups[0].
+    expect(result[0]).toMatchObject({
+      id: 'a', year: thisYear, groups: ['G1'], viewGroup: 'G1', editable: true, totalPoints: 5, possPoints: 50,
+    });
+
+    // Past-year entry: NOT editable; legacy singular `group` normalized into an array.
+    expect(result[1]).toMatchObject({
+      id: 'b', year: thisYear - 1, groups: ['G2'], viewGroup: 'G2', editable: false,
+    });
+    // possPoints defaults to 0 when absent.
+    expect(result[1].possPoints).toBe(0);
+  });
+
+  it('returns an empty list when the user has no entries', async () => {
+    mockGameRepo.getEntriesByEmail.mockResolvedValue([]);
+    expect(await getEntriesForUser('nobody@g.com')).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getEntryIdsForUserInGroup — highlight "your" rows on the results page
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getEntryIdsForUserInGroup', () => {
+  let mockGameRepo;
+
+  beforeEach(() => {
+    mockGameRepo = { getEntriesByEmail: vi.fn() };
+    setRepositories({}, mockGameRepo, {}, {});
+  });
+
+  it('returns only the IDs matching the requested group AND year (as strings)', async () => {
+    mockGameRepo.getEntriesByEmail.mockResolvedValue([
+      { id: 1, year: 2026, groups: ['Fam', 'Work'] },   // match
+      { id: 2, year: 2026, groups: ['Other'] },          // wrong group
+      { id: 3, year: 2025, groups: ['Fam'] },            // wrong year
+      { id: 4, year: 2026, group: 'Fam' },               // legacy singular group → match
+    ]);
+
+    const ids = await getEntryIdsForUserInGroup('u@g.com', 'Fam', 2026);
+
+    // Scoped to the requested year so it doesn't scan every tournament year.
+    expect(mockGameRepo.getEntriesByEmail).toHaveBeenCalledWith('u@g.com', 2026);
+    expect(ids).toEqual(['1', '4']);
+  });
+
+  it('returns [] when no email is provided (skips the lookup entirely)', async () => {
+    const ids = await getEntryIdsForUserInGroup('', 'Fam', 2026);
+    expect(ids).toEqual([]);
+    expect(mockGameRepo.getEntriesByEmail).not.toHaveBeenCalled();
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // addPickCount
@@ -352,6 +432,21 @@ describe('buildFullGridData', () => {
     expect(groupData[0].pickNames).toHaveLength(2);
     expect(groupData[0].pickNames[0]).toMatchObject({ sID: 1, name: 'Duke' });
     expect(groupData[0].pickNames[1]).toMatchObject({ sID: 2, name: 'Kansas' });
+  });
+
+  it('pickIndexBySID maps each resolved pick sID to its 1-based position', async () => {
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockViewRepo.getGroupTeams.mockResolvedValue([
+      { teamName: 'Entry A', picks: [1, 2], person: 'Alice', groups: ['Test'] },
+    ]);
+
+    const { groupData } = await buildFullGridData('Test', 2024);
+
+    // fullGrid.ejs renders the 1-based slot number from this map (replaces the
+    // old findIndex+1) and uses .has() to decide whether a team was picked.
+    expect(groupData[0].pickIndexBySID.get(1)).toBe(1);
+    expect(groupData[0].pickIndexBySID.get(2)).toBe(2);
+    expect(groupData[0].pickIndexBySID.has(99)).toBe(false);
   });
 
   it('allTeamsWithPickCounts has the correct pickCount for every team', async () => {
@@ -791,5 +886,21 @@ describe('calculateMaxPossiblePoints', () => {
     const callArgs = calculateEntryPointsAndPaths.mock.calls[0];
     expect(callArgs[2]).toBe(allGames);
     expect(callArgs[2]).not.toBe(activeGames);
+  });
+
+  it('throws an error and logs it if repository throws', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const repoError = new Error('Database down');
+    mockGameRepo.getAllTournamentDetails.mockRejectedValue(repoError);
+
+    await expect(calculateMaxPossiblePoints([1, 2], 2024)).rejects.toThrow('Failed to calculate maximum possible points.');
+
+    expect(errorSpy).toHaveBeenCalled();
+    const logOutput = JSON.parse(errorSpy.mock.calls[0][0]);
+    expect(logOutput.severity).toBe('ERROR');
+    expect(logOutput.message).toBe('Error in calculateMaxPossiblePoints service:');
+    expect(logOutput.data.message).toBe('Database down');
+
+    errorSpy.mockRestore();
   });
 });

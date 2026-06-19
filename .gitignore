@@ -97,23 +97,7 @@ lerna-debug.log
 .DS_Store
 Thumbs.db
 
-# Council reports and AI session files (private, local only)
-ai_private/council-reports/
-docs/private/council-reports/
-council-report*.html
-council-transcript*.md
-
 # PII / sensitive data — ensure never re-added
 databasebackup/
 scripts/outputs/
-
-# AI tool config/rules files (local only)
-claude.md
-gemini.md
-fixpolling.md
-ESPN-POLLING-SETUP.md
-.clinerules
-.cursorrules
-.windsurfrules
-.claude/
 

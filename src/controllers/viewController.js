@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import {
   getGroupTeamDetails,
   addTeamProgressforGroup,
@@ -8,8 +8,11 @@ import {
   addPickCount,
   calculateMaxPossiblePoints,
   getAllYearsforGroup,
+  getEntriesForUser,
+  getEntryIdsForUserInGroup,
   findEntriesByName,
   addNewGroup,
+  normalizeFirstFourPicks,
   buildFullGridData,
   buildGameViewData,
   getUnsentEmailEntries,
@@ -17,8 +20,33 @@ import {
 } from "../services/index.js";
 import { APP_CONFIG, thisYear, isRegistrationOpen } from "../config/app.js";
 import { gameRepository, teamRepository, entryRepository, viewRepository, conferenceRepository } from "../repositories/index.js";
-import { controllerWrapper, validateRequest, successResponse, errorResponse, parseYear } from "../utils/controllerUtils.js";
+import { controllerWrapper, validateRequest, successResponse, errorResponse, parseYear, parseYearOrDefault, saveSession, regenerateSession } from "../utils/controllerUtils.js";
+import { toCSVRow } from "../utils/csvUtils.js";
 import { ValidationError } from "../utils/errors.js";
+import { registerFailedAttempt } from "../middleware/rateLimit.js";
+
+// Brute-force guard for /my-entry/verify. Counted per entryId (so it holds even
+// when an attacker rotates IPs to defeat the per-IP publicLimiter), but only on
+// FAILED verifications — a correct email never consumes the bucket, so an
+// attacker can't lock the legitimate owner out with garbage attempts (#161).
+// Tightened to 5 failures / 15 min as the interim hardening for the
+// email-as-password weakness (#166) while the emailed one-time-link ("magic
+// link") replacement remains pending email-delivery infrastructure.
+const VERIFY_FAIL_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const VERIFY_FAIL_MAX = 5;
+
+// Constant-time, case-insensitive email equality. Both inputs are normalized
+// (trim + lowercase, matching how emails are canonicalized on write) and hashed
+// to fixed-length SHA-256 digests before comparison, so the check leaks neither
+// the inputs' length nor the position of the first differing byte via timing.
+// Used on the /my-entry/verify path so the endpoint can't be turned into a
+// timing oracle while email remains the (interim) ownership factor (#166).
+function emailsMatchConstantTime(a, b) {
+  const normalize = (v) => String(v ?? '').trim().toLowerCase();
+  const da = createHash('sha256').update(normalize(a)).digest();
+  const db = createHash('sha256').update(normalize(b)).digest();
+  return timingSafeEqual(da, db);
+}
 
 
 
@@ -54,12 +82,6 @@ const getFullGrid = controllerWrapper(async (req, res) => {
     gameYear: gameYear,
   });
 }, "getFullGrid");
-
-const toCSVRow = (cells) =>
-  cells.map((c) => {
-    const s = String(c ?? "");
-    return s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r") ? `"${s.replace(/"/g, '""')}"` : s;
-  }).join(",");
 
 const getFullGridCSV = controllerWrapper(async (req, res) => {
   const groupName = req.query["gameName"];
@@ -109,6 +131,16 @@ const gameView = controllerWrapper(async (req, res) => {
     conferenceStats,
   } = await buildGameViewData(verifiedGroupName, requestedYear);
 
+  // When someone is signed in, highlight their own entries on this public page.
+  // Match the participant email (userEmail) or, if they're in the admin console
+  // instead, their admin email. Matching happens on the server; only entry IDs
+  // reach the view, so no email is ever exposed here. buildGameViewData stays
+  // cached and user-agnostic — the per-user data is this separate ID list.
+  const signedInEmail = req.session?.userEmail || req.session?.adminEmail;
+  const myEntryIds = signedInEmail
+    ? await getEntryIdsForUserInGroup(signedInEmail, verifiedGroupName, requestedYear)
+    : [];
+
   res.set('Cache-Control', 'private, max-age=300');
   res.render("results", {
     name: verifiedGroupName,
@@ -120,6 +152,7 @@ const gameView = controllerWrapper(async (req, res) => {
     regions: regionNames,
     requestedYear: requestedYear,
     conferenceStats: conferenceStats,
+    myEntryIds,
   });
 }, "gameView");
 
@@ -201,39 +234,43 @@ const entryVerify = controllerWrapper(async (req, res) => {
   if (!groupName || !groupName.trim()) throw new ValidationError('Group name is required.');
 
 
-  const picksIds = [];
-  const picksNames = [];
-
-  // Iterate through teamSelect keys and split ID and name. The client sends each
-  // pick as `"<id>, <name>"`. Validate shape so a team name containing ", " (e.g.
-  // "St. Mary's, CA") cannot silently corrupt the parsed pick.
-  for (let i = 1; i <= 10; i++) {
-    const key = `teamSelect${i}`;
-    const raw = req.body[key];
-    if (!raw) continue;
-    const parts = raw.split(", ").map((s) => s.trim());
-    if (parts.length !== 2) {
-      return reRenderWithError(`Pick ${i} is malformed. Please re-select the team.`);
+  let picksIds, picksNames;
+  try {
+    ({ picksIds, picksNames } = extractPicks(req.body));
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return reRenderWithError(error.message);
     }
-    const [idStr, name] = parts;
-    const id = Number(idStr);
-    if (!Number.isInteger(id) || id <= 0) {
-      return reRenderWithError(`Pick ${i} has an invalid team ID.`);
-    }
-    if (!name || name.length === 0 || name.length > 128) {
-      return reRenderWithError(`Pick ${i} has an invalid team name.`);
-    }
-    picksIds.push(id);
-    picksNames.push(name);
+    throw error;
   }
 
-  if (picksIds.length !== 10) return reRenderWithError('Exactly 10 team picks are required.');
+  const year = parseYearOrDefault(req.body["year"], thisYear);
 
-  const uniqueIds = new Set(picksIds);
+  // Map First Four picks to live game state (combined → team1ID, resolved →
+  // winner) BEFORE the uniqueness check: a submission carrying both FF teams
+  // of one game normalizes to the same sID and is correctly rejected as a
+  // duplicate below.
+  const normalizedPicksIds = await normalizeFirstFourPicks(picksIds, year);
+
+  if (normalizedPicksIds.length !== 10) return reRenderWithError('Exactly 10 team picks are required.');
+
+  const uniqueIds = new Set(normalizedPicksIds);
   if (uniqueIds.size !== 10) return reRenderWithError('Duplicate team picks are not allowed.');
 
-  const year = Number(req.body["year"]) || thisYear;
-  const maxPoints = Number(req.body["maxPoints"]) || 0;
+  try {
+    await validateEntryPicks(normalizedPicksIds, year, groupName);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return reRenderWithError(error.message);
+    }
+    throw error;
+  }
+
+  // #159: never trust the client-supplied maxPoints. Recompute server-side from
+  // the validated, normalized picks so a participant can't inflate their stored
+  // possPoints (which drives the "Max" display, the standings sort key, and the
+  // tournament-over check).
+  const maxPoints = await calculateMaxPossiblePoints(normalizedPicksIds, year);
 
   // C7: stage the confirmation token + save the session BEFORE the DB write.
   // Order matters: a session.save() failure after createNewEntry leaves the
@@ -250,16 +287,14 @@ const entryVerify = controllerWrapper(async (req, res) => {
     picksNames,
     expiresAt: Date.now() + 10 * 60 * 1000,
   };
-  await new Promise((resolve, reject) => {
-    req.session.save((err) => err ? reject(err) : resolve());
-  });
+  await saveSession(req);
 
   await createNewEntry(
     req.body["email"],
     req.body["team"],
     req.body["name"],
     req.body["groupName"],
-    picksIds,
+    normalizedPicksIds,
     year,
     maxPoints
   );
@@ -296,9 +331,15 @@ const viewEntry = controllerWrapper(async (req, res) => {
     getGroupRegistrationData(nameFound, Number(year)),
     viewRepository.getAllGroups(),
   ]);
+
+  const safeAllGroups = allGroups || [];
+
+  const allGroupsSet = new Set(safeAllGroups);
+  const priorityGroupsSet = new Set(PRIORITY_GROUPS);
+
   const availableGroups = [
-    ...PRIORITY_GROUPS.filter(g => allGroups.includes(g)),
-    ...allGroups.filter(g => !PRIORITY_GROUPS.includes(g)),
+    ...PRIORITY_GROUPS.filter(g => allGroupsSet.has(g)),
+    ...allGroups.filter(g => !priorityGroupsSet.has(g)),
   ];
 
   if (!entryData) {
@@ -327,30 +368,20 @@ const viewEntry = controllerWrapper(async (req, res) => {
 }, "viewEntry");
 
 const entryUpdate = controllerWrapper(async (req, res) => {
-  const picksIds = [];
-  const picksNames = [];
+  const { picksIds, picksNames } = extractPicks(req.body);
 
-  for (let i = 1; i <= 10; i++) {
-    const key = `teamSelect${i}`;
-    const raw = req.body[key];
-    if (!raw) continue;
-    if (typeof raw !== 'string') {
-      throw new ValidationError(`Pick ${i} must be a string.`, key);
-    }
-    const parts = raw.split(", ").map((s) => s.trim());
-    if (parts.length !== 2) {
-      throw new ValidationError(`Pick ${i} is malformed.`, key);
-    }
-    const [idStr, name] = parts;
-    const id = Number(idStr);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw new ValidationError(`Pick ${i} has an invalid team ID.`, key);
-    }
-    if (!name || name.length > 128) {
-      throw new ValidationError(`Pick ${i} has an invalid team name.`, key);
-    }
-    picksIds.push(id);
-    picksNames.push(name);
+  const year = parseYearOrDefault(req.body["year"], thisYear);
+
+  // Admin edits skip the strict count check (deliberately, to allow repairing
+  // unusual entries) but still normalize FF picks so an admin can't strand an
+  // entry on an eliminated First Four team.
+  const normalizedPicksIds = await normalizeFirstFourPicks(picksIds, year);
+
+  // Duplicate picks are never a valid repair: they double-count cumulative
+  // points and fabricate phantom "guaranteed" clashes in minPoints (#157).
+  // Reject them while still permitting a non-10 pick count for admin fixes.
+  if (new Set(normalizedPicksIds).size !== normalizedPicksIds.length) {
+    throw new ValidationError('Duplicate team picks are not allowed.');
   }
 
   // groups[] comes as an array from multi-checkbox form, or a single string as fallback
@@ -361,7 +392,8 @@ const entryUpdate = controllerWrapper(async (req, res) => {
     groups = [groups];
   }
 
-  const maxPoints = Number(req.body["maxPoints"]) || 0;
+  // #159: recompute possPoints server-side rather than trusting the form value.
+  const maxPoints = await calculateMaxPossiblePoints(normalizedPicksIds, year);
 
   const entryPayload = {
     id: req.body["entryId"],
@@ -370,7 +402,7 @@ const entryUpdate = controllerWrapper(async (req, res) => {
     teamName: req.body["team"],
     person: req.body["name"],
     groups,
-    picks: picksIds,
+    picks: normalizedPicksIds,
     possPoints: maxPoints,
   };
 
@@ -595,25 +627,132 @@ const myEntryVerify = controllerWrapper(async (req, res) => {
   }
 
   const entryData = await gameRepository.getEntryById(entryId, year);
-  const emailMatches = entryData && entryData.email?.toLowerCase() === email.trim().toLowerCase();
+  // Constant-time comparison. Run the hash compare unconditionally (it normalizes
+  // a missing stored email to '') so the not-found and email-mismatch paths do
+  // identical work — no per-branch timing asymmetry. The `&& !!entryData?.email`
+  // guard is required for correctness: emailsMatchConstantTime normalizes both
+  // sides with trim+lowercase, so a whitespace-only submitted email (which passes
+  // the non-empty check above but normalizes to '') would otherwise "match" an
+  // entry whose stored email is empty/null. Requiring a non-empty *stored* email
+  // closes that, and — because the short-circuit depends only on stored state,
+  // not on attacker input — both failure branches stay byte-identical, so the
+  // endpoint is not an existence oracle (#166).
+  const emailComparison = emailsMatchConstantTime(entryData?.email, email);
+  const emailMatches = emailComparison && !!entryData?.email;
 
   if (!emailMatches) {
+    // Count this failure toward the per-entryId window; block once exhausted.
+    const blocked = await registerFailedAttempt(
+      `verify:${entryId}`,
+      VERIFY_FAIL_WINDOW_MS,
+      VERIFY_FAIL_MAX
+    );
+    if (blocked) {
+      // Keep the 429 + Retry-After semantics, but render the styled lookup page
+      // (like the other verify branches) instead of plain text for consistency.
+      res.set('Retry-After', String(Math.ceil(VERIFY_FAIL_WINDOW_MS / 1000)));
+      return res.status(429).render('myEntryLookup', {
+        currentYear: thisYear,
+        error: 'ratelimited',
+        entryId,
+        year,
+      });
+    }
     const params = new URLSearchParams({ entryId, year, error: 'invalid' });
     return res.redirect(`/my-entry?${params}`);
   }
 
-  await new Promise((resolve, reject) => {
-    req.session.regenerate((err) => err ? reject(err) : resolve());
-  });
+  await regenerateSession(req);
   if (!req.session.verifiedEntries) req.session.verifiedEntries = {};
   req.session.verifiedEntries[`${year}:${entryId}`] = true;
-  await new Promise((resolve, reject) => {
-    req.session.save((err) => err ? reject(err) : resolve());
-  });
+  await saveSession(req);
 
   const params = new URLSearchParams({ entryId, year });
   res.redirect(`/my-entry/edit?${params}`);
 }, 'myEntryVerify');
+
+// ─── Shared self-service edit helpers ─────────────────────────────
+// Both the Entry-ID+email flow (/my-entry) and the Google-authenticated flow
+// (/my-brackets) render the same editor and run the same update; only the
+// authorization differs. These helpers hold the shared rendering/write logic so
+// the two flows stay in lockstep.
+
+/** Renders the bracket editor for an already-authorized entry. */
+async function renderEntryEditor(res, entryData, year, updateAction) {
+  if (!Array.isArray(entryData.groups)) {
+    entryData.groups = entryData.group ? [entryData.group] : [];
+  }
+
+  const lookupGroup = APP_CONFIG.tournament.paymentCollectorGroup || APP_CONFIG.tournament.defaultGroup;
+  const registrationData = await getGroupRegistrationData(lookupGroup, Number(year));
+  const regions = registrationData.regions?.map((r) => r.regionName) ?? [];
+
+  res.render('myEditEntry', {
+    entryData,
+    teamData: registrationData.teamData,
+    gameData: registrationData.gameData,
+    regions,
+    year,
+    updateAction,
+  });
+}
+
+/** Parses the submitted picks for an already-authorized entry, persists the
+ *  update (preserving stored groups/payment fields), and renders confirmation. */
+async function applyEntryUpdate(req, res, storedEntry, year) {
+  const { picksIds, picksNames } = extractPicks(req.body);
+
+  // Map First Four picks to live game state before the uniqueness check
+  // (two FF teams of the same game normalize to one sID → duplicate error).
+  const normalizedPicksIds = await normalizeFirstFourPicks(picksIds, year);
+
+  if (normalizedPicksIds.length !== 10) {
+    throw new ValidationError('Exactly 10 team picks are required.');
+  }
+  if (new Set(normalizedPicksIds).size !== 10) {
+    throw new ValidationError('Duplicate team picks are not allowed.');
+  }
+
+  const storedGroups = Array.isArray(storedEntry.groups)
+    ? storedEntry.groups
+    : [storedEntry.group].filter(Boolean);
+
+  await validateEntryPicks(normalizedPicksIds, year, storedGroups[0] || APP_CONFIG.tournament.defaultGroup);
+
+  // #159: recompute possPoints server-side from the validated picks; the
+  // participant-submitted maxPoints is never persisted.
+  const maxPoints = await calculateMaxPossiblePoints(normalizedPicksIds, year);
+
+  const entryPayload = {
+    id: storedEntry.id,
+    email: storedEntry.email,
+    year,
+    teamName: req.body['team'],
+    person: req.body['name'],
+    groups: storedGroups,
+    hasPaid: storedEntry.hasPaid,
+    paymentNote: storedEntry.paymentNote,
+    payByCheck: storedEntry.payByCheck,
+    emailSent: storedEntry.emailSent,
+    picks: normalizedPicksIds,
+    possPoints: maxPoints,
+  };
+
+  await gameRepository.updateEntry(entryPayload);
+
+  const collectorGroup = APP_CONFIG.tournament.paymentCollectorGroup;
+  const isPaymentCollectorGroup = !!collectorGroup && entryPayload.groups.includes(collectorGroup);
+
+  res.render('confirm', {
+    name: entryPayload.person,
+    team: entryPayload.teamName,
+    groupName: entryPayload.groups.join(', '),
+    picksNames,
+    isPaymentCollectorGroup,
+    paymentCollectorGroup: collectorGroup,
+    paymentCollector: APP_CONFIG.payments,
+  });
+}
 
 const myEntryView = controllerWrapper(async (req, res) => {
   if (!isRegistrationOpen()) {
@@ -637,21 +776,7 @@ const myEntryView = controllerWrapper(async (req, res) => {
     return res.redirect(`/my-entry?error=notfound`);
   }
 
-  if (!Array.isArray(entryData.groups)) {
-    entryData.groups = entryData.group ? [entryData.group] : [];
-  }
-
-  const lookupGroup = APP_CONFIG.tournament.paymentCollectorGroup || APP_CONFIG.tournament.defaultGroup;
-  const registrationData = await getGroupRegistrationData(lookupGroup, Number(year));
-  const regions = registrationData.regions?.map((r) => r.regionName) ?? [];
-
-  res.render('myEditEntry', {
-    entryData,
-    teamData: registrationData.teamData,
-    gameData: registrationData.gameData,
-    regions,
-    year,
-  });
+  await renderEntryEditor(res, entryData, year, '/my-entry/update');
 }, 'myEntryView');
 
 const myEntryUpdate = controllerWrapper(async (req, res) => {
@@ -672,68 +797,77 @@ const myEntryUpdate = controllerWrapper(async (req, res) => {
     return res.redirect('/my-entry?error=notfound');
   }
 
-  const picksIds = [];
-  const picksNames = [];
+  await applyEntryUpdate(req, res, storedEntry, year);
+}, 'myEntryUpdate');
 
-  for (let i = 1; i <= 10; i++) {
-    const key = `teamSelect${i}`;
-    const raw = req.body[key];
-    if (!raw) continue;
-    if (typeof raw !== 'string') {
-      throw new ValidationError(`Pick ${i} must be a string.`, key);
-    }
-    const parts = raw.split(', ').map((s) => s.trim());
-    if (parts.length !== 2) {
-      throw new ValidationError(`Pick ${i} is malformed.`, key);
-    }
-    const [idStr, name] = parts;
-    const id = Number(idStr);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw new ValidationError(`Pick ${i} has an invalid team ID.`, key);
-    }
-    if (!name || name.length > 128) {
-      throw new ValidationError(`Pick ${i} has an invalid team name.`, key);
-    }
-    picksIds.push(id);
-    picksNames.push(name);
+// ─── Google-authenticated "My Brackets" flow ──────────────────────
+
+/** Dashboard: every entry matching the signed-in Google email, across years. */
+const myBrackets = controllerWrapper(async (req, res) => {
+  const userEmail = req.session.userEmail; // guaranteed by requireUser
+  const entries = await getEntriesForUser(userEmail);
+  res.render('myBrackets', {
+    userEmail,
+    entries,
+    editWindowOpen: isRegistrationOpen(),
+    thisYear,
+  });
+}, 'myBrackets');
+
+/** True when the stored entry belongs to the signed-in user (case-insensitive). */
+function ownsEntry(req, entry) {
+  const sessionEmail = req.session?.userEmail?.toLowerCase();
+  return !!sessionEmail && entry?.email?.toLowerCase() === sessionEmail;
+}
+
+/** Editing is allowed only for the current tournament year, within the window. */
+function canEditYear(year) {
+  return isRegistrationOpen() && Number(year) === thisYear;
+}
+
+const userEntryView = controllerWrapper(async (req, res) => {
+  const { entryId, year } = req.query;
+  if (!entryId || !year) {
+    throw new ValidationError('Entry ID and year are required.');
   }
 
-  const storedGroups = Array.isArray(storedEntry.groups)
-    ? storedEntry.groups
-    : [storedEntry.group].filter(Boolean);
+  if (!canEditYear(year)) {
+    return res.status(403).render('myEntryClosed');
+  }
 
-  const maxPoints = Number(req.body['maxPoints']) || 0;
+  const entryData = await gameRepository.getEntryById(entryId, year);
+  if (!entryData) {
+    return res.redirect('/my-brackets');
+  }
 
-  const entryPayload = {
-    id: storedEntry.id,
-    email: storedEntry.email,
-    year,
-    teamName: req.body['team'],
-    person: req.body['name'],
-    groups: storedGroups,
-    hasPaid: storedEntry.hasPaid,
-    paymentNote: storedEntry.paymentNote,
-    payByCheck: storedEntry.payByCheck,
-    emailSent: storedEntry.emailSent,
-    picks: picksIds,
-    possPoints: maxPoints,
-  };
+  // Authorize by email ownership (replaces the verifiedEntries token).
+  if (!ownsEntry(req, entryData)) {
+    return res.status(403).render('myEntryClosed');
+  }
 
-  await gameRepository.updateEntry(entryPayload);
+  await renderEntryEditor(res, entryData, year, '/my-brackets/update');
+}, 'userEntryView');
 
-  const collectorGroup = APP_CONFIG.tournament.paymentCollectorGroup;
-  const isPaymentCollectorGroup = !!collectorGroup && entryPayload.groups.includes(collectorGroup);
+const userEntryUpdate = controllerWrapper(async (req, res) => {
+  const entryId = req.body['entryId'];
+  const year = req.body['year'];
 
-  res.render('confirm', {
-    name: entryPayload.person,
-    team: entryPayload.teamName,
-    groupName: entryPayload.groups.join(', '),
-    picksNames,
-    isPaymentCollectorGroup,
-    paymentCollectorGroup: collectorGroup,
-    paymentCollector: APP_CONFIG.payments,
-  });
-}, 'myEntryUpdate');
+  if (!canEditYear(year)) {
+    return res.status(403).render('myEntryClosed');
+  }
+
+  const storedEntry = await gameRepository.getEntryById(entryId, year);
+  if (!storedEntry) {
+    return res.redirect('/my-brackets');
+  }
+
+  // Re-verify ownership against the stored email — never trust the posted form.
+  if (!ownsEntry(req, storedEntry)) {
+    return res.status(403).render('myEntryClosed');
+  }
+
+  await applyEntryUpdate(req, res, storedEntry, year);
+}, 'userEntryUpdate');
 
 const getUnsentEmails = controllerWrapper(async (req, res) => {
   const { year } = req.query;
@@ -760,6 +894,50 @@ const deleteEntry = controllerWrapper(async (req, res) => {
   res.redirect("/updates");
 }, "deleteEntry");
 
+function extractPicks(body) {
+  const picksIds = [];
+  const picksNames = [];
+
+  for (let i = 1; i <= 10; i++) {
+    const key = `teamSelect${i}`;
+    const raw = body[key];
+    if (!raw) continue;
+    if (typeof raw !== 'string') {
+      throw new ValidationError(`Pick ${i} must be a string.`, key);
+    }
+    const parts = raw.split(", ").map((s) => s.trim());
+    if (parts.length !== 2) {
+      throw new ValidationError(`Pick ${i} is malformed. Please re-select the team.`, key);
+    }
+    const [idStr, name] = parts;
+    const id = Number(idStr);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new ValidationError(`Pick ${i} has an invalid team ID.`, key);
+    }
+    if (!name || name.length > 128) {
+      throw new ValidationError(`Pick ${i} has an invalid team name.`, key);
+    }
+    picksIds.push(id);
+    picksNames.push(name);
+  }
+
+  return { picksIds, picksNames };
+}
+
+async function validateEntryPicks(picksIds, year, groupName) {
+  const registrationData = await getGroupRegistrationData(groupName, year);
+  if (!registrationData || !registrationData.teamData) {
+    throw new ValidationError("Invalid tournament or group.");
+  }
+  const validSIDs = new Set(registrationData.teamData.map(t => t.sID));
+  for (let i = 0; i < picksIds.length; i++) {
+    const pickId = picksIds[i];
+    if (!validSIDs.has(pickId)) {
+      throw new ValidationError(`Pick ${i + 1} is not a valid team in this tournament.`);
+    }
+  }
+}
+
 export {
   calculateMaxPoints,
   getFullGrid,
@@ -784,6 +962,9 @@ export {
   myEntryVerify,
   myEntryView,
   myEntryUpdate,
+  myBrackets,
+  userEntryView,
+  userEntryUpdate,
   getUnpaidEntries,
   getUnsentEmails,
   markEmailsSentController,

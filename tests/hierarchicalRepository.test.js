@@ -5,7 +5,10 @@ import {
   TourneyRepository,
   TeamRepository,
   ConferenceRepository,
+  SessionRepository,
+  _isExcludedOnlyGroupForTests,
 } from "../src/repositories/hierarchicalRepository.js";
+import { APP_CONFIG } from "../src/config/app.js";
 
 // ── Mock harness ──────────────────────────────────────────────────────────
 // One shared docRef / collectionRef pair links circularly so any chained
@@ -33,6 +36,7 @@ const {
   cacheDel,
   invalidateCache,
   runTransactionMock,
+  getAllMock,
 } = vi.hoisted(() => {
   const docGetMock = vi.fn();
   const queryGetMock = vi.fn();
@@ -103,18 +107,20 @@ const {
     return await cb(tx);
   });
 
+  const getAllMock = vi.fn();
+
   return {
     collectionMock, docMock, docGetMock, queryGetMock,
     updateMock, setMock, deleteMock,
     whereMock, orderByMock, limitMock,
     batchMock, batchUpdateMock, batchSetMock, batchDeleteMock, batchCommitMock,
     cacheGet, cacheSet, cacheDel, invalidateCache,
-    runTransactionMock,
+    runTransactionMock, getAllMock,
   };
 });
 
 vi.mock("../src/config/firestore.js", () => ({
-  db: { collection: collectionMock, batch: batchMock, runTransaction: runTransactionMock },
+  db: { collection: collectionMock, batch: batchMock, runTransaction: runTransactionMock, getAll: getAllMock },
 }));
 
 vi.mock("../src/utils/cacheUtils.js", () => ({
@@ -298,6 +304,19 @@ describe("EntryRepository", () => {
     expect(batchUpdateMock).toHaveBeenNthCalledWith(601, expect.anything(), { picks: [600] });
   });
 
+  test("updateMultipleEntryPicks invalidates caches even if a batch commit rejects", async () => {
+    const updates = [{ entryId: "1", picks: [9] }];
+    batchCommitMock.mockRejectedValueOnce(new Error("Batch failed"));
+
+    await expect(repo.updateMultipleEntryPicks(updates, 2024)).rejects.toThrow("Batch failed");
+
+    expect(invalidateCache).toHaveBeenCalledWith("groupTeams_");
+    expect(invalidateCache).toHaveBeenCalledWith("gameViewData_2024_");
+    expect(invalidateCache).toHaveBeenCalledWith("entriesForGroup_");
+    expect(cacheDel).toHaveBeenCalledWith("allEntries_2024");
+    expect(cacheDel).toHaveBeenCalledWith("entriesByNameRaw_2024");
+  });
+
   test("getUnsentEmailEntries filters out emailSent=true and returns email shape", async () => {
     queryGetMock.mockResolvedValue({
       docs: [
@@ -434,15 +453,138 @@ describe("ViewRepository", () => {
 describe("GameRepository", () => {
   const repo = new GameRepository();
 
-  test("updateWinner writes winner only and busts all dependent caches", async () => {
+  describe("getEntriesByEmail", () => {
+    test("returns [] for an empty email without touching Firestore", async () => {
+      const result = await repo.getEntriesByEmail("");
+      expect(result).toEqual([]);
+      expect(collectionMock).not.toHaveBeenCalledWith("tournaments");
+    });
+
+    test("queries each year's entries by email, tags year, and sorts newest-year first", async () => {
+      queryGetMock
+        .mockResolvedValueOnce({ docs: [makeDoc("2025", {}), makeDoc("2026", {})] })            // tournaments.get()
+        .mockResolvedValueOnce({ docs: [makeDoc("a", { id: "a", email: "u@g.com", teamName: "T25" })] }) // 2025 entries
+        .mockResolvedValueOnce({ docs: [makeDoc("b", { id: "b", email: "u@g.com", teamName: "T26" })] }); // 2026 entries
+
+      const result = await repo.getEntriesByEmail("u@g.com");
+
+      // Filtered the entries subcollection by the email field, and read the
+      // small top-level tournaments collection first (getAllYearsForGroup pattern).
+      expect(whereMock).toHaveBeenCalledWith("email", "==", "u@g.com");
+      expect(collectionMock).toHaveBeenCalledWith("tournaments");
+      // Tagged with year + sorted newest-year first.
+      expect(result.map((e) => e.year)).toEqual([2026, 2025]);
+      expect(result.map((e) => e.id)).toEqual(["b", "a"]);
+    });
+
+    test("drops entries whose stored email does not match (defense-in-depth)", async () => {
+      queryGetMock
+        .mockResolvedValueOnce({ docs: [makeDoc("2026", {})] })
+        .mockResolvedValueOnce({ docs: [
+          makeDoc("a", { id: "a", email: "u@g.com" }),
+          makeDoc("x", { id: "x", email: "someone-else@g.com" }),
+        ] });
+
+      const result = await repo.getEntriesByEmail("u@g.com");
+      expect(result.map((e) => e.id)).toEqual(["a"]);
+    });
+
+    test("scopes to a single year (skips the tournaments read) when year is passed", async () => {
+      // Exactly one get() — the year's entries query — and no separate
+      // tournaments.get() collection scan (which the all-years path needs first).
+      queryGetMock.mockResolvedValueOnce({
+        docs: [makeDoc("a", { id: "a", email: "u@g.com", teamName: "T26" })],
+      });
+
+      const result = await repo.getEntriesByEmail("u@g.com", 2026);
+
+      expect(queryGetMock).toHaveBeenCalledTimes(1);
+      expect(whereMock).toHaveBeenCalledWith("email", "==", "u@g.com");
+      expect(result.map((e) => e.year)).toEqual([2026]);
+      expect(result.map((e) => e.id)).toEqual(["a"]);
+    });
+  });
+
+  describe("getAllYearsForGroup", () => {
+    test("reads tournaments once, then a single Filter.or query per year, returns matched years newest-first", async () => {
+      queryGetMock
+        .mockResolvedValueOnce({ docs: [makeDoc("2024", {}), makeDoc("2025", {}), makeDoc("2026", {})] }) // tournaments.get()
+        .mockResolvedValueOnce({ empty: false }) // 2024 entries — match
+        .mockResolvedValueOnce({ empty: true })  // 2025 entries — no match
+        .mockResolvedValueOnce({ empty: false }); // 2026 entries — match
+
+      const result = await repo.getAllYearsForGroup("G");
+
+      // Reads the small top-level tournaments collection first.
+      expect(collectionMock).toHaveBeenCalledWith("tournaments");
+
+      // One get() for tournaments + exactly one get() per year (3) = 4 total.
+      // The pre-optimization code ran two queries per year (1 + 2*3 = 7); this
+      // asserts the N→N/2 read reduction holds.
+      expect(queryGetMock).toHaveBeenCalledTimes(4);
+
+      // Each year issues a single disjunctive Filter.or(...) query — one `where`
+      // call taking one composite filter arg — not the old pair of single-field
+      // .where('groups', 'array-contains', …) / .where('group', '==', …) queries.
+      expect(whereMock).toHaveBeenCalledTimes(3);
+      for (const call of whereMock.mock.calls) {
+        expect(call).toHaveLength(1);
+      }
+      expect(whereMock).not.toHaveBeenCalledWith("groups", "array-contains", "G");
+      expect(whereMock).not.toHaveBeenCalledWith("group", "==", "G");
+      expect(limitMock).toHaveBeenCalledWith(1);
+
+      // Only matched years, sorted newest-first, shaped as { year }.
+      expect(result).toEqual([{ year: 2026 }, { year: 2024 }]);
+
+      // Cached for a year under the group-scoped key.
+      expect(cacheSet).toHaveBeenCalledWith("yearsForGroup_G", result, 3600);
+    });
+
+    test("returns cached value without querying Firestore", async () => {
+      cacheGet.mockReturnValue([{ year: 2026 }]);
+      const result = await repo.getAllYearsForGroup("G");
+      expect(result).toEqual([{ year: 2026 }]);
+      expect(queryGetMock).not.toHaveBeenCalled();
+    });
+
+    test("returns [] when no year has an entry in the group", async () => {
+      queryGetMock
+        .mockResolvedValueOnce({ docs: [makeDoc("2025", {}), makeDoc("2026", {})] })
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true });
+
+      const result = await repo.getAllYearsForGroup("Ghost");
+      expect(result).toEqual([]);
+    });
+  });
+
+  test("updateWinner writes winner, releases any manual hold, and busts all dependent caches", async () => {
     await repo.updateWinner("23", 101, 2024);
 
-    expect(updateMock).toHaveBeenCalledWith({ winner: 101 });
+    expect(updateMock).toHaveBeenCalledWith({ winner: 101, manualHold: false });
     expect(docMock).toHaveBeenCalledWith("23");
     expect(cacheDel).toHaveBeenCalledWith("tournamentDetails_2024");
     expect(cacheDel).toHaveBeenCalledWith("activeGames_2024");
     expect(cacheDel).toHaveBeenCalledWith("activeFutureGames_2024");
     expect(invalidateCache).toHaveBeenCalledWith("gameViewData_2024_");
+  });
+
+  test("clearWinnerWithHold clears winner and sets the hold in one update, busting caches", async () => {
+    await repo.clearWinnerWithHold("23", 2024);
+
+    expect(updateMock).toHaveBeenCalledWith({ winner: null, manualHold: true });
+    expect(docMock).toHaveBeenCalledWith("23");
+    expect(cacheDel).toHaveBeenCalledWith("tournamentDetails_2024");
+    expect(cacheDel).toHaveBeenCalledWith("activeGames_2024");
+    expect(cacheDel).toHaveBeenCalledWith("activeFutureGames_2024");
+    expect(invalidateCache).toHaveBeenCalledWith("gameViewData_2024_");
+  });
+
+  test("setGameManualHold coerces the flag and busts caches", async () => {
+    await repo.setGameManualHold("23", 0, 2024);
+    expect(updateMock).toHaveBeenCalledWith({ manualHold: false });
+    expect(cacheDel).toHaveBeenCalledWith("activeFutureGames_2024");
   });
 
   test("updateNextGameTeam denormalizes team name+seed from schoolRecords for slot 1 inside a transaction", async () => {
@@ -595,7 +737,7 @@ describe("GameRepository", () => {
     const res = await repo.getEntriesForGroup(2024, "G");
     expect(whereMock).toHaveBeenCalledWith("groups", "array-contains", "G");
     expect(res.map(e => e.id)).toEqual([1, 2]);
-    expect(cacheSet).toHaveBeenCalledWith("entriesForGroup_G_2024", res);
+    expect(cacheSet).toHaveBeenCalledWith("entriesForGroup_G_2024", res, 300);
   });
 
   test("getAllEntries filters EXCLUDED 'Bad'-only entries, sorts by id, returns slim shape", async () => {
@@ -610,7 +752,7 @@ describe("GameRepository", () => {
 
     // EXCLUDED only filters when "Bad" is the ONLY group → id=3 dropped; id=2 has both Good + Bad so kept
     expect(entries.map(e => e.id)).toEqual([1, 2]);
-    expect(cacheSet).toHaveBeenCalledWith("allEntries_2024", entries);
+    expect(cacheSet).toHaveBeenCalledWith("allEntries_2024", entries, 300);
   });
 
   test("getTournamentTeams sorts by seed asc, then regionName asc", async () => {
@@ -623,7 +765,7 @@ describe("GameRepository", () => {
     });
     const teams = await repo.getTournamentTeams(2024);
     expect(teams.map(t => t.sID)).toEqual([103, 102, 101]); // seed=1 East, seed=1 Midwest, seed=2 South
-    expect(cacheSet).toHaveBeenCalledWith("allTeamNames_2024", teams, 86400);
+    expect(cacheSet).toHaveBeenCalledWith("allTeamNames_2024", teams, 300);
   });
 
   test("getAllTournamentDetails reads games+records+regions in parallel, builds maps, caches 300s", async () => {
@@ -1035,5 +1177,252 @@ describe("ConferenceRepository", () => {
     expect(updateMock).toHaveBeenCalledWith({
       name: "ACC updated", shortName: "ACC", division: "I", active: false,
     });
+  });
+});
+
+// ─── SessionRepository ────────────────────────────────────────────────────
+describe("SessionRepository", () => {
+  const repo = new SessionRepository();
+
+  test("deletes only sessions with userEmail or adminEmail and returns the count", async () => {
+    const docs = [
+      makeDoc("sess1", { session: { userEmail: "user@gmail.com" } }),
+      makeDoc("sess2", { session: { adminEmail: "admin@gmail.com" } }),
+      makeDoc("sess3", { session: { anonymous: true } }),
+      makeDoc("sess4", {}), // missing session field — must not throw
+    ];
+    queryGetMock.mockResolvedValue({ docs });
+    batchCommitMock.mockResolvedValue();
+
+    const count = await repo.clearAuthenticatedSessions();
+
+    expect(collectionMock).toHaveBeenCalledWith("express-sessions");
+    expect(batchDeleteMock).toHaveBeenCalledTimes(2);
+    expect(batchCommitMock).toHaveBeenCalledTimes(1);
+    expect(count).toBe(2);
+  });
+
+  test("skips the batch commit when nothing matches", async () => {
+    const docs = [
+      makeDoc("sess1", { session: { anonymous: true } }),
+    ];
+    queryGetMock.mockResolvedValue({ docs });
+
+    const count = await repo.clearAuthenticatedSessions();
+
+    expect(batchDeleteMock).not.toHaveBeenCalled();
+    expect(batchCommitMock).not.toHaveBeenCalled();
+    expect(count).toBe(0);
+  });
+
+  test("splits deletes across multiple batches of 450 when count exceeds limit", async () => {
+    const docs = Array.from({ length: 500 }, (_, i) =>
+      makeDoc(`sess${i}`, { session: { userEmail: `user${i}@gmail.com` } })
+    );
+    queryGetMock.mockResolvedValue({ docs });
+
+    const count = await repo.clearAuthenticatedSessions();
+
+    expect(batchDeleteMock).toHaveBeenCalledTimes(500);
+    expect(batchCommitMock).toHaveBeenCalledTimes(2); // batch 1: 450, batch 2: 50
+    expect(count).toBe(500);
+  });
+});
+
+// ─── EntryRepository.updateMultipleEntryPoints — deleted-entry resilience ──
+describe("EntryRepository.updateMultipleEntryPoints — missing-doc retry", () => {
+  const repo = new EntryRepository();
+
+  test("retries with only the still-existing docs when the atomic batch fails", async () => {
+    // First commit fails (one entry deleted between read and write → whole
+    // batch rejected); the retry must update the survivor and skip the ghost.
+    batchCommitMock.mockRejectedValueOnce(new Error("NOT_FOUND: no entity to update"));
+    getAllMock.mockResolvedValue([
+      { exists: true },   // entry 1 still there
+      { exists: false },  // entry 2 was deleted
+    ]);
+
+    await repo.updateMultipleEntryPoints(
+      [{ entryID: 1, points: 10, possPoints: 100 }, { entryID: 2, points: 20, possPoints: 200 }],
+      2024
+    );
+
+    // 2 updates on the failed attempt + 1 on the retry (only the existing doc)
+    expect(batchUpdateMock).toHaveBeenCalledTimes(3);
+    expect(batchUpdateMock).toHaveBeenNthCalledWith(3, expect.anything(), { totalPoints: 10, possPoints: 100 });
+    expect(batchCommitMock).toHaveBeenCalledTimes(2);
+    expect(getAllMock).toHaveBeenCalledTimes(1);
+
+    // Standings caches still busted after the partial write
+    expect(invalidateCache).toHaveBeenCalledWith("groupTeams_");
+    expect(invalidateCache).toHaveBeenCalledWith("gameViewData_2024_");
+  });
+
+  test("skips the retry commit entirely when no docs survive", async () => {
+    batchCommitMock.mockRejectedValueOnce(new Error("NOT_FOUND"));
+    getAllMock.mockResolvedValue([{ exists: false }]);
+
+    await repo.updateMultipleEntryPoints([{ entryID: 9, points: 1, possPoints: 2 }], 2024);
+
+    expect(batchCommitMock).toHaveBeenCalledTimes(1); // failed attempt only
+  });
+
+  test("rethrows when even the existence-checked retry fails", async () => {
+    batchCommitMock.mockRejectedValue(new Error("UNAVAILABLE"));
+    getAllMock.mockResolvedValue([{ exists: true }]);
+
+    await expect(
+      repo.updateMultipleEntryPoints([{ entryID: 1, points: 1, possPoints: 2 }], 2024)
+    ).rejects.toThrow("UNAVAILABLE");
+  });
+});
+
+// ─── GameRepository.resolveGame / undoResolvedGame — single-transaction ───
+describe("GameRepository.resolveGame / undoResolvedGame", () => {
+  const repo = new GameRepository();
+
+  test("resolveGame writes winner+hold release, next-round slot, and both team records in ONE transaction", async () => {
+    queryGetMock
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("w", { sID: 1, nameNick: "Duke", schoolName: "Duke University", seed: 2 })] })
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("l", { sID: 2 })] });
+
+    await repo.resolveGame(
+      {
+        gameID: 9, winner: 1, loser: 2, nextGame: 13, nextGameSpot: 1,
+        winnerPoints: 5, winnerStatus: ["W", "W"], loserPoints: 2, loserStatus: ["W", "L"],
+      },
+      2024
+    );
+
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith({ winner: 1, manualHold: false });
+    expect(updateMock).toHaveBeenCalledWith({ team1ID: 1, team1Name: "Duke", team1Seed: 2 });
+    expect(updateMock).toHaveBeenCalledWith({ points: 5, gameStatus: ["W", "W"] });
+    expect(updateMock).toHaveBeenCalledWith({ points: 2, gameStatus: ["W", "L"] });
+
+    // Game + team caches busted, including the team-points cache the old
+    // 4-write path busted via updateTeamRecord
+    expect(cacheDel).toHaveBeenCalledWith("tournamentDetails_2024");
+    expect(cacheDel).toHaveBeenCalledWith("activeGames_2024");
+    expect(cacheDel).toHaveBeenCalledWith("activeFutureGames_2024");
+    expect(cacheDel).toHaveBeenCalledWith("allTeamNames_2024");
+    expect(invalidateCache).toHaveBeenCalledWith("gameViewData_2024_");
+  });
+
+  test("resolveGame updates ALL schoolRecords docs sharing the winner sID (ff_ + canonical)", async () => {
+    queryGetMock
+      .mockResolvedValueOnce({
+        empty: false,
+        docs: [makeDoc("ff_64_1", { sID: 1, nameNick: "FDU" }), makeDoc("1_16", { sID: 1, nameNick: "FDU" })],
+      })
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("l", { sID: 2 })] });
+
+    await repo.resolveGame(
+      { gameID: 1, winner: 1, loser: 2, nextGame: null, nextGameSpot: null, winnerPoints: 2, winnerStatus: ["W"], loserPoints: 0, loserStatus: ["L"] },
+      2024
+    );
+
+    const winnerRecordWrites = updateMock.mock.calls.filter(
+      ([data]) => data.points === 2 && Array.isArray(data.gameStatus)
+    );
+    expect(winnerRecordWrites).toHaveLength(2);
+  });
+
+  test("resolveGame with no nextGame writes no team-slot update", async () => {
+    queryGetMock
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("w", { sID: 1 })] })
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("l", { sID: 2 })] });
+
+    await repo.resolveGame(
+      { gameID: 63, winner: 1, loser: 2, nextGame: null, nextGameSpot: null, winnerPoints: 69, winnerStatus: [], loserPoints: 36, loserStatus: [] },
+      2024
+    );
+
+    const slotWrites = updateMock.mock.calls.filter(([data]) => "team1ID" in data || "team2ID" in data);
+    expect(slotWrites).toHaveLength(0);
+  });
+
+  test("undoResolvedGame clears winner WITH manualHold, clears the slot, and restores both records atomically", async () => {
+    queryGetMock
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("w", { sID: 1 })] })
+      .mockResolvedValueOnce({ empty: false, docs: [makeDoc("l", { sID: 2 })] });
+
+    await repo.undoResolvedGame(
+      { gameID: 9, winner: 1, loser: 2, nextGame: 13, nextGameSpot: 2, restorePoints: null, restoreStatus: [] },
+      2024
+    );
+
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith({ winner: null, manualHold: true });
+    expect(updateMock).toHaveBeenCalledWith({ team2ID: null, team2Name: null, team2Seed: null });
+    const restoreWrites = updateMock.mock.calls.filter(
+      ([data]) => data.points === null && Array.isArray(data.gameStatus) && data.gameStatus.length === 0
+    );
+    expect(restoreWrites).toHaveLength(2); // winner + loser
+    expect(cacheDel).toHaveBeenCalledWith("allTeamNames_2024");
+  });
+});
+
+// ─── GameRepository — pending points-recalc marker ─────────────────────────
+describe("GameRepository — pending recalc marker", () => {
+  const repo = new GameRepository();
+
+  test("addPendingRecalcSIDs merges a numeric, deduped arrayUnion onto tournaments/{year}", async () => {
+    await repo.addPendingRecalcSIDs(2024, [28, "73", 28]);
+
+    expect(collectionMock).toHaveBeenCalledWith("tournaments");
+    expect(docMock).toHaveBeenCalledWith("2024");
+    expect(setMock).toHaveBeenCalledWith(
+      { pendingRecalcSIDs: expect.anything() },
+      { merge: true }
+    );
+  });
+
+  test("addPendingRecalcSIDs with an empty list writes nothing", async () => {
+    await repo.addPendingRecalcSIDs(2024, []);
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  test("getPendingRecalcSIDs returns numeric sIDs, and [] when the doc or field is missing", async () => {
+    docGetMock.mockResolvedValueOnce({ exists: true, data: () => ({ pendingRecalcSIDs: [28, "73"] }) });
+    expect(await repo.getPendingRecalcSIDs(2024)).toEqual([28, 73]);
+
+    docGetMock.mockResolvedValueOnce({ exists: true, data: () => ({}) });
+    expect(await repo.getPendingRecalcSIDs(2024)).toEqual([]);
+
+    docGetMock.mockResolvedValueOnce({ exists: false });
+    expect(await repo.getPendingRecalcSIDs(2024)).toEqual([]);
+  });
+
+  test("clearPendingRecalcSIDs removes only the given sIDs (merge + arrayRemove), nothing on empty", async () => {
+    await repo.clearPendingRecalcSIDs(2024, [28, 73]);
+    expect(setMock).toHaveBeenCalledWith(
+      { pendingRecalcSIDs: expect.anything() },
+      { merge: true }
+    );
+
+    setMock.mockClear();
+    await repo.clearPendingRecalcSIDs(2024, []);
+    expect(setMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("isExcludedOnlyGroup", () => {
+  it("should return true when groups contains only an excluded group", () => {
+    const excludedGroup = APP_CONFIG.tournament.excludedGroups[0] || "Bad";
+    expect(_isExcludedOnlyGroupForTests([excludedGroup])).toBe(true);
+  });
+
+  it("should return false when groups contains multiple groups including an excluded group", () => {
+    const excludedGroup = APP_CONFIG.tournament.excludedGroups[0] || "Bad";
+    expect(_isExcludedOnlyGroupForTests([excludedGroup, "OtherGroup"])).toBe(false);
+  });
+
+  it("should return false when groups contains a single group that is not excluded", () => {
+    expect(_isExcludedOnlyGroupForTests(["GoodGroup"])).toBe(false);
+  });
+
+  it("should return false when groups is empty", () => {
+    expect(_isExcludedOnlyGroupForTests([])).toBe(false);
   });
 });

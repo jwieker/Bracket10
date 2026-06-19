@@ -1,15 +1,11 @@
 import { buildPlaygroundData } from '../services/playgroundService.js';
-import { controllerWrapper } from '../utils/controllerUtils.js';
+import { controllerWrapper, parseYearOrDefault } from '../utils/controllerUtils.js';
 import { ValidationError } from '../utils/errors.js';
 import { thisYear } from '../config/app.js';
 
 export const getPlayground = controllerWrapper(async (req, res) => {
   const groupName = req.query.group;
-  const year = req.query.year ? Number(req.query.year) : thisYear;
-
-  if (req.query.year && isNaN(year)) {
-    throw new ValidationError('Year must be a valid number');
-  }
+  const year = parseYearOrDefault(req.query.year, thisYear);
 
   if (!groupName) {
     throw new ValidationError('Group name is required');

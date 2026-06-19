@@ -1,4 +1,4 @@
-import { updateWinner, undoGame } from "../src/controllers/gameController";
+import { updateWinner, undoGame, releaseGameHold } from "../src/controllers/gameController";
 import { GameRepository } from "../src/repositories/hierarchicalRepository.js";
 import {
   updateTeamRecords,
@@ -16,6 +16,7 @@ vi.mock("../src/controllers/pointsController", () => ({
 const mockGameRepository = {
   updateWinner: vi.fn(),
   updateNextGameTeam: vi.fn(),
+  setGameManualHold: vi.fn(),
 };
 
 // Mock the GameRepository class implementation
@@ -28,6 +29,9 @@ vi
 vi
   .spyOn(GameRepository.prototype, "updateNextGameTeam")
   .mockImplementation(mockGameRepository.updateNextGameTeam);
+vi
+  .spyOn(GameRepository.prototype, "setGameManualHold")
+  .mockImplementation(mockGameRepository.setGameManualHold);
 
 describe("updateWinner", () => {
   let mockRequest;
@@ -126,5 +130,49 @@ describe("undoGame", () => {
     expect(mockRes.json).toHaveBeenCalledWith({
       message: "Game result updated successfully",
     });
+  });
+});
+
+describe("releaseGameHold", () => {
+  let mockRes;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRes = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+  });
+
+  test("clears the hold for a valid gameID/year and returns 200", async () => {
+    mockGameRepository.setGameManualHold.mockResolvedValue();
+    const req = { body: { gameID: "64", year: "2024" }, method: "POST", url: "/releaseGameHold" };
+
+    await releaseGameHold(req, mockRes);
+
+    expect(mockGameRepository.setGameManualHold).toHaveBeenCalledWith(64, false, 2024);
+    expect(mockRes.status).toHaveBeenCalledWith(200);
+    expect(mockRes.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/hold released/i) })
+    );
+  });
+
+  test("returns 400 for missing or non-positive gameID without touching the repo", async () => {
+    for (const gameID of [undefined, "0", "-3", "abc"]) {
+      const req = { body: { gameID, year: "2024" }, method: "POST", url: "/releaseGameHold" };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      await releaseGameHold(req, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+    }
+    expect(mockGameRepository.setGameManualHold).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for a missing year without touching the repo", async () => {
+    const req = { body: { gameID: "64" }, method: "POST", url: "/releaseGameHold" };
+
+    await releaseGameHold(req, mockRes);
+
+    expect(mockRes.status).toHaveBeenCalledWith(400);
+    expect(mockGameRepository.setGameManualHold).not.toHaveBeenCalled();
   });
 });

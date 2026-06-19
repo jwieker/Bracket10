@@ -17,6 +17,7 @@
                 </div>
 
                 <form action="<%= isNew ? '/addTeam' : '/updateTeam' %>" method="post">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <% if (!isNew) { %>
                         <input type="hidden" name="sid" value="<%= team.sid %>">
                         <% } %>
@@ -174,6 +175,7 @@
                 <% if (!isNew) { %>
                     <form action="/deleteTeam" method="post" style="display:inline;"
                         data-confirm="PERMANENTLY delete <%= team.name %>? This cannot be undone.">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                         <input type="hidden" name="sid" value="<%= team.sid %>">
                         <button type="submit" class="btn btn-danger pb-2">Delete School</button>
                     </form>
@@ -190,25 +192,60 @@
     </div>
 
     <% if (!isNew) { %>
-        <script>
-            // Build the conference options HTML for new rows
-            const confOptions = `<option value="">—</option>` + [
+        <script nonce="<%= cspNonce %>">
+            // Conference options data for new rows
+            const CONF_OPTIONS = [
+                { slug: '', label: '—' },
         <% conferences.forEach(conf => { %>
                 { slug: '<%= conf.slug %>', label: '<%= conf.shortName %>' },
         <% }) %>
-    ].map(c => `<option value="${c.slug}">${c.label}</option>`).join('');
+            ];
+
+            function buildConfSelect(idx) {
+                const select = document.createElement('select');
+                select.name = `confHistory[${idx}][confID]`;
+                select.className = 'form-select form-select-sm';
+                CONF_OPTIONS.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.slug;
+                    opt.textContent = c.label;
+                    select.appendChild(opt);
+                });
+                return select;
+            }
+
+            function buildYearInput(idx, field, placeholder) {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.name = `confHistory[${idx}][${field}]`;
+                input.className = 'form-control form-control-sm';
+                input.placeholder = placeholder;
+                return input;
+            }
 
             document.getElementById('addHistoryRow').addEventListener('click', () => {
                 const tbody = document.getElementById('historyRows');
                 const idx = tbody.querySelectorAll('.history-row').length;
                 const row = document.createElement('tr');
                 row.className = 'history-row';
-                row.innerHTML = `
-            <td><select name="confHistory[${idx}][confID]" class="form-select form-select-sm">${confOptions}</select></td>
-            <td><input type="number" name="confHistory[${idx}][startYear]" class="form-control form-control-sm" placeholder="(unknown)"></td>
-            <td><input type="number" name="confHistory[${idx}][endYear]" class="form-control form-control-sm" placeholder="(current)"></td>
-            <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">✕</button></td>
-        `;
+
+                const confTd = document.createElement('td');
+                confTd.appendChild(buildConfSelect(idx));
+
+                const startTd = document.createElement('td');
+                startTd.appendChild(buildYearInput(idx, 'startYear', '(unknown)'));
+
+                const endTd = document.createElement('td');
+                endTd.appendChild(buildYearInput(idx, 'endYear', '(current)'));
+
+                const btnTd = document.createElement('td');
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-sm btn-outline-danger remove-row';
+                removeBtn.textContent = '✕';
+                btnTd.appendChild(removeBtn);
+
+                row.append(confTd, startTd, endTd, btnTd);
                 tbody.appendChild(row);
             });
 
@@ -225,7 +262,7 @@
             });
         </script>
         <% } %>
-    <script src="/js/admin/confirmDestructive.js"></script>
+    <script nonce="<%= cspNonce %>" src="/js/admin/confirmDestructive.js"></script>
 </body>
 
 </html>

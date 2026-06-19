@@ -35,7 +35,7 @@
 
 
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
         integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
         crossorigin="anonymous"></script>
     <div class="container-lg pt-3" id="regcont">
@@ -50,17 +50,18 @@
                     Editing your <strong><%= year %></strong> entry
                 </div>
                 <form action="/entryUpdate" method="post">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="container pb-3">
                         <label for="inputName">Your Name</label>
                         <!-- Pre-populate Your Name -->
-                        <input type="text" name="name" class="form-control" onfocus="this.placeholder = ''"
+                        <input type="text" name="name" class="form-control" data-clear-placeholder
                             id="inputName" placeholder="John Doe" value="<%= entryData.person %>" required>
                     </div>
                     <div class="container pb-3">
                         <label for="inputTeam">Team Name</label>
                         <!-- Pre-populate Team Name -->
                         <input type="text" name="team" class="form-control" maxlength="25"
-                            onfocus="this.placeholder = ''" id="inputTeam" placeholder="Winning team!"
+                            data-clear-placeholder id="inputTeam" placeholder="Winning team!"
                             value="<%= entryData.teamName %>" required>
                     </div>
                     <div class="container pb-3">
@@ -122,7 +123,7 @@
                                 <label for="exampleInputEmail1">Email address</label>
 
                                 <!-- Pre-populate Email -->
-                                <input type="email" class="form-control" name="email" onfocus="this.placeholder = ''"
+                                <input type="email" class="form-control" name="email" data-clear-placeholder
                                     id="exampleInputEmail1" aria-describedby="emailHelp"
                                     placeholder="john.doe@gmail.com" value="<%= entryData.email %>" required>
                             </div>
@@ -164,6 +165,7 @@
                 <% if (entryData && entryData.id) { %>
                     <form action="/deleteEntry" method="post" style="display:inline;"
                         data-confirm="PERMANENTLY delete entry for <%= entryData.person %>? This cannot be undone.">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                         <input type="hidden" name="entryId" value="<%= entryData.id %>">
                         <input type="hidden" name="year" value="<%= year %>">
                         <button type="submit" class="btn btn-danger ms-2">Delete Entry</button>
@@ -191,11 +193,11 @@
 
 
 
-    <script type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="entryPicksFromServerJson"><%- JSON.stringify(entryData.picks || []).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
-    <script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="entryPicksFromServerJson"><%- JSON.stringify(entryData.picks || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>">
         const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
         const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);
         const entryPicksFromServer = JSON.parse(document.getElementById('entryPicksFromServerJson').textContent);
@@ -207,8 +209,8 @@
         document.getElementById('regionTopRight').textContent = regionData[2];
         document.getElementById('regionBottomRight').textContent = regionData[3];
     </script>
-    <script src="/js/editEntry.js"></script>
-    <script src="/js/admin/confirmDestructive.js"></script>
+    <script nonce="<%= cspNonce %>" src="/js/editEntry.js"></script>
+    <script nonce="<%= cspNonce %>" src="/js/admin/confirmDestructive.js"></script>
 
 </body>
 

@@ -4,10 +4,10 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug E2E-V2",
+      "name": "Debug E2E-V4",
       "program": "${workspaceFolder}/node_modules/jest/bin/jest.js",
       "args": [
-        "tests/e2e-v2.live.test.js"
+        "tests/e2e-v4.live.test.js"
       ],
       "env": {
         "LIVE_E2E": "true"

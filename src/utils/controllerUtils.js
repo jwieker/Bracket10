@@ -1,5 +1,5 @@
 import Logger from './logger.js';
-import { ValidationError, ServiceError } from './errors.js';
+import { ValidationError, ServiceError, debugErrorsEnabled } from './errors.js';
 
 const SENSITIVE_KEYS = new Set([
   'email', 'password', 'name', 'team', 'teamName', 'person',
@@ -15,7 +15,15 @@ function redactBody(body) {
   return out;
 }
 
-// Standardized controller response wrapper
+// Standardized controller response wrapper.
+//
+// Mirrors errorMiddleware's error-disclosure policy: the internal `service`
+// name and raw service-error message are exposed only under DEBUG_ERRORS.
+// Previously this catch block returned `service` (and the raw message)
+// unconditionally, silently leaking internal service names in production even
+// though errorMiddleware hid them — this closes that bypass (#168). The
+// non-sensitive `field` on a ValidationError is still returned (matching
+// errorMiddleware) so clients learn which input was invalid.
 export const controllerWrapper = (controllerFunction, operationName = '') => {
     return async (req, res) => {
         const startTime = Date.now();
@@ -48,10 +56,11 @@ export const controllerWrapper = (controllerFunction, operationName = '') => {
             }
 
             if (error instanceof ServiceError) {
+                const verbose = debugErrorsEnabled();
                 return res.status(500).json({
                     error: 'Service Error',
-                    message: error.message,
-                    service: error.service
+                    message: verbose ? error.message : 'A service error occurred.',
+                    ...(verbose && { service: error.service }),
                 });
             }
 
@@ -158,11 +167,15 @@ export function validateConferencePayload({ slug, name, shortName, division }) {
   }
 }
 
-// Pagination helper
-export const getPaginationParams = (req) => {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
-    const offset = (page - 1) * limit;
+// Session promisification helpers
+export const saveSession = (req) => {
+  return new Promise((resolve, reject) => {
+    req.session.save((err) => err ? reject(err) : resolve());
+  });
+};
 
-    return { page, limit, offset };
+export const regenerateSession = (req) => {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((err) => err ? reject(err) : resolve());
+  });
 };

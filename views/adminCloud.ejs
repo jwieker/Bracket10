@@ -211,7 +211,7 @@
         <%- include('partials/scripts') %>
     </div>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         document.addEventListener('DOMContentLoaded', () => {
             const refreshBtn = document.getElementById('refreshBudgetBtn');
             const budgetContent = document.getElementById('budgetContent');
@@ -485,7 +485,7 @@
                     try {
                         const res = await fetch('/admin/cloud/deploy', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                            headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', Accept: 'application/json' },
                         });
                         const data = await res.json();
                         if (!res.ok || !data.ok) {

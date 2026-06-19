@@ -79,22 +79,6 @@ const cache = {
     },
 };
 
-export const cacheMiddleware = (key, ttl = 1800) => (req, res, next) => {
-    const cacheKey = `${key}_${JSON.stringify(req.params)}_${JSON.stringify(req.query)}`;
-    const cachedData = cache.get(cacheKey);
-
-    if (cachedData) {
-        return res.json(cachedData);
-    }
-
-    res.sendResponse = res.json;
-    res.json = (body) => {
-        cache.set(cacheKey, body, ttl);
-        res.sendResponse(body);
-    };
-    next();
-};
-
 export const invalidateCache = (pattern) => {
     const keys = cache.keys();
     keys.forEach(key => {

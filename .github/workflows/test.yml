@@ -14,8 +14,8 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          # Pinned to match Dockerfile (FROM node:24.14.0-alpine).
-          node-version: '24.14.0'
+          # Pinned to match Dockerfile (FROM node:24.16.0-alpine).
+          node-version: '24.16.0'
           cache: 'npm'
 
       # `npm ci` runs with --ignore-scripts implicitly by repo policy

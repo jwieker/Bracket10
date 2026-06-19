@@ -10,9 +10,10 @@ import {
   enrichEntriesWithPotentialRankings,
 } from "./pointsService.js";
 
-import { thisYear, TOURNAMENT_ROUNDS } from "../config/app.js";
+import { thisYear, TOURNAMENT_ROUNDS, isRegistrationOpen } from "../config/app.js";
 import { cacheGet, cacheSet } from "../utils/cacheUtils.js";
 import Logger from "../utils/logger.js";
+import { randomInt } from "node:crypto";
 
 
 export {
@@ -24,10 +25,13 @@ export {
   addPickCount,
   calculateMaxPossiblePoints,
   getAllYearsforGroup,
+  getEntriesForUser,
+  getEntryIdsForUserInGroup,
   getRegionsForYear,
   findEntriesByName,
   addNewGroup,
   getRegionIDForYear,
+  normalizeFirstFourPicks,
   setRepositories,
   buildFullGridData,
   buildGameViewData,
@@ -154,14 +158,20 @@ async function getGroupRegistrationData(groupName, year = thisYear) {
   const ffWinnerSIDs = new Set();
   const combinedFFOptions = [];
 
+  // Pre-build map of allTeams for O(1) lookup
+  const teamMap = new Map();
+  for (const t of allTeams || []) {
+    teamMap.set(t.sID, t);
+  }
+
   for (const ffGame of ffGames) {
     ffTeamSIDs.add(ffGame.team1ID);
     ffTeamSIDs.add(ffGame.team2ID);
 
     if (!ffGame.winner) {
       // Unresolved FF: create combined option using team1's sID as the pick value
-      const team1 = allTeams.find(t => t.sID === ffGame.team1ID);
-      const team2 = allTeams.find(t => t.sID === ffGame.team2ID);
+      const team1 = teamMap.get(ffGame.team1ID);
+      const team2 = teamMap.get(ffGame.team2ID);
       if (team1 && team2) {
         combinedFFOptions.push({
           sID: team1.sID,
@@ -212,16 +222,75 @@ async function getGroupRegistrationData(groupName, year = thisYear) {
   };
 }
 
+/**
+ * Normalizes First Four picks against LIVE game state at write time, so an
+ * entry always stores the value the pick-swap machinery would converge to:
+ *
+ *   game unresolved → team1ID  (the combined "A / B" option's value)
+ *   game resolved   → winner   (regardless of which FF team was submitted)
+ *
+ * This is what makes "whoever you pick, you get the winner" unconditional:
+ * a submission from a stale form (rendered before the game resolved) or
+ * validated against the 300s-cached registration team list still lands on
+ * the correct sID, instead of stranding the entry on an eliminated team.
+ * Reads the round-0 games uncached (≤4 tiny docs) for exactly that reason.
+ *
+ * Non-FF picks pass through untouched. Returns a new array.
+ */
+async function normalizeFirstFourPicks(picksIds, year = thisYear) {
+  const ffGames = await gameRepository.getFirstFourGames(year);
+  if (!ffGames || ffGames.length === 0) return [...picksIds];
+
+  const ffTarget = new Map(); // any FF-team sID → the sID the pick should store
+  for (const game of ffGames) {
+    const team1 = Number(game.team1ID);
+    const team2 = Number(game.team2ID);
+    const target = game.winner != null ? Number(game.winner) : team1;
+    if (Number.isFinite(team1)) ffTarget.set(team1, target);
+    if (Number.isFinite(team2)) ffTarget.set(team2, target);
+  }
+
+  return picksIds.map((pick) => {
+    const id = Number(pick);
+    return ffTarget.has(id) ? ffTarget.get(id) : pick;
+  });
+}
+
+// Entry IDs gate access to an entry in /my-entry. A timestamp-based id
+// (Date.now() + small random) is guessable: its entropy is only the
+// registration window, so an attacker who knows roughly when someone signed
+// up can enumerate it. We instead use a cryptographically-random integer with
+// ~48 bits of entropy — unrelated to time and effectively unguessable. It
+// stays a Number so existing numeric handling (Number(entryId), arithmetic)
+// keeps working.
+const MIN_ENTRY_ID = 100_000_000_000; // 1e11, keeps ids a consistent length
+const MAX_ENTRY_ID = 281_474_976_710_655; // 2**48 - 1 (crypto.randomInt ceiling)
+
+async function generateUniqueEntryId(year) {
+  // Random ids have no built-in uniqueness, so verify the id is free before
+  // using it. Collisions are astronomically unlikely, so a few retries is
+  // plenty; registration is infrequent, so the extra read is cheap.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = randomInt(MIN_ENTRY_ID, MAX_ENTRY_ID);
+    const existing = await gameRepository.getEntryById(candidate, year);
+    if (!existing) return candidate;
+  }
+  throw new Error("Could not generate a unique entry ID after multiple attempts.");
+}
+
 async function createNewEntry(email, teamName, personName, groupName, picks, year = thisYear, maxPoints = 0) {
-  // Use a timestamp + random suffix instead of a DB read-then-write.
-  // This eliminates the cross-year Firestore scan and reduces collision risk
-  // from 1-in-10 (old) to ~1-in-1,000,000 (same-millisecond + same random).
-  const newId = Date.now() + Math.floor(Math.random() * 1000);
+  const newId = await generateUniqueEntryId(year);
   const nowEST = new Date().toISOString();
+
+  // Canonicalize the email on write so it matches the lowercased session email
+  // used for "My Brackets" lookups (getEntriesByEmail) and case-insensitive
+  // ownership checks. Email addresses are case-insensitive in practice, so this
+  // is safe for delivery too.
+  const normalizedEmail = String(email || '').trim().toLowerCase();
 
   await entryRepository.createEntry(
     newId,
-    email,
+    normalizedEmail,
     teamName,
     picks,
     groupName,
@@ -278,6 +347,55 @@ async function getAllYearsforGroup(groupName) {
 }
 
 /**
+ * getEntriesForUser — shapes a signed-in participant's entries (matched by their
+ * verified Google email, across all years) for the "My Brackets" dashboard.
+ * Normalizes the legacy singular `group` field into a `groups` array and derives
+ * an `editable` flag from the shared registration window (isRegistrationOpen()).
+ */
+async function getEntriesForUser(email) {
+  const windowOpen = isRegistrationOpen();
+  const entries = await gameRepository.getEntriesByEmail(email);
+  return entries.map((e) => {
+    const groups = Array.isArray(e.groups)
+      ? e.groups
+      : (e.group ? [e.group] : []);
+    return {
+      id: e.id,
+      year: e.year,
+      person: e.person,
+      teamName: e.teamName,
+      groups,
+      totalPoints: e.totalPoints ?? 0,
+      possPoints: e.possPoints ?? 0,
+      // Editable only for the current tournament year, within the open window.
+      editable: windowOpen && e.year === thisYear,
+      viewGroup: groups[0] || null,
+    };
+  });
+}
+
+/**
+ * getEntryIdsForUserInGroup — entry IDs (as strings) belonging to the signed-in
+ * participant within a specific group + year. Used to highlight "your" rows on
+ * the public results page by matching email on the SERVER and passing only IDs
+ * to the view, so no participant's email is ever exposed on that public page.
+ */
+async function getEntryIdsForUserInGroup(email, groupName, year) {
+  if (!email) return [];
+  const yr = Number(year);
+  // Scope to the requested year — this runs on the (cached) results page for
+  // every signed-in visitor, so avoid scanning all tournament years.
+  const entries = await gameRepository.getEntriesByEmail(email, yr);
+  return entries
+    .filter((e) => {
+      if (e.year !== yr) return false;
+      const groups = Array.isArray(e.groups) ? e.groups : (e.group ? [e.group] : []);
+      return groups.includes(groupName);
+    })
+    .map((e) => String(e.id));
+}
+
+/**
  * Returns the 4 bracket region IDs for a given year.
  * Reads directly from the regions subcollection.
  */
@@ -329,13 +447,19 @@ async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) 
   // For unresolved FF games, build a combined "Team A / Team B" entry to use as the column.
   const ffLoserSIDs = new Set();
   const combinedFFOptions = [];
+
+  const teamMapRawFull = new Map();
+  for (const t of allTeamsRawFull) {
+    teamMapRawFull.set(t.sID, t);
+  }
+
   for (const g of activeGamesForYear) {
     if (g.round === 0) {
       if (g.winner) {
         ffLoserSIDs.add(g.winner === g.team1ID ? g.team2ID : g.team1ID);
       } else {
-        const team1 = allTeamsRawFull.find(t => t.sID === g.team1ID);
-        const team2 = allTeamsRawFull.find(t => t.sID === g.team2ID);
+        const team1 = teamMapRawFull.get(g.team1ID);
+        const team2 = teamMapRawFull.get(g.team2ID);
         if (team1 && team2) {
           combinedFFOptions.push({
             ...team1,
@@ -360,10 +484,18 @@ async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) 
 
   // Map the FF partner sID to the same combined object so picks for either team resolve correctly.
   combinedFFOptions.forEach(opt => teamMapFull.set(opt.ffPartnerSID, opt));
-  const allGroupDetails = (groupTeamsRaw || []).map((team) => ({
-    ...team,
-    pickNames: team.picks.map((pickId) => teamMapFull.get(pickId)).filter(Boolean),
-  }));
+  const allGroupDetails = (groupTeamsRaw || []).map((team) => {
+    const pickNames = team.picks.map((pickId) => teamMapFull.get(pickId)).filter(Boolean);
+    return {
+      ...team,
+      pickNames,
+      // O(1) resolved-sID -> 1-based position within pickNames. Consumed by
+      // fullGrid.ejs to avoid a per-cell linear scan over picks (the render was
+      // O(entries × teams × picks)). Keyed off the resolved pickNames sIDs so FF
+      // partner picks remap to their combined column, matching the old findIndex.
+      pickIndexBySID: new Map(pickNames.map((pick, i) => [pick.sID, i + 1])),
+    };
+  });
 
   let groupData = await addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
   const allTeamsWithPickCounts = await addPickCount(allTeamsRaw, groupData);

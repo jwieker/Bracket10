@@ -6,19 +6,9 @@ import {
   updateEntrywithNewSchools,
   deleteTournament,
 } from "../services/index.js";
-import { fetchScheduledTournamentGames } from "../services/espnService.js";
+import { fetchScheduledTournamentGames, loadTeamMap } from "../services/espnService.js";
 import { gameRepository } from "../repositories/index.js";
 import { controllerWrapper, parseYear, parsePositiveInt } from "../utils/controllerUtils.js";
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-function loadTeamMap() {
-  try {
-    return require("../config/espnTeamMap.json");
-  } catch {
-    return {};
-  }
-}
 
 const regionVerify = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
@@ -105,12 +95,9 @@ const pollEspnScheduled = controllerWrapper(async (req, res) => {
     date2 ? fetchScheduledTournamentGames(date2) : Promise.resolve([]),
   ]);
 
-  const seen = new Set();
-  const allGames = [...games1, ...games2].filter((g) => {
-    if (seen.has(g.espnEventId)) return false;
-    seen.add(g.espnEventId);
-    return true;
-  });
+  const allGames = Array.from(
+    new Map([...games1, ...games2].map((g) => [g.espnEventId, g])).values()
+  );
 
   const resolved = allGames.map((g) => ({
     ...g,

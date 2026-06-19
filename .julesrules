@@ -1,0 +1,17 @@
+# AI Assistant Instructions
+
+Read `docs/GUIDE.md` first. It explains the project and directs you to the right docs per task.
+
+**CRITICAL INSTRUCTION**: If you discover new patterns or make architectural changes, update the relevant `docs/` file. Skip updates for minor changes.
+
+**CRITICAL INSTRUCTION**: Act decisively. When you have a likely cause and a clear fix, make the change. Don't re-examine the same evidence or generate alternatives. Token usage is expensive.
+
+**CRITICAL INSTRUCTION — Cost contract**: Keep the project as close to **$0/month** as possible. Any change adding recurring spend needs a kill switch or explicit funding. Read `CONTRIBUTING.md` § "Cost contract" before adding infrastructure, third-party API calls, or changing scaling parameters.
+
+**TESTING**:
+- Always test with `npm test`. Fix any errors that arise.
+- Use the Logger instead of console.log — vitest tests spy on console output expecting valid JSON strings.
+
+**EFFICIENCY**:
+- Check memory context for helpful project constraints before planning or coding.
+- Keep dependency additions minimal to avoid bloating the application package.

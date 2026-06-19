@@ -69,19 +69,9 @@ export const thisYear = APP_CONFIG.tournament.currentYear;
 export const bracketLaunchDate = new Date("2026-03-15T19:00:00-04:00");
 export const tourneyStartDate = new Date("2026-03-19T12:00:00-04:00");
 
-// First Four window dates (Eastern Time)
-export const firstFourStartDate = new Date("2026-03-17T18:00:00-04:00");
-export const firstFourEndDate = new Date("2026-03-18T23:59:00-04:00");
-
 // Returns true if registration is currently open (or we're in a dev/test environment)
 export function isRegistrationOpen() {
     if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') return true;
     const now = new Date();
     return now > bracketLaunchDate && now <= tourneyStartDate;
-}
-
-export function isFirstFourActive() {
-    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') return false;
-    const now = new Date();
-    return now >= firstFourStartDate && now <= firstFourEndDate;
 }

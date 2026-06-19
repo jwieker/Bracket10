@@ -1,4 +1,4 @@
-import { requireSiteAdmin } from '../src/middleware/adminMiddleware.js';
+import { requireSiteAdmin, requireUser } from '../src/middleware/adminMiddleware.js';
 import { errorMiddleware } from '../src/middleware/errorMiddleware.js';
 import { rateLimit } from '../src/middleware/rateLimit.js';
 import { ValidationError, DatabaseError, ServiceError } from '../src/utils/errors.js';
@@ -21,9 +21,9 @@ import Logger from '../src/utils/logger.js';
 // ---------------------------------------------------------------------------
 
 describe('requireSiteAdmin', () => {
-  function makeReqRes(sessionOverrides = {}) {
-    const req = { session: sessionOverrides };
-    const res = { redirect: vi.fn() };
+  function makeReqRes(sessionOverrides = {}, method = 'GET', accept) {
+    const req = { session: sessionOverrides, method, headers: accept ? { accept } : {} };
+    const res = { redirect: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
     return { req, res, next };
   }
@@ -50,11 +50,75 @@ describe('requireSiteAdmin', () => {
   });
 
   test('redirects when session is undefined', () => {
-    const req = { session: undefined };
-    const res = { redirect: vi.fn() };
-    const next = vi.fn();
+    const { req, res, next } = makeReqRes(null);
+    req.session = undefined;
     requireSiteAdmin(req, res, next);
     expect(res.redirect).toHaveBeenCalledWith('/updates');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 JSON for an unauthenticated POST', () => {
+    const { req, res, next } = makeReqRes({}, 'POST');
+    requireSiteAdmin(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized. Please log in.' });
+    expect(res.redirect).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 JSON for an unauthenticated GET with application/json accept header', () => {
+    const { req, res, next } = makeReqRes({}, 'GET', 'application/json');
+    requireSiteAdmin(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized. Please log in.' });
+    expect(res.redirect).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+});
+
+describe('requireUser', () => {
+  function makeReqRes({ session = {}, method = 'GET', accept } = {}) {
+    const req = { session, method, headers: accept ? { accept } : {} };
+    const res = { redirect: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    return { req, res, next };
+  }
+
+  test('calls next() when userEmail is present', () => {
+    const { req, res, next } = makeReqRes({ session: { userEmail: 'u@g.com' } });
+    requireUser(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.redirect).not.toHaveBeenCalled();
+  });
+
+  test('redirects to / for an unauthenticated GET', () => {
+    const { req, res, next } = makeReqRes({});
+    requireUser(req, res, next);
+    expect(res.redirect).toHaveBeenCalledWith('/');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('redirects to / for an unauthenticated HTML form POST (no JSON blob)', () => {
+    const { req, res, next } = makeReqRes({ method: 'POST', accept: 'text/html' });
+    requireUser(req, res, next);
+    expect(res.redirect).toHaveBeenCalledWith('/');
+    expect(res.json).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 JSON only for explicit JSON clients', () => {
+    const { req, res, next } = makeReqRes({ method: 'POST', accept: 'application/json' });
+    requireUser(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Please sign in.' });
+    expect(res.redirect).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('never inspects siteAdmin — an admin-only session is still rejected', () => {
+    const { req, res, next } = makeReqRes({ session: { siteAdmin: true } });
+    requireUser(req, res, next);
+    expect(res.redirect).toHaveBeenCalledWith('/');
     expect(next).not.toHaveBeenCalled();
   });
 });
@@ -265,6 +329,15 @@ describe('errorMiddleware', () => {
     expect(res.send).toHaveBeenCalledWith('An unexpected error occurred');
   });
 
+  test('returns 500 plain text for ServiceError (HTML client)', () => {
+    const err = new ServiceError('svc fail', 'myService');
+    const req = mockReq(false);
+    const res = makeMockRes();
+    errorMiddleware(err, req, res, vi.fn());
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('A service error occurred.');
+  });
+
   test('returns 500 when the inner response call crashes', () => {
     const err = new ValidationError('bad', 'f');
     // Cause json to throw on first call (simulating a broken response pipeline)
@@ -275,6 +348,17 @@ describe('errorMiddleware', () => {
     };
     const req = mockReq(true);
     errorMiddleware(err, req, res, vi.fn());
+    expect(res.send).toHaveBeenCalledWith('Internal Server Error');
+  });
+
+  test('returns 500 when an error is thrown within errorMiddleware itself', () => {
+    const err = new Error('initial error');
+    // Simulating undefined req.headers to trigger a TypeError in errorMiddleware
+    const req = { method: 'POST', originalUrl: '/test' };
+    const res = makeMockRes();
+    errorMiddleware(err, req, res, vi.fn());
+    expect(Logger.error).toHaveBeenCalledWith('Error in errorMiddleware:', expect.any(TypeError));
+    expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Internal Server Error');
   });
 });

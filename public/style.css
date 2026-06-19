@@ -6,6 +6,14 @@ body {
   margin: 0;
   line-height: 1.5;
   background-image: linear-gradient(135deg, var(--bg-soft) 0%, var(--bg-body) 50%, var(--bg-softer) 100%);
+  /* Cover the page once instead of tiling: on pages taller than the viewport the
+     default repeat would restart the gradient each viewport, and in dark mode the
+     dark-to-light tile seam shows up as horizontal bands of "different blacks".
+     Locking it to the viewport (a cheap CSS gradient, not the raster photo) avoids
+     the seams. min-height keeps it covering the full viewport on short pages. */
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -19,7 +27,7 @@ body::before {
   right: 0;
   bottom: 0;
   z-index: -1;
-  background-image: url("teams.webp");
+  background-image: url("/teams.webp");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -179,12 +187,23 @@ a:hover {
 
 .mode-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
 
-.mode-btn.active {
+.mode-btn.active,
+/* Pre-JS highlight: keyed off the theme attribute that the head script sets
+   before first paint, so the correct button is lit immediately — no flash.
+   :not([data-theme="dark"]) also covers the JS-disabled case (no attribute → light). */
+[data-theme="dark"] #theme-dark,
+html:not([data-theme="dark"]) #theme-light {
   background: rgba(255, 255, 255, 0.92);
   color: var(--primary-color);
 }
 
 .mode-btn:hover:not(.active) { color: rgba(255, 255, 255, 0.95); }
+
+/* Keep the pre-JS (CSS-driven) active button from picking up the hover color. */
+[data-theme="dark"] #theme-dark:hover,
+html:not([data-theme="dark"]) #theme-light:hover {
+  color: var(--primary-color);
+}
 
 /* -- Modal Overrides -- */
 .modal-header.bracket-header {
@@ -830,6 +849,57 @@ a:hover {
 /* Bootstrap link/btn-link in dark mode */
 [data-theme="dark"] .btn-link { color: var(--blue-link); }
 
+/* Google Sign-In button — mirrors the design system .btn-google (light + dark).
+   These are Google's official brand colors, so they stay fixed rather than
+   tokenized; the dark variant swaps to Google's dark-surface treatment. */
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 18px;
+  font-weight: 500;
+  background-color: #ffffff;
+  color: #1f1f1f;
+  border: 1px solid #dadce0;
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+}
+.btn-google:hover {
+  background-color: #f7f8fa;
+  border-color: #d2d5da;
+  color: #1f1f1f;
+  box-shadow: var(--shadow-md);
+}
+.btn-google:focus-visible {
+  border-color: var(--primary-color);
+  color: #1f1f1f;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  outline: none;
+}
+.btn-google.btn-sm { padding: 5px 12px; }
+.btn-google.btn-lg { padding: 11px 22px; }
+.btn-google .g-logo { width: 18px; height: 18px; flex-shrink: 0; }
+.btn-google.btn-sm .g-logo { width: 16px; height: 16px; }
+.btn-google.btn-lg .g-logo { width: 20px; height: 20px; }
+
+[data-theme="dark"] .btn-google {
+  background-color: #131314;
+  color: #e3e3e3;
+  border-color: #5f6368;
+  box-shadow: none;
+}
+[data-theme="dark"] .btn-google:hover {
+  background-color: #1d1e20;
+  border-color: #8e918f;
+  color: #e3e3e3;
+}
+[data-theme="dark"] .btn-google:focus-visible {
+  border-color: var(--primary-color);
+  color: #e3e3e3;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
 /* Bootstrap's `.bg-body-tertiary` resolves --bs-tertiary-bg-rgb (we remap
    --bs-tertiary-bg but not the -rgb variant), so override with our token. */
 .bg-body-tertiary {
@@ -848,6 +918,12 @@ a:hover {
 [data-theme="dark"] .navbar-light .nav-link:hover,
 [data-theme="dark"] .navbar-light .nav-link.active {
   color: var(--primary-color);
+}
+[data-theme="dark"] .navbar-light .navbar-toggler {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+[data-theme="dark"] .navbar-light .navbar-toggler-icon {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255%2C255%2C255%2C0.85%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }
 
 /* Bootstrap's `.alert-warning` (the others share names with our utilities at line ~284) */

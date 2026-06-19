@@ -4,8 +4,8 @@ import {
   viewTournament,
   tournamentUpdate,
   deleteTournamentHandler,
+  pollEspnScheduled,
 } from '../src/controllers/tourneyController.js';
-
 
 vi.mock('../src/services/index.js', () => ({
   prepareRegionVerifyData: vi.fn(),
@@ -20,6 +20,12 @@ vi.mock('../src/repositories/index.js', () => ({
   gameRepository: { getAllTournamentDetails: vi.fn() },
 }));
 
+// Mock module for module-based function that imports JSON
+vi.mock('../src/services/espnService.js', () => ({
+  fetchScheduledTournamentGames: vi.fn(),
+  loadTeamMap: vi.fn(),
+}));
+
 import {
   prepareRegionVerifyData,
   createNewBracket,
@@ -28,6 +34,7 @@ import {
   deleteTournament,
 } from '../src/services/index.js';
 import { gameRepository } from '../src/repositories/index.js';
+import { fetchScheduledTournamentGames, loadTeamMap } from '../src/services/espnService.js';
 
 function mockRes() {
   return {
@@ -117,5 +124,66 @@ describe('deleteTournamentHandler', () => {
     expect(deleteTournament).toHaveBeenCalledWith(2024);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ message: 'Tournament for 2024 deleted successfully' });
+  });
+});
+
+describe('pollEspnScheduled', () => {
+  test('fetches games and resolves sIDs using teamMap', async () => {
+    loadTeamMap.mockReturnValue({
+      'Duke Blue Devils': 264,
+      'Kansas Jayhawks': 2305,
+    });
+    fetchScheduledTournamentGames.mockResolvedValueOnce([
+      { espnEventId: '1', team1DisplayName: 'Duke Blue Devils', team2DisplayName: 'Kansas Jayhawks' },
+    ]);
+
+    const req = {
+      body: { date1: '20240321' },
+      method: 'POST', url: '/pollEspnScheduled',
+    };
+    const res = mockRes();
+
+    await pollEspnScheduled(req, res);
+
+    expect(loadTeamMap).toHaveBeenCalled();
+    expect(fetchScheduledTournamentGames).toHaveBeenCalledWith('20240321');
+    expect(res.json).toHaveBeenCalledWith({
+      games: [
+        {
+          espnEventId: '1',
+          team1DisplayName: 'Duke Blue Devils',
+          team2DisplayName: 'Kansas Jayhawks',
+          team1SID: 264,
+          team2SID: 2305,
+        },
+      ],
+    });
+  });
+
+  test('handles missing team mapping gracefully', async () => {
+    loadTeamMap.mockReturnValue({});
+    fetchScheduledTournamentGames.mockResolvedValueOnce([
+      { espnEventId: '2', team1DisplayName: 'Unknown Team', team2DisplayName: 'Another Unknown' },
+    ]);
+
+    const req = {
+      body: { date1: '20240322' },
+      method: 'POST', url: '/pollEspnScheduled',
+    };
+    const res = mockRes();
+
+    await pollEspnScheduled(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      games: [
+        {
+          espnEventId: '2',
+          team1DisplayName: 'Unknown Team',
+          team2DisplayName: 'Another Unknown',
+          team1SID: null,
+          team2SID: null,
+        },
+      ],
+    });
   });
 });

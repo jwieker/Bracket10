@@ -25,6 +25,10 @@
                     <div class="alert alert-danger" role="alert">
                         We couldn't find an entry matching that ID and email. Double-check both fields and try again.
                     </div>
+                <% } else if (error === 'ratelimited') { %>
+                    <div class="alert alert-warning" role="alert">
+                        Too many verification attempts for this entry. Please try again in about 10 minutes.
+                    </div>
                 <% } %>
 
                 <form action="/my-entry/verify" method="post">

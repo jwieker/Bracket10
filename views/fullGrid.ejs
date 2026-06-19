@@ -4,8 +4,8 @@
 <head>
     <%- include('partials/header') %>
         <!-- sorting -->
-        <script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
         <link rel="stylesheet" href="/table-styles.css">
         <style>
             .team-logo-box {
@@ -100,7 +100,7 @@
                                 </strong></div>
                             <div class="d-flex flex-wrap gap-1">
                                 <% allTeams.forEach(team=> { %>
-                                    <% if (group.pickNames.some(pick=> pick.sID === team.sID)) { %>
+                                    <% if (group.pickIndexBySID.has(team.sID)) { %>
 
                                         <span
                                             class="badge rounded-pill <%= (team.gameStatus && team.gameStatus[team.gameStatus.length - 1]==='L') ? 'bg-danger' : 'bg-success' %>">
@@ -221,18 +221,18 @@
                                         %>
                                         class="eliminated bg-light" title="Eliminated"
                                         <% } %>>
-                                            <% const pickIndex=group.pickNames.findIndex(pick=> pick.sID === team.sID);
+                                            <% const pickPosition = group.pickIndexBySID.get(team.sID);
                                                 %>
-                                                <% if (pickIndex !==-1) { %>
+                                                <% if (pickPosition) { %>
 
                                                     <% if (team.gameStatus && team.gameStatus[team.gameStatus.length -
                                                         1]==='L' ) { %>
                                                         <span class="text-danger fw-bold">
-                                                            <%= pickIndex + 1 %>
+                                                            <%= pickPosition %>
                                                         </span>
                                                         <% } else { %>
                                                             <span class="text-success fw-bold">
-                                                                <%= pickIndex + 1 %>
+                                                                <%= pickPosition %>
                                                             </span>
                                                             <% } %>
 
@@ -251,7 +251,7 @@
         <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
     </div>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         document.addEventListener('DOMContentLoaded', function () {
             // Apply team logo border colors from data attribute (avoids EJS-in-CSS lint error)
             document.querySelectorAll('.team-logo-box[data-border-color]').forEach(el => {
