@@ -293,3 +293,21 @@ describe("getDateStrDaysAgo", () => {
     expect(weekAgo < today).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// loadTeamMap
+// ---------------------------------------------------------------------------
+
+import { loadTeamMap } from "../src/services/espnService.js";
+
+describe("loadTeamMap", () => {
+  test("returns valid team map if file exists", () => {
+    // The actual config file should exist when running these tests in the repo.
+    const teamMap = loadTeamMap();
+    expect(typeof teamMap).toBe('object');
+  });
+
+  // Error-path coverage (createRequire throwing) lives in tests/loadTeamMap.pure.test.js,
+  // which mocks node's `module` at import time — something this suite can't do once
+  // espnService has already been imported above.
+});

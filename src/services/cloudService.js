@@ -79,7 +79,7 @@ async function gcpRequest(url, options = {}) {
  * Programmatically retrieves month-to-date spent cost from standard BigQuery billing export.
  * Returns { configured: boolean, spent: number | null, currency: string, error?: string }
  */
-export async function getMonthToDateSpend() {
+async function getMonthToDateSpend() {
   const exportTable = process.env.GCP_BILLING_EXPORT_TABLE;
   if (!exportTable) {
     return { configured: false, spent: null, currency: "USD" };
@@ -181,7 +181,7 @@ export async function getMonthToDateSpend() {
  * Shape: { configured, days: [{ date: 'YYYY-MM-DD', spent: number }], currency, error? }
  * Days with zero spend are included so the chart shows a continuous date axis.
  */
-export async function getDailySpend() {
+async function getDailySpend() {
   const exportTable = process.env.GCP_BILLING_EXPORT_TABLE;
   if (!exportTable) {
     return { configured: false, days: [], currency: "USD" };
@@ -428,3 +428,6 @@ export function _clearBudgetCacheForTests() {
   budgetCache = { value: null, expiresAt: 0 };
   projectIdPromise = null;
 }
+
+export const _getMonthToDateSpendForTests = getMonthToDateSpend;
+export const _getDailySpendForTests = getDailySpend;

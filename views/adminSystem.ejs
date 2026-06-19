@@ -21,6 +21,7 @@
                     <div class="card-header fw-semibold">Active Year</div>
                     <div class="card-body">
                         <form action="/changeYear" method="post">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                             <div class="input-group">
                                 <input type="text" name="year" class="form-control" value="<%= year %>" aria-label="Year">
                                 <button class="btn btn-outline-secondary" type="submit">Update Year</button>
@@ -36,6 +37,7 @@
                     <div class="card-header fw-semibold">Recalculate Scores</div>
                     <div class="card-body d-flex align-items-center">
                         <form action="/updateTotalPoints" method="post" class="w-100">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                             <input type="hidden" name="year" value="<%= year %>">
                             <button class="btn btn-outline-secondary w-100" type="submit">Update Total Points</button>
                         </form>
@@ -56,6 +58,18 @@
                 </div>
             </div>
 
+            <!-- Clear Google Sign-in Sessions -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Google Sign-in Sessions</div>
+                    <div class="card-body d-flex align-items-center">
+                        <div class="w-100">
+                            <button class="btn btn-outline-danger w-100" type="button" id="clearGoogleSessionsBtn">Clear Google Sign-Ins</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -64,10 +78,11 @@
         <%- include('partials/scripts') %>
     </div>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         document.addEventListener('DOMContentLoaded', () => {
             const clearCacheBtn = document.getElementById('clearCacheBtn');
             const clearCacheForm = document.getElementById('clearCacheForm');
+            const clearGoogleSessionsBtn = document.getElementById('clearGoogleSessionsBtn');
 
             if (clearCacheBtn) {
                 clearCacheBtn.addEventListener('click', async () => {
@@ -78,7 +93,7 @@
                         try {
                             const response = await fetch('/clearCache', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                                 body: JSON.stringify(data)
                             });
                             if (response.ok) {
@@ -91,6 +106,29 @@
                         } catch (error) {
                             console.error("Error clearing cache:", error);
                             alert('An error occurred while clearing the cache.');
+                        }
+                    }
+                });
+            }
+
+            if (clearGoogleSessionsBtn) {
+                clearGoogleSessionsBtn.addEventListener('click', async () => {
+                    if (confirm("Are you sure you want to clear all Google sign-in sessions? You will be signed out.")) {
+                        try {
+                            const response = await fetch('/clearGoogleSessions', {
+                                method: 'POST',
+                                headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' }
+                            });
+                            if (response.ok) {
+                                const responseData = await response.json();
+                                alert(responseData);
+                                window.location.href = '/updates';
+                            } else {
+                                alert('Failed to clear Google sign-in sessions. Server error.');
+                            }
+                        } catch (error) {
+                            console.error("Error clearing Google sessions:", error);
+                            alert('An error occurred while clearing Google sign-in sessions.');
                         }
                     }
                 });

@@ -80,6 +80,7 @@
                     <div class="card-header fw-semibold">New Group</div>
                     <div class="card-body">
                         <form action="/newGroup" method="post">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                             <div class="input-group">
                                 <input type="hidden" name="year" value="<%= year %>">
                                 <input type="text" name="groupName" class="form-control" placeholder="Group name" aria-label="Group name">
@@ -150,7 +151,7 @@
         <%- include('partials/scripts') %>
     </div>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         function esc(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -189,22 +190,64 @@
                         const entries = await response.json();
 
                         const modalBody = document.getElementById('findEntryModalBody');
-                        modalBody.innerHTML = '';
+                        modalBody.replaceChildren();
 
                         if (entries.length === 0) {
-                            modalBody.innerHTML = '<p>No entries found matching that name.</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'No entries found matching that name.';
+                            modalBody.replaceChildren(p);
                         } else {
                             entries.forEach(entry => {
                                 const entryDiv = document.createElement('div');
-                                entryDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
-                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
-                                    <strong>Person:</strong> ${esc(entry.person)}<br>
-                                    <strong>Email:</strong> ${esc(entry.email)}<br>
-                                    <strong>Group:</strong> ${esc((entry.groups || [entry.group]).filter(Boolean).join(', '))}<br>
-                                    <strong>Paid:</strong> ${entry.payByCheck ? 'Paid by Check' : (entry.hasPaid ? 'Yes' : 'No')}${entry.paymentNote ? ' — ' + esc(entry.paymentNote) : ''}<br>
-                                    <strong>Year:</strong> ${esc(String(entry.year ?? year))}
-                                </p><hr>`;
+                                const p = document.createElement('p');
+
+                                const strongId = document.createElement('strong');
+                                strongId.textContent = 'ID: ';
+                                const aId = document.createElement('a');
+                                aId.href = '/viewEntry?year=' + encodeURIComponent(year) + '&entryId=' + encodeURIComponent(String(entry.id)) + '&fromAdmin=true';
+                                aId.textContent = String(entry.id);
+                                p.appendChild(strongId);
+                                p.appendChild(aId);
+                                p.appendChild(document.createElement('br'));
+
+                                const strongTeam = document.createElement('strong');
+                                strongTeam.textContent = 'Team Name: ';
+                                p.appendChild(strongTeam);
+                                p.appendChild(document.createTextNode(entry.teamName));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongPerson = document.createElement('strong');
+                                strongPerson.textContent = 'Person: ';
+                                p.appendChild(strongPerson);
+                                p.appendChild(document.createTextNode(entry.person));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongEmail = document.createElement('strong');
+                                strongEmail.textContent = 'Email: ';
+                                p.appendChild(strongEmail);
+                                p.appendChild(document.createTextNode(entry.email || ''));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongGroup = document.createElement('strong');
+                                strongGroup.textContent = 'Group: ';
+                                p.appendChild(strongGroup);
+                                p.appendChild(document.createTextNode((entry.groups || [entry.group]).filter(Boolean).join(', ')));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongPaid = document.createElement('strong');
+                                strongPaid.textContent = 'Paid: ';
+                                p.appendChild(strongPaid);
+                                const paidText = (entry.payByCheck ? 'Paid by Check' : (entry.hasPaid ? 'Yes' : 'No')) + (entry.paymentNote ? ' — ' + entry.paymentNote : '');
+                                p.appendChild(document.createTextNode(paidText));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongYear = document.createElement('strong');
+                                strongYear.textContent = 'Year: ';
+                                p.appendChild(strongYear);
+                                p.appendChild(document.createTextNode(String(entry.year ?? year)));
+
+                                entryDiv.appendChild(p);
+                                entryDiv.appendChild(document.createElement('hr'));
                                 modalBody.appendChild(entryDiv);
                             });
                         }
@@ -229,19 +272,45 @@
                         const entries = await response.json();
 
                         const modalBody = document.getElementById('unpaidEntriesModalBody');
-                        modalBody.innerHTML = '';
+                        modalBody.replaceChildren();
 
                         if (entries.length === 0) {
-                            modalBody.innerHTML = '<p>Everyone in Bob has paid!</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'Everyone in Bob has paid!';
+                            modalBody.replaceChildren(p);
                         } else {
                             entries.forEach(entry => {
                                 const entryDiv = document.createElement('div');
-                                entryDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewEntry?year=${esc(year)}&entryId=${esc(String(entry.id))}&fromAdmin=true">${esc(String(entry.id))}</a><br>
-                                    <strong>Team Name:</strong> ${esc(entry.teamName)}<br>
-                                    <strong>Person:</strong> ${esc(entry.person)}<br>
-                                    <strong>Group:</strong> ${esc((entry.groups || []).join(', '))}
-                                </p><hr>`;
+                                const p = document.createElement('p');
+
+                                const strongId = document.createElement('strong');
+                                strongId.textContent = 'ID: ';
+                                const aId = document.createElement('a');
+                                aId.href = '/viewEntry?year=' + encodeURIComponent(year) + '&entryId=' + encodeURIComponent(String(entry.id)) + '&fromAdmin=true';
+                                aId.textContent = String(entry.id);
+                                p.appendChild(strongId);
+                                p.appendChild(aId);
+                                p.appendChild(document.createElement('br'));
+
+                                const strongTeam = document.createElement('strong');
+                                strongTeam.textContent = 'Team Name: ';
+                                p.appendChild(strongTeam);
+                                p.appendChild(document.createTextNode(entry.teamName));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongPerson = document.createElement('strong');
+                                strongPerson.textContent = 'Person: ';
+                                p.appendChild(strongPerson);
+                                p.appendChild(document.createTextNode(entry.person));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongGroup = document.createElement('strong');
+                                strongGroup.textContent = 'Group: ';
+                                p.appendChild(strongGroup);
+                                p.appendChild(document.createTextNode((entry.groups || []).join(', ')));
+
+                                entryDiv.appendChild(p);
+                                entryDiv.appendChild(document.createElement('hr'));
                                 modalBody.appendChild(entryDiv);
                             });
                         }
@@ -275,30 +344,60 @@
                         const markSentBtn = document.getElementById('markAllSentBtn');
 
                         if (unsentEmailData.length === 0) {
-                            modalBody.innerHTML = '<p class="text-success mb-0">✓ All entries have been emailed!</p>';
+                            const p = document.createElement('p');
+                            p.className = 'text-success mb-0';
+                            p.textContent = '✓ All entries have been emailed!';
+                            modalBody.replaceChildren(p);
                             copyBtn.style.display = 'none';
                             markSentBtn.style.display = 'none';
                         } else {
-                            let html = `<p class="mb-2"><strong>${unsentEmailData.length}</strong> entr${unsentEmailData.length === 1 ? 'y needs' : 'ies need'} a bracket email:</p>`;
-                            html += '<div class="list-group">';
+                            modalBody.replaceChildren();
+                            const headerP = document.createElement('p');
+                            headerP.className = 'mb-2';
+                            const strongCount = document.createElement('strong');
+                            strongCount.textContent = unsentEmailData.length;
+                            headerP.appendChild(strongCount);
+                            headerP.appendChild(document.createTextNode(` entr${unsentEmailData.length === 1 ? 'y needs' : 'ies need'} a bracket email:`));
+                            modalBody.appendChild(headerP);
+
+                            const listGroup = document.createElement('div');
+                            listGroup.className = 'list-group';
                             unsentEmailData.forEach(entry => {
                                 const picks = (entry.pickNames || []).join(', ') || '—';
-                                html += `
-                                    <div class="list-group-item py-2">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <strong>${esc(entry.person)}</strong>
-                                                <span class="text-muted ms-2">${esc(entry.teamName)}</span>
-                                            </div>
-                                            <small class="text-muted ms-2">${esc(entry.email || '—')}</small>
-                                        </div>
-                                        <div class="mt-1 text-muted" style="font-size:0.82rem;">
-                                            Picks: ${esc(picks)}
-                                        </div>
-                                    </div>`;
+
+                                const itemDiv = document.createElement('div');
+                                itemDiv.className = 'list-group-item py-2';
+
+                                const flexDiv = document.createElement('div');
+                                flexDiv.className = 'd-flex justify-content-between align-items-start';
+
+                                const innerDiv = document.createElement('div');
+                                const strongPerson = document.createElement('strong');
+                                strongPerson.textContent = entry.person;
+                                const spanTeam = document.createElement('span');
+                                spanTeam.className = 'text-muted ms-2';
+                                spanTeam.textContent = entry.teamName;
+                                innerDiv.appendChild(strongPerson);
+                                innerDiv.appendChild(spanTeam);
+
+                                const smallEmail = document.createElement('small');
+                                smallEmail.className = 'text-muted ms-2';
+                                smallEmail.textContent = entry.email || '—';
+
+                                flexDiv.appendChild(innerDiv);
+                                flexDiv.appendChild(smallEmail);
+                                itemDiv.appendChild(flexDiv);
+
+                                const picksDiv = document.createElement('div');
+                                picksDiv.className = 'mt-1 text-muted';
+                                picksDiv.style.fontSize = '0.82rem';
+                                picksDiv.textContent = `Picks: ${picks}`;
+                                itemDiv.appendChild(picksDiv);
+
+                                listGroup.appendChild(itemDiv);
                             });
-                            html += '</div>';
-                            modalBody.innerHTML = html;
+                            modalBody.appendChild(listGroup);
+
                             copyBtn.style.display = 'inline-block';
                             markSentBtn.style.display = 'inline-block';
                         }
@@ -339,14 +438,22 @@
                     try {
                         const response = await fetch('/admin/mark-emails-sent', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                             body: JSON.stringify({ year: Number(year), entryIds })
                         });
                         if (!response.ok) throw new Error('Failed to mark emails sent.');
                         const result = await response.json();
 
-                        document.getElementById('bracketEmailsModalBody').innerHTML =
-                            `<p class="text-success mb-0">✓ Marked <strong>${result.data.marked}</strong> entr${result.data.marked === 1 ? 'y' : 'ies'} as sent.</p>`;
+                        const modalBody = document.getElementById('bracketEmailsModalBody');
+                        modalBody.replaceChildren();
+                        const p = document.createElement('p');
+                        p.className = 'text-success mb-0';
+                        p.textContent = '✓ Marked ';
+                        const strong = document.createElement('strong');
+                        strong.textContent = result.data.marked;
+                        p.appendChild(strong);
+                        p.appendChild(document.createTextNode(` entr${result.data.marked === 1 ? 'y' : 'ies'} as sent.`));
+                        modalBody.appendChild(p);
                         copyEmailDataBtn.style.display = 'none';
                         markAllSentBtn.style.display = 'none';
                         unsentEmailData = [];

@@ -18,7 +18,7 @@
             <!-- ── Add Team Panel ────────────────────────────────────────────── -->
             <div class="card my-3 border-secondary" id="addTeamPanel">
                 <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer"
-                    onclick="toggleAddTeam()">
+                    data-act="toggleAddTeam">
                     <span class="fw-bold">➕ Add a New Team</span>
                     <span id="addTeamChevron">▼</span>
                 </div>
@@ -46,7 +46,7 @@
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <button class="btn btn-success w-100" onclick="submitNewTeam()">Add Team</button>
+                            <button class="btn btn-success w-100" data-act="submitNewTeam">Add Team</button>
                         </div>
                     </div>
                     <div id="addTeamStatus" class="mt-2"></div>
@@ -61,7 +61,7 @@
                 <div class="card-body">
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" id="includeFirstFour"
-                            onchange="toggleFirstFour()">
+                            data-action-change="toggleFirstFour">
                         <label class="form-check-label fw-bold" for="includeFirstFour">
                             Include First Four games
                         </label>
@@ -72,7 +72,7 @@
                             <div class="col-auto">
                                 <label class="form-label mb-0">Number of games</label>
                                 <input type="number" id="ffGameCount" class="form-control" style="width:80px"
-                                    value="4" min="1" max="8" onchange="updateFFGameRows()">
+                                    value="4" min="1" max="8" data-action-change="updateFFGameRows">
                             </div>
                             <div class="col-auto">
                                 <label class="form-label mb-0">Date 1 (YYYYMMDD)</label>
@@ -83,7 +83,7 @@
                                 <input type="text" id="ffDate2" class="form-control" style="width:120px" placeholder="20260318">
                             </div>
                             <div class="col-auto align-self-end">
-                                <button type="button" class="btn btn-outline-primary" onclick="pollEspnFF()">
+                                <button type="button" class="btn btn-outline-primary" data-act="pollEspnFF">
                                     Poll ESPN
                                 </button>
                             </div>
@@ -91,6 +91,49 @@
                                 <span id="ffPollStatus" class="text-muted small"></span>
                             </div>
                         </div>
+
+                        <template id="ffRowTpl">
+                            <div class="ff-game-row border rounded p-3 mb-3">
+                                <div class="fw-bold mb-2 js-ff-title"></div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-12 col-md-5">
+                                        <label class="form-label mb-1">Team 1</label>
+                                        <div class="search-dropdown">
+                                            <input type="text" class="search-input" placeholder="Search…" data-filter-dropdown>
+                                            <select class="ff-team-select form-select form-select-sm" data-slot="1">
+                                                <option value="" disabled selected hidden>— Select Team —</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-5">
+                                        <label class="form-label mb-1">Team 2</label>
+                                        <div class="search-dropdown">
+                                            <input type="text" class="search-input" placeholder="Search…" data-filter-dropdown>
+                                            <select class="ff-team-select form-select form-select-sm" data-slot="2">
+                                                <option value="" disabled selected hidden>— Select Team —</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 col-md-2">
+                                        <label class="form-label mb-1">Seed</label>
+                                        <input type="number" class="form-control form-control-sm ff-seed-input" min="1" max="16" placeholder="11">
+                                    </div>
+                                </div>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-12 col-md-7">
+                                        <label class="form-label mb-1">Feeds into R1 Game</label>
+                                        <select class="form-select form-select-sm ff-nextgame-select"></select>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label mb-1">Spot</label>
+                                        <select class="form-select form-select-sm ff-nextspot-select">
+                                            <option value="1">1 (Team 1 slot)</option>
+                                            <option value="2">2 (Team 2 slot)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
 
                         <div id="ffGameRows"></div>
                     </div>
@@ -136,7 +179,7 @@
                             <input type="text" id="r1Date2" class="form-control" style="width:120px" placeholder="20260321">
                         </div>
                         <div class="col-auto align-self-end">
-                            <button type="button" id="r1PollBtn" class="btn btn-outline-primary" disabled onclick="pollR1ESPN()">
+                            <button type="button" id="r1PollBtn" class="btn btn-outline-primary" disabled data-act="pollR1ESPN">
                                 Poll ESPN
                             </button>
                         </div>
@@ -170,7 +213,7 @@
                                 <div class="col-10">
                                     <div class="search-dropdown">
                                         <input type="text" class="search-input" placeholder="Search…"
-                                            aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                            aria-label="Search teams" data-filter-dropdown>
                                         <select class="r1-team-select form-select form-select-sm"
                                             data-region-slot="<%= regIdx %>"
                                             data-game-id="<%= gameId %>"
@@ -195,7 +238,7 @@
                                 <div class="col-10">
                                     <div class="search-dropdown">
                                         <input type="text" class="search-input" placeholder="Search…"
-                                            aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                            aria-label="Search teams" data-filter-dropdown>
                                         <select class="r1-team-select form-select form-select-sm"
                                             data-region-slot="<%= regIdx %>"
                                             data-game-id="<%= gameId %>"
@@ -223,7 +266,7 @@
             <!-- ══ END ROUND 1 GAMES ══════════════════════════════════════════ -->
 
             <div class="container pb-5 text-center">
-                <button type="button" class="btn btn-primary btn-lg" onclick="submitTournament()">
+                <button type="button" class="btn btn-primary btn-lg" data-act="submitTournament">
                     Create Tournament
                 </button>
                 <div id="submitStatus" class="mt-2"></div>
@@ -237,15 +280,14 @@
         <%- include('partials/scripts') %>
     </div>
 
-    <script>
-        function esc(str) {
-            if (str === null || str === undefined) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
+    <script nonce="<%= cspNonce %>">
+        function setStatus(el, text, type = 'danger') {
+            if (!el) return;
+            el.replaceChildren();
+            const span = document.createElement('span');
+            span.className = `text-${type}`;
+            span.textContent = text;
+            el.appendChild(span);
         }
 
         // ── Constants ──────────────────────────────────────────────────────────
@@ -281,24 +323,24 @@
             const statusEl = document.getElementById('addTeamStatus');
 
             if (!name) {
-                statusEl.innerHTML = '<span class="text-danger">⚠ Team name is required.</span>';
+                setStatus(statusEl, '⚠ Team name is required.');
                 return;
             }
-            statusEl.innerHTML = '<span class="text-muted">Saving…</span>';
+            setStatus(statusEl, 'Saving…', 'muted');
 
             try {
                 const resp = await fetch('/api/addTeam', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({ name, mascot, nameNick, confID: confID || null }),
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
-                    statusEl.innerHTML = `<span class="text-danger">⚠ ${esc(err.error || 'Failed to add team.')}</span>`;
+                    setStatus(statusEl, `⚠ ${err.error || 'Failed to add team.'}`);
                     return;
                 }
                 const team = await resp.json();
-                statusEl.innerHTML = `<span class="text-success">✓ Added: ${esc(team.name)} ${esc(team.mascot || '')} (sID: ${esc(team.sid)})</span>`;
+                setStatus(statusEl, `✓ Added: ${team.name} ${team.mascot || ''} (sID: ${team.sid})`, 'success');
                 addTeamToAllDropdowns(team);
                 const listEl = document.getElementById('addedTeamsList');
                 const badge = document.createElement('span');
@@ -310,7 +352,7 @@
                 });
                 document.getElementById('newTeamName').focus();
             } catch (e) {
-                statusEl.innerHTML = `<span class="text-danger">⚠ Network error: ${esc(e.message)}</span>`;
+                setStatus(statusEl, `⚠ Network error: ${e.message}`);
             }
         }
 
@@ -319,6 +361,9 @@
                 const label = `${team.name} ${team.mascot || ''} sID: ${team.sid}`;
                 select.add(new Option(label, String(team.sid)));
             });
+            // Invalidate the cached option list so FF rows rebuilt later
+            // (e.g. on game-count change) include the newly added team.
+            _teamOptionsCache = null;
         }
 
         // ── Search filter ──────────────────────────────────────────────────────
@@ -363,7 +408,7 @@
             try {
                 const resp = await fetch('/admin/poll-espn-scheduled', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json' },
                     body: JSON.stringify({ date1, date2: date2 || null }),
                 });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -460,59 +505,23 @@
                 };
             });
 
-            container.innerHTML = '';
+            container.replaceChildren();
             for (let i = 0; i < count; i++) {
                 container.appendChild(buildFFRow(i, existing[i] || {}));
             }
         }
 
         function buildFFRow(idx, saved = {}) {
-            const div = document.createElement('div');
-            div.className = 'ff-game-row border rounded p-3 mb-3';
-            div.innerHTML = `
-                <div class="fw-bold mb-2">FF Game ${idx + 1}</div>
-                <div class="row g-2 mb-2">
-                    <div class="col-12 col-md-5">
-                        <label class="form-label mb-1">Team 1</label>
-                        <div class="search-dropdown">
-                            <input type="text" class="search-input" placeholder="Search…" onkeyup="filterDropdown(this)">
-                            <select class="ff-team-select form-select form-select-sm" data-idx="${idx}" data-slot="1">
-                                <option value="" disabled selected hidden>— Select Team —</option>
-                                ${allTeamOptions()}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-5">
-                        <label class="form-label mb-1">Team 2</label>
-                        <div class="search-dropdown">
-                            <input type="text" class="search-input" placeholder="Search…" onkeyup="filterDropdown(this)">
-                            <select class="ff-team-select form-select form-select-sm" data-idx="${idx}" data-slot="2">
-                                <option value="" disabled selected hidden>— Select Team —</option>
-                                ${allTeamOptions()}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-4 col-md-2">
-                        <label class="form-label mb-1">Seed</label>
-                        <input type="number" class="form-control form-control-sm ff-seed-input" min="1" max="16" placeholder="11" value="${saved.seed || ''}">
-                    </div>
-                </div>
-                <div class="row g-2 align-items-end">
-                    <div class="col-12 col-md-7">
-                        <label class="form-label mb-1">Feeds into R1 Game</label>
-                        <select class="form-select form-select-sm ff-nextgame-select">
-                            ${buildNextGameOptions()}
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-3">
-                        <label class="form-label mb-1">Spot</label>
-                        <select class="form-select form-select-sm ff-nextspot-select">
-                            <option value="1">1 (Team 1 slot)</option>
-                            <option value="2">2 (Team 2 slot)</option>
-                        </select>
-                    </div>
-                </div>
-            `;
+            const div = document.getElementById('ffRowTpl').content.firstElementChild.cloneNode(true);
+            div.querySelector('.js-ff-title').textContent = `FF Game ${idx + 1}`;
+
+            div.querySelectorAll('.ff-team-select').forEach(select => {
+                select.dataset.idx = idx;
+                select.append(...teamOptionEls().map(o => o.cloneNode(true)));
+            });
+            div.querySelector('.ff-nextgame-select').append(...buildNextGameOptions());
+
+            if (saved.seed) div.querySelector('.ff-seed-input').value = saved.seed;
 
             // Restore saved values
             if (saved.t1) div.querySelector('.ff-team-select[data-slot="1"]').value = saved.t1;
@@ -523,31 +532,38 @@
             return div;
         }
 
-        // Cached team option HTML built once from server-rendered data
+        // Cached team <option> elements built once from server-rendered data
         let _teamOptionsCache = null;
-        function allTeamOptions() {
+        function teamOptionEls() {
             if (_teamOptionsCache) return _teamOptionsCache;
-            const opts = [];
-            document.querySelectorAll('.r1-team-select').item(0)?.querySelectorAll('option:not([disabled])').forEach(o => {
-                opts.push(`<option value="${esc(o.value)}">${esc(o.textContent)}</option>`);
+            _teamOptionsCache = [];
+            document.querySelector('.r1-team-select')?.querySelectorAll('option:not([disabled])').forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.value;
+                opt.textContent = o.textContent;
+                _teamOptionsCache.push(opt);
             });
-            _teamOptionsCache = opts.join('');
             return _teamOptionsCache;
         }
 
         function buildNextGameOptions() {
             const groups = [];
             R1_GAME_RANGES.forEach((range, slot) => {
-                const label = regionNames[slot] || `Region #${slot + 1}`;
-                const opts = [];
+                const optgroup = document.createElement('optgroup');
+                optgroup.className = 'ff-nextgame-optgroup';
+                optgroup.dataset.slot = slot;
+                optgroup.label = regionNames[slot] || `Region #${slot + 1}`;
                 for (let gid = range.start; gid <= range.end; gid++) {
                     const matchupIdx = gid - range.start;
                     const [s1, s2] = R1_SEED_MATCHUPS[matchupIdx];
-                    opts.push(`<option value="${gid}">Game ${gid} (${s1} vs ${s2})</option>`);
+                    const opt = document.createElement('option');
+                    opt.value = gid;
+                    opt.textContent = `Game ${gid} (${s1} vs ${s2})`;
+                    optgroup.appendChild(opt);
                 }
-                groups.push(`<optgroup class="ff-nextgame-optgroup" data-slot="${slot}" label="${label}">${opts.join('')}</optgroup>`);
+                groups.push(optgroup);
             });
-            return groups.join('');
+            return groups;
         }
 
         // ── ESPN Poll for FF ───────────────────────────────────────────────────
@@ -565,7 +581,7 @@
             try {
                 const resp = await fetch('/admin/poll-espn-scheduled', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json' },
                     body: JSON.stringify({ date1, date2: date2 || null }),
                 });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -616,7 +632,7 @@
                 return v ? Number(v) : null;
             });
             if (regions.some(r => !r)) {
-                statusEl.innerHTML = '<span class="text-danger">⚠ Please select all 4 regions.</span>';
+                setStatus(statusEl, '⚠ Please select all 4 regions.');
                 return;
             }
 
@@ -635,7 +651,7 @@
                 games.push(`${regions[regionSlot]}-${gameId}-${seed}-${select.value}`);
             });
             if (missingR1) {
-                statusEl.innerHTML = '<span class="text-danger">⚠ Please select all Round 1 teams (or mark as First Four slot).</span>';
+                setStatus(statusEl, '⚠ Please select all Round 1 teams (or mark as First Four slot).');
                 return;
             }
 
@@ -659,25 +675,25 @@
                     body[`ff_nextGameSpot_${i}`] = Number(row.querySelector('.ff-nextspot-select').value);
                 });
                 if (missingFF) {
-                    statusEl.innerHTML = '<span class="text-danger">⚠ Please select both teams for all First Four games.</span>';
+                    setStatus(statusEl, '⚠ Please select both teams for all First Four games.');
                     return;
                 }
             }
 
-            statusEl.innerHTML = '<span class="text-muted">Creating tournament…</span>';
+            setStatus(statusEl, 'Creating tournament…', 'muted');
 
             try {
                 const resp = await fetch('/createTournament', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-                statusEl.innerHTML = '<span class="text-success">✓ Tournament created! Redirecting…</span>';
+                setStatus(statusEl, '✓ Tournament created! Redirecting…', 'success');
                 setTimeout(() => { window.location.href = '/admin'; }, 1500);
             } catch (err) {
-                statusEl.innerHTML = `<span class="text-danger">⚠ Error: ${esc(err.message)}</span>`;
+                setStatus(statusEl, `⚠ Error: ${err.message}`);
             }
         }
 

@@ -10,11 +10,12 @@ A clean, modern interface for an NCAA basketball tournament bracket application.
 
 ## 0. Theming Model
 
-The entire UI is driven by CSS custom properties ("design tokens") defined in `public/tokens.css`. The theme is toggled by setting `data-theme="dark"` on the `<html>` element — a tiny inline script in `views/partials/header.ejs` reads `localStorage.theme` before first paint to avoid a flash of the wrong theme. A moon/sun toggle button in the navbar persists the choice.
+The entire UI is driven by CSS custom properties ("design tokens") defined in `public/tokens.css`. The theme is toggled by setting `data-theme="dark"` on the `<html>` element — a tiny inline script in `views/partials/header.ejs` reads `localStorage.theme` (falling back to the browser's `prefers-color-scheme: dark` preference) before first paint to avoid a flash of the wrong theme. A moon/sun toggle button in the navbar persists the choice.
 
 - **Single source of truth**: to restyle the app, edit only `public/tokens.css`.
 - **Light theme**: declared on `:root`.
 - **Dark theme**: declared on `[data-theme="dark"]` and overrides the same variable names.
+- **Flicker-free switcher**: the switcher buttons get their active styling from CSS selectors keyed on `data-theme` (`[data-theme="dark"] #theme-dark`, `html:not([data-theme="dark"]) #theme-light`), so the correct button paints lit before JavaScript runs. The initial paint only persists to `localStorage` on an explicit click, so visitors who never choose keep following their OS preference.
 - Alert, badge, and surface pairs (bg + fg + border) are declared together so contrast stays balanced across themes.
 
 ### Bootstrap variable remap
@@ -33,9 +34,10 @@ Bootstrap 5.3 exposes its own CSS custom properties (`--bs-body-color`, `--bs-bo
 ### Theming — Quick Reference
 
 - All colors, spacing, radius, shadows, and font stacks live in `public/tokens.css`. **Never hardcode colors** in a view or CSS file — always reference `var(--token-name)`.
-- Theme is toggled via `data-theme="dark"` on `<html>`. An inline script in `views/partials/header.ejs` reads `localStorage.theme` before first paint; the navbar sun/moon button persists the user's choice.
+- Theme is toggled via `data-theme="dark"` on `<html>`. An inline script in `views/partials/header.ejs` reads `localStorage.theme` (or the system `prefers-color-scheme` fallback) before first paint; the navbar sun/moon button persists the user's choice.
+- Active states of the switcher buttons are styled in CSS using `[data-theme]` selectors to prevent render flicker on first paint.
 - Bootstrap CDN **must** load before our custom stylesheets (it does in `header.ejs`). Our tokens remap Bootstrap's internal vars (`--bs-body-color`, `--bs-secondary-color`, `--bs-border-color`, etc.) so built-in utilities stay theme-aware.
-- When changing any precached CSS, **bump `CACHE_NAME` in `public/service-worker.js`** (currently `bracket10-v8`) so clients fetch the new file.
+- When changing any precached CSS, **bump `CACHE_NAME` in `public/service-worker.js`** (currently `bracket10-v17`) so clients fetch the new file.
 - Typography utilities (`t-display`, `t-h1…t-h3`, `t-body`, `t-small`, `t-label`, `t-mono`) live in `style.css` and mirror `Design System.html`. Prefer these over ad-hoc `fs-*` + `fw-*` combinations.
 
 ## 1. Color Palette
@@ -156,6 +158,7 @@ Dark theme redefines the same variables with higher alphas so shadows remain vis
 ### Buttons
 - `.btn-primary` — solid `--primary-color`, weight 600, `--radius-md`, hover → `--primary-dark`.
 - `.btn-success` / `.btn-danger` / `.btn-warning` / `.btn-info` / `.btn-secondary` are all tokenized with matching outline variants. Dark-mode outline buttons fill on hover with their token color.
+- `.btn-google` — the "Sign in with Google" button used on the landing page (`views/partials/userSignIn.ejs`) and admin login (`views/adminLogin.ejs`). Pair it with Bootstrap's base `.btn` and give the SVG mark the `g-logo` class (auto-sizes 16/18/20px for `.btn-sm`/default/`.btn-lg`). **Intentional token exception:** this is the one component that hardcodes hex colors rather than using `var(--token-name)` — Google's brand guidelines require their exact light (`#ffffff` fill, `#1f1f1f` text, `#dadce0` border) and dark (`#131314` fill, `#e3e3e3` text, `#5f6368` border) surface treatments. The light/dark split is handled by a `[data-theme="dark"] .btn-google` override; focus rings still use `--primary-soft` to stay consistent with the rest of the app.
 
 ### Cards
 - `.card`: `--bg-card`, `--border-color`, `--radius-lg`, `--shadow-sm`. Subtle hover via `transform 0.2s, box-shadow 0.2s`.
@@ -238,7 +241,7 @@ Bootstrap 5.3.3 is loaded via CDN **before** our stylesheets so our tokens and u
 
 - Install banner (`.fixed-bottom`) on mobile plus an iOS share-sheet instructions modal (`#iosPwaModal`).
 - Service worker registered in `views/partials/header.ejs`.
-- `public/service-worker.js` caches `tokens.css`, `style.css`, `bracket.css`, `playground.css`, and `table-styles.css` at install. **Bump `CACHE_NAME` (currently `bracket10-v6`) whenever you change any cached static asset** so clients fetch the new CSS.
+- `public/service-worker.js` caches `tokens.css`, `style.css`, `bracket.css`, `playground.css`, and `table-styles.css` at install. **Bump `CACHE_NAME` (currently `bracket10-v17`) whenever you change any cached static asset** so clients fetch the new CSS.
 
 ## 9. Accessibility
 
@@ -374,6 +377,8 @@ The `.pick-wl-chips` container is **fixed width (152px)** with `flex-wrap: nowra
 
 The endpoint replaced `exceljs` (22 MB) with a plain CSV response using RFC 4180 quoting. No external dependencies — cells containing commas, double-quotes, or newlines are wrapped in double-quotes with internal quotes escaped as `""`.
 
+Cells beginning with `=`, `+`, `-`, `@`, TAB, or CR are prefixed with a single quote **before** quote-wrapping, so attacker-controlled entrant/team names can't smuggle spreadsheet formulas into the export (CSV/DDE injection — see `docs/architecture/security.md` § CSV Export Formula-Injection Defense).
+
 The W/L row (`wlRow`) must have the same number of leading empty strings as fixed columns in the `headers` array. Currently **8 fixed columns** (Rank, Entry, Team, Points, Teams Remaining, Advanced, Best Rank, Max Score), so `wlRow` starts with 8 empty strings before the team game-status values.
 
 ```js
@@ -387,4 +392,3 @@ The file downloads as `fullgrid-<groupName>-<year>.csv` and opens natively in Ex
 ## Related Files
 
 - `docs/architecture/security.md` — CSP rules that affect inline event handlers and `<script>` tags
-- `docs/private/development/contributing.md` — UI & styling guidelines (SVG icons, Bootstrap tooltips, responsive navbars)

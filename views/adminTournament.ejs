@@ -24,6 +24,7 @@
                             <div class="d-flex gap-2">
                                 <% if (typeof isNewTournament !=='undefined' && isNewTournament) { %>
                                     <form action="/setupNewTourney" method="post" class="d-inline">
+                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                                         <input type="hidden" name="year" value="<%= year %>">
                                         <button class="btn btn-primary" type="submit">Create <%= year %> Bracket</button>
                                     </form>
@@ -31,7 +32,7 @@
                             </div>
                             <div>
                                 <button id="pwaRefreshBtn" class="btn btn-outline-secondary d-none"
-                                    onclick="location.reload()" title="Refresh page">
+                                    data-act="reloadPage" title="Refresh page">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                                         fill="currentColor" viewBox="0 0 16 16">
                                         <path fill-rule="evenodd"
@@ -41,7 +42,7 @@
                                     </svg>
                                     Refresh
                                 </button>
-                                <script>
+                                <script nonce="<%= cspNonce %>">
                                     if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
                                         document.getElementById('pwaRefreshBtn').classList.remove('d-none');
                                     }
@@ -52,6 +53,7 @@
                         <input type="hidden" id="currentYearInput" value="<%= year %>">
                         <div class="d-flex gap-2 mb-3 justify-content-center">
                             <form action="/editTournament" method="post" id="editTournamentForm" class="d-inline">
+                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                                 <input type="hidden" name="year" value="<%= year %>">
                                 <button class="btn btn-outline-secondary" type="submit" <%= hasRound1Winner ? 'disabled' : '' %>>Edit <%= year %> Tournament</button>
                             </form>
@@ -166,6 +168,12 @@
                                                         class="btn btn-primary submit-game-result">Submit</button>
                                                     <button
                                                         class="btn btn-primary undo-game-result">Undo</button>
+                                                    <% if (group.manualHold && !group.winner) { %>
+                                                        <button class="btn btn-warning release-hold-btn"
+                                                            data-game-id="<%= group.gameID %>"
+                                                            title="Undone game — the ESPN poll is skipping it. Release to let the poll resolve it again.">
+                                                            Release Hold</button>
+                                                    <% } %>
                                                 </td>
                                             </tr>
                                             <% }); %>
@@ -234,6 +242,11 @@
                                                 <button class="btn btn-warning w-100 undo-game-result">Undo
                                                     Winner</button>
                                             </div>
+                                            <% if (group.manualHold && !group.winner) { %>
+                                                <button class="btn btn-warning w-100 mt-2 release-hold-btn"
+                                                    data-game-id="<%= group.gameID %>">
+                                                    Release Poll Hold</button>
+                                            <% } %>
                                         </div>
                                     </div>
                                 </div>
@@ -248,17 +261,7 @@
                     <%- include('partials/scripts') %>
             </div>
 
-            <script>
-                function esc(str) {
-                    if (str === null || str === undefined) return '';
-                    return String(str)
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#39;');
-                }
-
+            <script nonce="<%= cspNonce %>">
                 document.addEventListener('DOMContentLoaded', () => {
                     const currentYear = document.getElementById('currentYearInput').value;
 
@@ -277,6 +280,12 @@
                         espnPollBtn.addEventListener('click', async () => {
                             const resultsWrapper = document.getElementById('espnPollResults');
                             const resultsInner = document.getElementById('espnPollResultsInner');
+                            const makeSpan = (cls, text) => {
+                                const s = document.createElement('span');
+                                s.className = cls;
+                                s.textContent = text;
+                                return s;
+                            };
                             espnPollBtn.disabled = true;
                             espnPollBtn.textContent = 'Polling...';
                             resultsWrapper.style.display = 'none';
@@ -287,43 +296,56 @@
                                 const body = dateVal ? JSON.stringify({ dateStr: dateVal }) : null;
                                 const response = await fetch('/admin/trigger-espn-poll', {
                                     method: 'POST',
-                                    headers: { 'Accept': 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+                                    headers: { 'x-csrf-token': '<%= csrfToken %>', 'Accept': 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
                                     ...(body ? { body } : {}),
                                 });
                                 const data = await response.json();
 
-                                let html = '';
+                                const nodes = [];
                                 if (!response.ok) {
-                                    html = `<span class="text-danger">Error: ${esc(data.error || 'Unknown error')}</span>`;
+                                    nodes.push(makeSpan('text-danger', `Error: ${data.error || 'Unknown error'}`));
                                 } else if (data.games.length === 0) {
-                                    html = '<span class="text-muted">No new completed games found.</span>';
+                                    nodes.push(makeSpan('text-muted', 'No new completed games found.'));
                                 } else {
                                     const roundLabel = (r) => ({0: 'FF', 1: 'R1', 2: 'R2', 3: 'Sweet 16', 4: 'Elite 8', 5: 'Final Four', 6: 'Championship'}[r] ?? `R${r}`);
-                                    html = '<strong>ESPN says these games are done:</strong><ul class="mb-1 mt-1 list-unstyled">';
-                                    data.games.forEach((g, i) => {
-                                        html += `<li class="d-flex align-items-center gap-2 mb-1">
-                                    <span>${esc(roundLabel(g.round))} · Game ${esc(g.gameID)}: <strong>${esc(g.winnerDisplayName)}</strong> wins</span>
-                                    <button class="btn btn-sm btn-success espn-submit-btn"
-                                        data-game-id="${esc(g.gameID)}"
-                                        data-round="${esc(g.round)}"
-                                        data-winner-id="${esc(g.winnerSID)}"
-                                        data-winner-name="${esc(g.winnerDisplayName)}"
-                                        data-team1-id="${esc(g.team1ID)}"
-                                        data-team2-id="${esc(g.team2ID)}"
-                                        data-next-game-id="${esc(g.nextGameID ?? '')}"
-                                        data-next-game-spot="${esc(g.nextGameSpot ?? '')}">Submit</button>
-                                </li>`;
+                                    const heading = document.createElement('strong');
+                                    heading.textContent = 'ESPN says these games are done:';
+                                    const ul = document.createElement('ul');
+                                    ul.className = 'mb-1 mt-1 list-unstyled';
+                                    data.games.forEach(g => {
+                                        const li = document.createElement('li');
+                                        li.className = 'd-flex align-items-center gap-2 mb-1';
+
+                                        const span = document.createElement('span');
+                                        const winner = document.createElement('strong');
+                                        winner.textContent = g.winnerDisplayName ?? '';
+                                        span.append(`${roundLabel(g.round)} · Game ${g.gameID}: `, winner, ' wins');
+
+                                        const btn = document.createElement('button');
+                                        btn.className = 'btn btn-sm btn-success espn-submit-btn';
+                                        btn.textContent = 'Submit';
+                                        btn.dataset.gameId = g.gameID;
+                                        btn.dataset.round = g.round;
+                                        btn.dataset.winnerId = g.winnerSID;
+                                        btn.dataset.winnerName = g.winnerDisplayName ?? '';
+                                        btn.dataset.team1Id = g.team1ID;
+                                        btn.dataset.team2Id = g.team2ID;
+                                        btn.dataset.nextGameId = g.nextGameID ?? '';
+                                        btn.dataset.nextGameSpot = g.nextGameSpot ?? '';
+
+                                        li.append(span, btn);
+                                        ul.appendChild(li);
                                     });
-                                    html += '</ul>';
+                                    nodes.push(heading, ul);
                                 }
                                 if (data.unmapped && data.unmapped.length > 0) {
-                                    html += `<span class="text-warning">Unmapped teams (update espnTeamMap.json): ${data.unmapped.map(esc).join(', ')}</span>`;
+                                    nodes.push(makeSpan('text-warning', `Unmapped teams (update espnTeamMap.json): ${data.unmapped.join(', ')}`));
                                 }
 
-                                resultsInner.innerHTML = html;
+                                resultsInner.replaceChildren(...nodes);
                                 resultsWrapper.style.display = 'block';
                             } catch (error) {
-                                resultsInner.innerHTML = '<span class="text-danger">Failed to reach server.</span>';
+                                resultsInner.replaceChildren(makeSpan('text-danger', 'Failed to reach server.'));
                                 resultsWrapper.style.display = 'block';
                             } finally {
                                 espnPollBtn.disabled = false;
@@ -354,7 +376,7 @@
                         try {
                             const response = await fetch('/updateWinner', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                                 body: JSON.stringify(gameData)
                             });
                             if (response.ok) {
@@ -479,7 +501,7 @@
                                 try {
                                     const response = await fetch('/updateWinner', {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                        headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                                         body: JSON.stringify(gameData)
                                     });
                                     if (response.ok) {
@@ -528,7 +550,7 @@
                                 try {
                                     const response = await fetch('/undoGame', {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                        headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
                                         body: JSON.stringify(gameData)
                                     });
                                     if (response.ok) {
@@ -544,6 +566,32 @@
                                     alert('Network error undoing game result. Please try again.');
                                     document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
                                     undoButton.textContent = 'Undo';
+                                }
+                            });
+                        }
+
+                        const releaseHoldButton = row.querySelector('.release-hold-btn');
+                        if (releaseHoldButton) {
+                            releaseHoldButton.addEventListener('click', async () => {
+                                if (!window.confirm(`Release the poll hold on game ${gameID}? The ESPN poll may immediately re-apply the result from its feed.`)) return;
+                                releaseHoldButton.disabled = true;
+                                try {
+                                    const response = await fetch('/releaseGameHold', {
+                                        method: 'POST',
+                                        headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                        body: JSON.stringify({ gameID, year: currentYear })
+                                    });
+                                    if (response.ok) {
+                                        alert('Hold released. The page will refresh on OK.');
+                                        window.location.reload();
+                                    } else {
+                                        alert('Error releasing hold. Please try again.');
+                                        releaseHoldButton.disabled = false;
+                                    }
+                                } catch (error) {
+                                    console.error('Error releasing hold:', error);
+                                    alert('Network error releasing hold. Please try again.');
+                                    releaseHoldButton.disabled = false;
                                 }
                             });
                         }

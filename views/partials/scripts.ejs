@@ -1,13 +1,13 @@
 <!-- jQuery -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-<!-- <script async src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+<script nonce="<%= cspNonce %>" src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<!-- <script nonce="<%= cspNonce %>" async src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
     integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
     crossorigin="anonymous"></script> -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"
+<script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"
     integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy"
     crossorigin="anonymous"></script>
 
-<script>
+<script nonce="<%= cspNonce %>">
     document.addEventListener('DOMContentLoaded', function () {
         $('form[action="/gameView"]').submit(function (event) {
             disableAndChangeText(event.target.querySelector('button[type="submit"]'));
@@ -34,4 +34,66 @@
             });
         }
     });
+</script>
+
+<!--
+  Delegated event wiring (#165). Inline on*= handlers were removed from the views
+  so the enforcing CSP can drop 'unsafe-inline' from script-src and omit
+  script-src-attr entirely. Each migrated element now carries a data-* hook; the
+  functions it calls remain global `function` declarations in their own nonce'd
+  page scripts. These delegated listeners are attached once, here, on every page
+  that includes this partial.
+-->
+<script nonce="<%= cspNonce %>">
+    (function () {
+        function callGlobal(name, arg) {
+            var fn = window[name];
+            if (typeof fn === 'function') return fn(arg);
+        }
+
+        // data-act="fn" on a clickable element → window.fn(data-act-arg?).
+        // The reserved action "reloadPage" reloads the page (replaces
+        // onclick="location.reload()").
+        // NB: deliberately NOT `data-action` — playground.ejs already uses
+        // `data-action` for its own page-scoped delegated listeners, so this
+        // dispatcher uses a distinct attribute to avoid hijacking that namespace.
+        document.addEventListener('click', function (e) {
+            var el = e.target.closest('[data-act]');
+            if (!el) return;
+            var action = el.getAttribute('data-act');
+            if (action === 'reloadPage') { location.reload(); return; }
+            var arg = el.getAttribute('data-act-arg');
+            callGlobal(action, arg === null ? undefined : arg);
+        });
+
+        // data-action-change="fn" on an input/select → window.fn() on change.
+        document.addEventListener('change', function (e) {
+            var el = e.target.closest('[data-action-change]');
+            if (el) callGlobal(el.getAttribute('data-action-change'));
+        });
+
+        // [data-filter-dropdown] → window.filterDropdown(el) on keyup
+        // (replaces onkeyup="filterDropdown(this)").
+        document.addEventListener('keyup', function (e) {
+            var el = e.target.closest('[data-filter-dropdown]');
+            if (el) callGlobal('filterDropdown', el);
+        });
+
+        // [data-clear-placeholder] → clear the field's placeholder on focus
+        // (replaces onfocus="this.placeholder = ''").
+        document.addEventListener('focusin', function (e) {
+            var el = e.target.closest && e.target.closest('[data-clear-placeholder]');
+            if (el) el.placeholder = '';
+        });
+
+        // form[data-confirm-submit="fn"] → if window.fn() returns false, cancel
+        // the submit (replaces onsubmit="return confirmDelete()").
+        document.addEventListener('submit', function (e) {
+            var form = e.target.closest('[data-confirm-submit]');
+            if (!form) return;
+            if (callGlobal(form.getAttribute('data-confirm-submit')) === false) {
+                e.preventDefault();
+            }
+        });
+    })();
 </script>

@@ -1,6 +1,6 @@
 ---
 tags: [architecture, utilities, errors, logging]
-updated: 2026-05-17
+updated: 2026-06-09
 ---
 
 # Utilities & Error Handling
@@ -9,7 +9,7 @@ These utilities in `src/utils/` are central to the architecture and **must** be 
 
 ## `controllerUtils.js` — Controller Wrapper & Responses
 
-- **`controllerWrapper(fn, operationName)`**: The standard way to define controller functions. Automatically logs request start/end, measures performance, and maps `ValidationError` → HTTP 400, `ServiceError` → HTTP 500 with consistent JSON bodies. Always use this for new controller functions. **Both `startGoogleAuth` and `googleAuthCallback` in `pointsController.js` are wrapped** (E1 fix, 2026-05-17) so OAuth-flow errors route through `errorMiddleware` rather than escaping as unhandled rejections.
+- **`controllerWrapper(fn, operationName)`**: Standard controller wrapper. Logs start/end, measures performance, maps `ValidationError` → 400, `ServiceError` → 500. Always use for new controllers. Both OAuth handlers in `pointsController.js` are wrapped.
 - **`successResponse(res, data, message)`**: Standard JSON success response shape.
 - **`errorResponse(res, statusCode, message)`**: Standard JSON error response shape.
 - **`validateRequest(req, fields[])`**: Throws a `ValidationError` if required body fields are missing.
@@ -17,6 +17,7 @@ These utilities in `src/utils/` are central to the architecture and **must** be 
 - **`parseYearOrDefault(raw, defaultYear)`**: Same as `parseYear` but returns `defaultYear` when `raw` is missing/empty. Replaces the legacy `Number(req.query.year) || thisYear` pattern, which silently accepted NaN, negatives, and Infinity.
 - **`parsePositiveInt(raw, fieldName, { defaultValue, max })`**: Validates a positive integer with optional default and upper bound. Use for any numeric input where zero/negative is invalid (counts, IDs, etc.). Example: `parsePositiveInt(req.body.firstFourCount, 'firstFourCount', { defaultValue: 4, max: 8 })`.
 - **`validateConferencePayload({ slug, name, shortName, division })`**: Shape validator for the conference admin forms. Enforces slug character set (`[a-z0-9-]`), length caps, and required fields. Throws `ValidationError` on any violation.
+- **`saveSession(req)`** / **`regenerateSession(req)`**: Promise wrappers around the callback-based `req.session.save()` / `req.session.regenerate()`. Use these at every privilege transition (e.g. `await regenerateSession(req)` before setting `siteAdmin`/`verifiedEntries`, then `await saveSession(req)`) instead of hand-rolling `new Promise()`. See the Session Lifecycle section in `docs/architecture/security.md`.
 
 ```javascript
 export const createEntry = controllerWrapper(async (req, res) => {
@@ -37,7 +38,6 @@ Three custom error classes:
 | `ServiceError` | 500 | `service` | Business logic failure |
 
 - **`withErrorHandling(fn, context)`**: Wraps an async function to catch errors, log them via `Logger`, and re-throw as `ServiceError` if untyped.
-- **Validation helpers**: `validateRequired(val, field)`, `validateArray(val, field)`, `validateNumber(val, field, min, max)`.
 
 ```javascript
 export const getTournamentData = withErrorHandling(async (tournamentId) => {
@@ -47,7 +47,7 @@ export const getTournamentData = withErrorHandling(async (tournamentId) => {
 }, 'getTournamentData');
 ```
 
-Global error middleware (`src/middleware/errorMiddleware.js`) catches all unhandled errors, maps them to status codes, and returns consistent JSON or HTML responses. In production, `DatabaseError` and `ServiceError` JSON payloads are intentionally generic so Firestore operations, service names, and internal exception text are not exposed to callers. Full error detail is still sent to `Logger.error`.
+Global error middleware in `errorMiddleware.js` maps errors to status codes and returns consistent responses. Production payloads are generic; full detail goes to `Logger.error`.
 
 ## PII Redaction in Request Logs
 
@@ -70,8 +70,3 @@ To see verbose `[DEBUG] DB CALL: ...` logs locally:
 export NODE_ENV=development && npm run dev
 ```
 
-## Related Files
-
-- `docs/architecture/caching.md` — `cacheUtils.js` (separate utility, same `src/utils/` folder)
-- `docs/architecture/security.md` — Admin middleware and error handling for security routes
-- `docs/private/development/contributing.md` — Controller-Service-Repository pattern, new API walkthrough

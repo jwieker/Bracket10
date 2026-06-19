@@ -4,17 +4,21 @@
 <head>
     <%- include('partials/header') %>
         <!-- sorting -->
-        <script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
-        <!-- <script src='tablesort.number.js'></script> -->
-        <script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
+        <!-- <script nonce="<%= cspNonce %>" src='tablesort.number.js'></script> -->
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
         <link rel="stylesheet" href="/table-styles.css">
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
         integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
         crossorigin="anonymous"></script>
     <!-- <div class="container mt-4 mb-5" style="max-width: 1400px; padding: 0 1rem;"> -->
+
+    <%# Signed-in participant's own entry IDs (matched server-side; no emails here). %>
+    <% const __mineSet = new Set((((typeof myEntryIds !== 'undefined') && myEntryIds) || []).map(String));
+       const isMine = (id) => __mineSet.has(String(id)); %>
 
     <div class="col-12 col-xxl-10 mx-auto mt-2" style="max-width: 1300px;">
         <div class="card-table-container">
@@ -31,7 +35,7 @@
                     </form>
 
                     <button id="pwaRefreshBtn" class="btn btn-sm btn-outline-secondary d-none px-3 py-2 rounded-3"
-                         onclick="location.reload()" title="Refresh page">
+                         data-act="reloadPage" title="Refresh page">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                             viewBox="0 0 16 16">
                             <path fill-rule="evenodd"
@@ -41,7 +45,7 @@
                         </svg>
                     </button>
                     <!-- Script relocated next to button for simplicity -->
-                    <script>
+                    <script nonce="<%= cspNonce %>">
                         if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
                             document.getElementById('pwaRefreshBtn').classList.remove('d-none');
                         }
@@ -104,7 +108,7 @@
                     </thead>
                     <tbody>
                         <% groupData.forEach(group=> { %>
-                            <tr data-group-id="<%= group.id %>" data-search="<%= (group.person + ' ' + group.teamName).toLowerCase() %>">
+                            <tr class="<%= isMine(group.id) ? 'my-entry' : '' %>" data-group-id="<%= group.id %>" data-search="<%= (group.person + ' ' + group.teamName).toLowerCase() %>">
                                 <td class="col-expand-toggle"></td>
                                 <td class="text-start text-md-nowrap">
                                     <div class="d-flex align-items-center gap-2">
@@ -113,7 +117,7 @@
                                             <button type="button" class="btn btn-link p-0 tbl-person-btn"
                                                 data-bs-toggle="modal" data-bs-target="#picksModal<%= group.id %>">
                                                 <% if (group.rank===1 && isTourneyOver) { %>🏆 <% } %><%= group.person %>
-                                            </button><span class="tbl-sep"> · </span><span class="tbl-team-name"><%= group.teamName %></span>
+                                            </button><span class="tbl-sep"> · </span><span class="tbl-team-name"><%= group.teamName %></span><% if (isMine(group.id)) { %><span class="you-tag" title="This entry is yours">You</span><% } %>
                                         </div>
                                     </div>
                                     <div class="modal fade" id="picksModal<%= group.id %>" tabindex="-1"
@@ -289,7 +293,7 @@
                     const rd = [0,1,2,3,4,5].map(i => (group.picksProgress && group.picksProgress[i] ? group.picksProgress[i][3] : 0) || 0);
                     const rdLabels = ['Rd 1·2pts','Rd 2·3pts','Rd 3·5pts','Rd 4·9pts','Rd 5·17pts','Rd 6·33pts'];
                 %>
-                <div class="mob-entry-card" id="mob-card-<%= group.id %>" data-search="<%= (group.person + ' ' + group.teamName).toLowerCase() %>">
+                <div class="mob-entry-card<%= isMine(group.id) ? ' my-entry' : '' %>" id="mob-card-<%= group.id %>" data-search="<%= (group.person + ' ' + group.teamName).toLowerCase() %>">
 
                     <!-- Visible Row: Rank, Content, and Points -->
                     <div class="mob-card-visible-row">
@@ -308,7 +312,7 @@
                              style="cursor:pointer; -webkit-tap-highlight-color:transparent;">
                             <div class="mob-name-block">
                                 <span class="mob-person-name" style="pointer-events: none;">
-                                    <% if (group.rank === 1 && isTourneyOver) { %>🏆 <% } %><%= group.person %><span class="mob-sep"> · </span><span class="mob-team-inline"><%= group.teamName %></span>
+                                    <% if (group.rank === 1 && isTourneyOver) { %>🏆 <% } %><%= group.person %><span class="mob-sep"> · </span><span class="mob-team-inline"><%= group.teamName %></span><% if (isMine(group.id)) { %><span class="you-tag" title="This entry is yours">You</span><% } %>
                                 </span>
                             </div>
                             <div class="mob-stat-strip">
@@ -328,7 +332,7 @@
                              role="button"
                              aria-expanded="false"
                              aria-controls="mob-round-<%= group.id %>"
-                             onclick="toggleMobCard('<%= group.id %>')"
+                             data-act="toggleMobCard" data-act-arg="<%= group.id %>"
                              style="cursor: pointer; -webkit-tap-highlight-color: transparent;">
                             <div class="mob-pts-row">
                                 <span class="mob-pts-total"><%= group.totalPoints || 0 %></span>
@@ -360,7 +364,7 @@
         </div> <!-- closing card-table-container div -->
     </div> <!-- closing container div -->
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         function toggleMobCard(id) {
             const card = document.getElementById('mob-card-' + id);
             if (card) card.classList.toggle('expanded');
@@ -419,12 +423,12 @@
         <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
     </div>
 
-    <script type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="groupDataJson"><%- JSON.stringify(groupData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="groupDataJson"><%- JSON.stringify(groupData || []).replace(/</g, '\\u003c') %></script>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         function esc(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -529,7 +533,8 @@
                         detailsTd.colSpan = 12; // span all columns
                         detailsTd.className = 'p-0';
 
-                        let html = '<div class="container-fluid details-row-inner">';
+                        const innerDiv = document.createElement('div');
+                        innerDiv.className = 'container-fluid details-row-inner';
                         const hiddenCells = tr.querySelectorAll('.col-collapsible');
                         let hasHidden = false;
                         hiddenCells.forEach(cell => {
@@ -537,17 +542,33 @@
                             const isHidden = (compStyle && compStyle.display === 'none') || cell.offsetWidth === 0;
                             if (isHidden) {
                                 const label = cell.getAttribute('data-label') || 'Column';
-                                const value = cell.innerHTML.trim();
-                                html += `<div class="details-pair"><strong class="col-7 col-sm-5 col-md-4 text-start">${esc(label)}</strong><span class="col-5 col-sm-7 col-md-8 text-start">${value}</span></div>`;
+
+                                const pairDiv = document.createElement('div');
+                                pairDiv.className = 'details-pair';
+
+                                const strongEl = document.createElement('strong');
+                                strongEl.className = 'col-7 col-sm-5 col-md-4 text-start';
+                                strongEl.textContent = label;
+
+                                const spanEl = document.createElement('span');
+                                spanEl.className = 'col-5 col-sm-7 col-md-8 text-start';
+                                Array.from(cell.childNodes).forEach(child => spanEl.appendChild(child.cloneNode(true)));
+
+                                pairDiv.appendChild(strongEl);
+                                pairDiv.appendChild(spanEl);
+                                innerDiv.appendChild(pairDiv);
+
                                 hasHidden = true;
                             }
                         });
                         if (!hasHidden) {
-                            html += '<div class="details-empty">All columns are currently visible.</div>';
+                            const emptyDiv = document.createElement('div');
+                            emptyDiv.className = 'details-empty';
+                            emptyDiv.textContent = 'All columns are currently visible.';
+                            innerDiv.appendChild(emptyDiv);
                         }
-                        html += '</div>';
 
-                        detailsTd.innerHTML = html;
+                        detailsTd.appendChild(innerDiv);
                         detailsTr.appendChild(detailsTd);
                         tr.after(detailsTr);
                     }
@@ -1398,7 +1419,7 @@
         });
 
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"></script>
+    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"></script>
 
 </body>
 

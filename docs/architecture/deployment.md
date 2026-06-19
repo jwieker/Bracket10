@@ -19,19 +19,19 @@ The application runs on **Google Cloud Run**, deployed automatically when a comm
 | `ADMIN_EMAILS` | Comma-separated list of authorized admin Google email addresses |
 | `SESSION_SECRET` | Secret for `express-session` — **required or server crashes on startup** |
 | `NODE_ENV` | Set to `production` to enable `secure` cookie flag (HTTPS-only sessions) |
-| `GOOGLE_CLOUD_PROJECT` | (Optional in production) GCP project ID. In production (Cloud Run), the SDK resolves this automatically via the metadata server/application credentials; set it explicitly in `.env` for local dev. `GCP_PROJECT_ID` is also accepted as an alternative name. |
-| `APP_HOST` | (Optional) Apex domain the app is served from in production (e.g. `bracket.example.com`). Drives (1) the `www.<host>` → `<host>` 308 redirect in `server.js`, and (2) the default OAuth callback URL when `REDIRECT_URI` is unset. Leave unset locally. |
-| `REDIRECT_URI` | (Optional) Explicit OAuth callback URL. Takes precedence over `APP_HOST` derivation. Use this for tunnels, preview envs, or any deployment where the callback isn't `https://<APP_HOST>/auth/google/callback`. |
-| `GA_MEASUREMENT_ID` | (Optional) Google Analytics 4 measurement ID (e.g. `G-XXXXXXXXXX`). When set, the gtag snippet is rendered by `views/partials/header.ejs` on all user-facing pages. Leave unset to omit GA entirely — the default for forks. |
-| `DEFAULT_GROUP` | (Optional) Default group name shown in pickers and used as a fallback in registration lookups. Defaults to `"Default"`. |
-| `EMAIL_GROUP` | (Optional) Group whose unsent entries are surfaced by the admin email-drafting helper (`emailService.getUnsentEmailEntries`). Leave empty to disable. |
+| `GOOGLE_CLOUD_PROJECT` | (Optional in production) GCP project ID. Auto-resolved on Cloud Run. Set explicitly for local dev. Also accepted as `GCP_PROJECT_ID`. |
+| `APP_HOST` | (Optional) Production domain (e.g. `bracket.example.com`). Drives the `www` redirect and default OAuth callback. Unset locally. |
+| `REDIRECT_URI` | (Optional) Explicit OAuth callback URL. Overrides `APP_HOST`. Use for tunnels or preview envs. |
+| `GA_MEASUREMENT_ID` | (Optional) GA4 measurement ID (e.g. `G-XXXXXXXXXX`). Enables gtag on user-facing pages. Omit to disable GA (default for forks). |
+| `DEFAULT_GROUP` | (Optional) Default group name in pickers and registration lookups. Defaults to `"Default"`. |
+| `EMAIL_GROUP` | (Optional) Group surfaced by the email-drafting helper. Empty to disable. |
 | `EXCLUDED_GROUPS` | (Optional) Comma-separated group names filtered out of standard listings (legacy / sandbox). Defaults to `"Bad"`. |
 | `PRIORITY_GROUPS` | (Optional) Comma-separated group names pinned to the top of group pickers. Defaults to empty. |
 | `PAYMENT_COLLECTOR_GROUP` | (Optional) When an entry joins this exact group, the confirmation page renders a payment-collector contact block. Leave empty to never render it. |
 | `PAYMENT_COLLECTOR_NAME` / `PAYMENT_COLLECTOR_EMAIL` / `PAYMENT_COLLECTOR_PHONE` | (Optional) Contact fields shown in the payment-collector block. Each field is independent — empty values hide that row. |
-| `DEBUG_ERRORS` | (Optional) Set to `1` or `true` to expose verbose error fields (`operation`, `service`, raw `message`) in `DatabaseError` / `ServiceError` JSON responses. Default is generic-only in **every** environment — explicit opt-in keeps schema names out of staging / preview responses too. Detailed errors always go to `Logger.error` regardless. |
-| `GCP_BILLING_ACCOUNT_ID` | (Optional) Billing account ID used by `/admin/cloud` to list configured GCP budgets via the Cloud Billing Budgets API. Unset → budget card shows a configuration hint. |
-| `GCP_CLOUD_BUILD_TRIGGER_ID` | (Optional) UUID of the Cloud Build trigger used by the "Deploy to Production" button on `/admin/cloud`. This must be the actual trigger resource UUID copied from the trigger detail page URL — NOT the internal `_TRIGGER_ID` substitution parameter inside `cloudbuild.yaml`. |
+| `DEBUG_ERRORS` | (Optional) Set to `1` or `true` to expose `operation`, `service`, and `message` in error responses. Default is generic-only in all environments. Full detail always logged. |
+| `GCP_BILLING_ACCOUNT_ID` | (Optional) Billing account ID for `/admin/cloud` budget card. Unset → shows a configuration hint. |
+| `GCP_CLOUD_BUILD_TRIGGER_ID` | (Optional) Cloud Build trigger UUID for the "Deploy to Production" button. Use the resource UUID from the trigger URL — not `_TRIGGER_ID` from `cloudbuild.yaml`. |
 | `GCP_DEPLOY_BRANCH` | (Optional) Branch the deploy trigger runs against. Defaults to `main`. |
 | `GCP_BILLING_EXPORT_TABLE` | (Optional) Full path of the BigQuery billing export table (e.g. `project.dataset.gcp_billing_export_v1_XXXX`) used to fetch live month-to-date spent cost. |
 
@@ -47,7 +47,7 @@ Auth uses Application Default Credentials via `google-auth-library`. On Cloud Ru
 
 ### Budget Card Integration: Caps and Live Spend
 
-The Cloud Billing **Budgets** API only returns budget configuration (cap amount, alert thresholds). To display the actual live month-to-date spend directly alongside these caps on the dashboard, the application integrates with **BigQuery billing export** via standard usage cost tables.
+The Cloud Billing Budgets API returns budget config only (cap + thresholds). Live month-to-date spend comes from BigQuery billing export.
 
 ### Production Setup Runbook — Wire the Dashboard to Real Prod Data
 
@@ -135,16 +135,12 @@ WHERE invoice.month = FORMAT_DATE('%Y%m', CURRENT_DATE())
 GROUP BY currency
 ```
 
-#### Credit Column Fallback Mechanism
-Very new billing export tables, non-standard exports, or empty schemas may not immediately expose the repeated `credits` column. Running the query above on such tables throws an `Unrecognized name: credits` database error.
+#### Credit Column Fallback
 
-To ensure the budget card remains robust and informative instead of failing or displaying `$0.00`:
-1. The service first attempts to run the fully comprehensive query with the `credits` summation.
-2. If it catches an `Unrecognized name: credits` error, it logs a warning: `getMonthToDateSpend: billing export missing credits column; falling back to gross cost`.
-3. It falls back to a query calculating gross cost (`SUM(CAST(cost AS NUMERIC))`) only.
-4. It surfaces a non-blocking warning message on the UI dashboard advising the user that gross costs are shown and that they should verify the table is "Standard usage cost" and wait 24h for the full schema to propagate.
-
-This prevents temporary schema gaps from breaking the admin dashboard.
+New or non-standard tables may lack the `credits` column, causing an `Unrecognized name: credits` error. When that happens, the service:
+1. Logs a warning.
+2. Falls back to gross cost only (`SUM(CAST(cost AS NUMERIC))`).
+3. Shows a non-blocking dashboard warning to verify the table type and wait 24h for schema propagation.
 
 ESPN polling now runs through Cloud Run Jobs / Scheduler OAuth, so there is no shared `POLL_SECRET` web endpoint secret in the current architecture.
 
@@ -159,6 +155,33 @@ gcloud run services update $SERVICE \
 # Example: update min instances
 gcloud run services update $SERVICE --min-instances=0 --region=us-central1
 ```
+
+## Firestore One-Time Setup
+
+### Rate-limit counter TTL (optional)
+
+The Firestore-backed rate limiters (login, entry verify — see [security.md](./security.md#rate-limiting)) write counters to the `rateLimits` collection. Windows reset in place, so the collection stays bounded by distinct keys without any cleanup. To also reap keys that are never seen again, enable a TTL policy on the `expireAt` field (free, no app changes):
+
+```bash
+# Uses the project from `gcloud config`; pass --project=$GOOGLE_CLOUD_PROJECT to override.
+gcloud firestore fields ttls update expireAt \
+  --collection-group=rateLimits \
+  --enable-ttl
+```
+
+One-time; Firestore deletes expired docs automatically thereafter.
+
+### Session TTL (recommended)
+
+The session store (`src/middleware/firestoreSessionStore.js`) writes an `expireAt` `Timestamp` on every session doc in `express-sessions`. Enable a TTL policy on that field so abandoned/expired sessions (including pre-auth `oauthState`-only docs created by clicking "sign in") are reaped automatically instead of accumulating forever (security audit 2026-06-09, finding 2):
+
+```bash
+gcloud firestore fields ttls update expireAt \
+  --collection-group=express-sessions \
+  --enable-ttl
+```
+
+One-time; the TTL policy itself is free to enable, and TTL deletions are billed as standard deletes, which stay well inside the Firestore free tier at this app's session volume. The store also deletes expired docs opportunistically on read, so growth is bounded even before the policy is enabled — but the policy is what cleans up docs that are never read again.
 
 ## Dual PWA Architecture
 
@@ -176,8 +199,3 @@ Two distinct Progressive Web Apps run on the same domain to isolate offline capa
 
 **Critical Rule:** Do *not* combine these headers or service workers.
 
-## Related Files
-
-- `docs/architecture/security.md` — Admin session auth, rate limiting, custom security headers
-- `docs/architecture/caching.md` — In-memory cache (instance-local — fragments under multi-instance Cloud Run)
-- `docs/tournament/espn-setup.md` — Cloud Scheduler setup for ESPN polling jobs

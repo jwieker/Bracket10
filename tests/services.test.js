@@ -18,6 +18,7 @@ import {
     getAllYearsforGroup,
     getRegionsForYear,
     findEntriesByName,
+    normalizeFirstFourPicks,
     setRepositories as setViewServiceRepositories,
 } from "../src/services/viewService.js";
 import * as tourneyService from "../src/services/tourneyService.js";
@@ -49,6 +50,7 @@ describe("TourneyService", () => {
             findEntriesByName: vi.fn(),
             deleteEntry: vi.fn(),
             updateEntryPicks: vi.fn(),
+            updateEntryPicksWithSwaps: vi.fn(),
         };
 
         mockViewRepository = {
@@ -60,6 +62,10 @@ describe("TourneyService", () => {
 
         mockGameRepository = {
             updateWinner: vi.fn(),
+            clearWinnerWithHold: vi.fn(),
+            resolveGame: vi.fn(),
+            undoResolvedGame: vi.fn(),
+            getFirstFourGames: vi.fn(),
             updateNextGameTeam: vi.fn(),
             getActiveAndFutureGames: vi.fn(),
             getAllEntries: vi.fn(),
@@ -72,6 +78,7 @@ describe("TourneyService", () => {
             getEntriesForGroup: vi.fn(),
             getAllEntries: vi.fn(),
             getAllTournamentDetails: vi.fn(),
+            getEntriesContainingTeams: vi.fn(),
         };
 
         mockTourneyRepository = {
@@ -253,6 +260,19 @@ describe("TourneyService", () => {
                 expect(chunkArg[0]).toHaveProperty("points");
                 expect(chunkArg[0]).toHaveProperty("possPoints");
             });
+
+            test("defaults year to thisYear when called with no arguments (#158 — no ReferenceError)", async () => {
+                mockGameRepository.getActiveAndFutureGames.mockResolvedValue([]);
+                mockGameRepository.getAllEntries.mockResolvedValue([]);
+                mockGameRepository.getTournamentTeams.mockResolvedValue([]);
+
+                // Regression: `year = thisYear` default param previously threw
+                // ReferenceError because `thisYear` was never imported. A no-arg
+                // call must now resolve and use the configured current year
+                // (2027 under NODE_ENV=test).
+                await expect(updatePossiblePoints()).resolves.toBeUndefined();
+                expect(mockGameRepository.getActiveAndFutureGames).toHaveBeenCalledWith(2027);
+            });
         });
 
         describe("possibleRanking", () => {
@@ -303,6 +323,18 @@ describe("TourneyService", () => {
                 expect(result).toEqual([]);
                 expect(mockGameRepository.getEntriesForGroup).toHaveBeenCalledWith(2024, "Family");
             });
+
+            test("defaults year to thisYear when called with no arguments (#158 — no ReferenceError)", async () => {
+                mockGameRepository.getActiveAndFutureGames.mockResolvedValue([]);
+                mockGameRepository.getEntriesForGroup.mockResolvedValue([]);
+                mockGameRepository.getTournamentTeams.mockResolvedValue([]);
+
+                // Regression: `year = thisYear` default param previously threw
+                // ReferenceError because `thisYear` was never imported.
+                const result = await possibleRanking();
+                expect(result).toEqual([]);
+                expect(mockGameRepository.getActiveAndFutureGames).toHaveBeenCalledWith(2027);
+            });
         });
     });
 
@@ -311,158 +343,123 @@ describe("TourneyService", () => {
             setGameServiceRepositories(mockTeamRepository, mockGameRepository);
         });
         describe("updateTeamRecords", () => {
-            test("should update team records for winner and loser", async () => {
-                const winnerID = 1;
-                const loserID = 2;
-                const round = 2;
-                const gameID = 10;
-                const nextGameID = 20;
-                const nextGameSpot = 1;
-                const year = 2024;
+            test("resolves the game in a single transactional repo call", async () => {
+                mockGameRepository.resolveGame.mockResolvedValue();
 
-                mockTeamRepository.updateTeamRecord.mockResolvedValue();
+                await updateTeamRecords(1, 2, 2, 10, 20, 1, 2024);
 
-                await updateTeamRecords(
-                    winnerID,
-                    loserID,
-                    round,
-                    gameID,
-                    nextGameID,
-                    nextGameSpot,
-                    year
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledTimes(1);
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        gameID: 10,
+                        winner: 1,
+                        loser: 2,
+                        nextGame: 20,
+                        nextGameSpot: 1,
+                        winnerPoints: expect.any(Number),
+                        winnerStatus: expect.any(Array),
+                        loserPoints: expect.any(Number),
+                        loserStatus: expect.any(Array),
+                    }),
+                    2024
                 );
-
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledTimes(2);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(
-                    winnerID,
-                    expect.any(Number),
-                    expect.any(Array),
-                    year
-                );
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(
-                    loserID,
-                    expect.any(Number),
-                    expect.any(Array),
-                    year
-                );
+                // No piecemeal writes outside the transaction
+                expect(mockGameRepository.updateWinner).not.toHaveBeenCalled();
+                expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
+                expect(mockTeamRepository.updateTeamRecord).not.toHaveBeenCalled();
             });
 
             test("should handle championship game (no next game)", async () => {
-                const winnerID = 1;
-                const loserID = 2;
-                const round = 6; // Championship round
-                const gameID = 63;
-                const nextGameID = 0;
-                const nextGameSpot = null;
-                const year = 2024;
+                mockGameRepository.resolveGame.mockResolvedValue();
 
-                mockTeamRepository.updateTeamRecord.mockResolvedValue();
+                await updateTeamRecords(1, 2, 6, 63, 0, null, 2024);
 
-                await updateTeamRecords(
-                    winnerID,
-                    loserID,
-                    round,
-                    gameID,
-                    nextGameID,
-                    nextGameSpot,
-                    year
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledWith(
+                    expect.objectContaining({ gameID: 63, winner: 1, loser: 2, nextGame: null }),
+                    2024
                 );
+            });
 
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledTimes(2);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(
-                    winnerID,
-                    expect.any(Number),
-                    expect.any(Array),
-                    year
-                );
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(
-                    loserID,
-                    expect.any(Number),
-                    expect.any(Array),
-                    year
-                );
+            test("propagates a transaction failure to the caller", async () => {
+                mockGameRepository.resolveGame.mockRejectedValue(new Error("txn aborted"));
+
+                await expect(updateTeamRecords(1, 2, 2, 10, 20, 1, 2024)).rejects.toThrow("txn aborted");
             });
         });
 
         describe("undoTeamRecords", () => {
-            test("should undo team records", async () => {
-                const winnerID = 1;
-                const loserID = 2;
-                const round = 1;
-                const gameID = 10;
-                const nextGameID = 20;
-                const nextGameSpot = 1;
-                const year = 2024;
+            test("round 1 undo restores both teams to pre-tournament state (nulls) in one transactional call", async () => {
+                mockGameRepository.undoResolvedGame.mockResolvedValue();
 
-                mockTeamRepository.updateTeamRecordWithNulls.mockResolvedValue();
-
-                await undoTeamRecords(
-                    winnerID,
-                    loserID,
-                    round,
-                    gameID,
-                    nextGameID,
-                    nextGameSpot,
-                    year
-                );
-
-                expect(mockTeamRepository.updateTeamRecordWithNulls).toHaveBeenCalledTimes(2);
-                expect(mockTeamRepository.updateTeamRecordWithNulls).toHaveBeenCalledWith(
-                    winnerID,
-                    year
-                );
-                expect(mockTeamRepository.updateTeamRecordWithNulls).toHaveBeenCalledWith(
-                    loserID,
-                    year
-                );
-            });
-
-            test("round 1 undo: does NOT call updateTeamRecord (only updateTeamRecordWithNulls)", async () => {
-                mockTeamRepository.updateTeamRecordWithNulls.mockResolvedValue();
                 await undoTeamRecords(1, 2, 1, 10, 20, 1, 2024);
-                expect(mockTeamRepository.updateTeamRecord).not.toHaveBeenCalled();
-            });
 
-            test("round 1 undo with no nextGame: skips updateNextGameTeam call", async () => {
-                mockTeamRepository.updateTeamRecordWithNulls.mockResolvedValue();
-                await undoTeamRecords(1, 2, 1, 10, null, null, 2024);
+                expect(mockGameRepository.undoResolvedGame).toHaveBeenCalledTimes(1);
+                expect(mockGameRepository.undoResolvedGame).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        gameID: 10,
+                        winner: 1,
+                        loser: 2,
+                        nextGame: 20,
+                        nextGameSpot: 1,
+                        restorePoints: null,
+                        restoreStatus: [],
+                    }),
+                    2024
+                );
+                // No piecemeal writes outside the transaction
+                expect(mockGameRepository.clearWinnerWithHold).not.toHaveBeenCalled();
+                expect(mockGameRepository.updateWinner).not.toHaveBeenCalled();
                 expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
-                expect(mockGameRepository.updateWinner).toHaveBeenCalledWith(10, null, 2024);
+                expect(mockTeamRepository.updateTeamRecord).not.toHaveBeenCalled();
+                expect(mockTeamRepository.updateTeamRecordWithNulls).not.toHaveBeenCalled();
             });
 
-            test("round 2 undo: calls updateTeamRecord (not updateTeamRecordWithNulls) for both teams", async () => {
-                // Round 2 undo restores both teams to their Round-1-winner state:
-                // config.wins=2, so gameArray = ["W"] (one prior win), loserPoints=2
-                mockTeamRepository.updateTeamRecord.mockResolvedValue();
-                mockGameRepository.updateWinner.mockResolvedValue();
-                mockGameRepository.updateNextGameTeam.mockResolvedValue();
+            test("round 1 undo with no nextGame passes nextGame: null", async () => {
+                mockGameRepository.undoResolvedGame.mockResolvedValue();
+                await undoTeamRecords(1, 2, 1, 10, null, null, 2024);
+                expect(mockGameRepository.undoResolvedGame).toHaveBeenCalledWith(
+                    expect.objectContaining({ gameID: 10, nextGame: null }),
+                    2024
+                );
+            });
+
+            test("round 2 undo restores both teams to their Round-1-winner state", async () => {
+                // config.wins=2, so restoreStatus = ["W"] (one prior win), restorePoints = loserPoints = 2
+                mockGameRepository.undoResolvedGame.mockResolvedValue();
 
                 await undoTeamRecords(1, 2, 2, 10, 20, 1, 2024);
 
-                expect(mockTeamRepository.updateTeamRecordWithNulls).not.toHaveBeenCalled();
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledTimes(2);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(1, 2, ["W"], 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(2, 2, ["W"], 2024);
+                expect(mockGameRepository.undoResolvedGame).toHaveBeenCalledWith(
+                    expect.objectContaining({ restorePoints: 2, restoreStatus: ["W"] }),
+                    2024
+                );
             });
 
-            test("round 3 undo: gameArray has 2 Ws (config.wins - 1 = 2)", async () => {
-                mockTeamRepository.updateTeamRecord.mockResolvedValue();
-                mockGameRepository.updateWinner.mockResolvedValue();
-                mockGameRepository.updateNextGameTeam.mockResolvedValue();
+            test("round 3 undo: restoreStatus has 2 Ws (config.wins - 1 = 2)", async () => {
+                mockGameRepository.undoResolvedGame.mockResolvedValue();
 
                 await undoTeamRecords(1, 2, 3, 13, 15, 1, 2024);
 
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(1, 5, ["W", "W"], 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(2, 5, ["W", "W"], 2024);
+                expect(mockGameRepository.undoResolvedGame).toHaveBeenCalledWith(
+                    expect.objectContaining({ restorePoints: 5, restoreStatus: ["W", "W"] }),
+                    2024
+                );
             });
 
-            test("round 2+ undo with no nextGame: skips updateNextGameTeam call", async () => {
-                mockTeamRepository.updateTeamRecord.mockResolvedValue();
-                mockGameRepository.updateWinner.mockResolvedValue();
+            test("round 2+ undo with no nextGame passes nextGame: null", async () => {
+                mockGameRepository.undoResolvedGame.mockResolvedValue();
 
                 await undoTeamRecords(1, 2, 2, 10, null, null, 2024);
 
-                expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
+                expect(mockGameRepository.undoResolvedGame).toHaveBeenCalledWith(
+                    expect.objectContaining({ nextGame: null }),
+                    2024
+                );
+            });
+
+            test("propagates a transaction failure to the caller", async () => {
+                mockGameRepository.undoResolvedGame.mockRejectedValue(new Error("txn aborted"));
+                await expect(undoTeamRecords(1, 2, 2, 10, 20, 1, 2024)).rejects.toThrow("txn aborted");
             });
 
             test("throws on invalid round number", async () => {
@@ -473,36 +470,48 @@ describe("TourneyService", () => {
 
         describe("updateTeamRecords — exact arrays per round", () => {
             beforeEach(() => {
-                mockTeamRepository.updateTeamRecord.mockResolvedValue();
-                mockGameRepository.updateWinner.mockResolvedValue();
-                mockGameRepository.updateNextGameTeam.mockResolvedValue();
+                mockGameRepository.resolveGame.mockResolvedValue();
             });
 
             test("round 1: winner gets ['W'], loser gets ['L']", async () => {
                 await updateTeamRecords(1, 2, 1, 5, 9, 1, 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(1, 2, ["W"], 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(2, 0, ["L"], 2024);
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        winnerPoints: 2, winnerStatus: ["W"],
+                        loserPoints: 0, loserStatus: ["L"],
+                    }),
+                    2024
+                );
             });
 
             test("round 2: winner gets ['W','W'], loser gets ['W','L']", async () => {
                 await updateTeamRecords(1, 2, 2, 9, 13, 1, 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(1, 5, ["W", "W"], 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(2, 2, ["W", "L"], 2024);
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        winnerPoints: 5, winnerStatus: ["W", "W"],
+                        loserPoints: 2, loserStatus: ["W", "L"],
+                    }),
+                    2024
+                );
             });
 
             test("round 6: winner gets 6 Ws, loser gets 5 Ws then L", async () => {
                 await updateTeamRecords(1, 2, 6, 63, 0, null, 2024);
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(
-                    1, 69, ["W", "W", "W", "W", "W", "W"], 2024
-                );
-                expect(mockTeamRepository.updateTeamRecord).toHaveBeenCalledWith(
-                    2, 36, ["W", "W", "W", "W", "W", "L"], 2024
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        winnerPoints: 69, winnerStatus: ["W", "W", "W", "W", "W", "W"],
+                        loserPoints: 36, loserStatus: ["W", "W", "W", "W", "W", "L"],
+                    }),
+                    2024
                 );
             });
 
-            test("skips updateNextGameTeam when nextGame is falsy", async () => {
+            test("passes nextGame: null when nextGame is falsy", async () => {
                 await updateTeamRecords(1, 2, 6, 63, 0, null, 2024);
-                expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
+                expect(mockGameRepository.resolveGame).toHaveBeenCalledWith(
+                    expect.objectContaining({ nextGame: null }),
+                    2024
+                );
             });
 
             test("throws on invalid round number", async () => {
@@ -517,6 +526,8 @@ describe("TourneyService", () => {
             beforeEach(() => {
                 mockUpdateEntrywithNewSchools = vi.fn().mockResolvedValue();
                 mockGameRepository.updateWinner.mockResolvedValue();
+                mockGameRepository.clearWinnerWithHold.mockResolvedValue();
+                mockGameRepository.getFirstFourGames.mockResolvedValue([]);
                 mockGameRepository.updateNextGameTeam.mockResolvedValue();
                 mockTeamRepository.createCanonicalSchoolRecord.mockResolvedValue();
                 mockTeamRepository.deleteCanonicalSchoolRecord.mockResolvedValue();
@@ -555,12 +566,54 @@ describe("TourneyService", () => {
                     expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
                     expect(mockGameRepository.updateWinner).toHaveBeenCalledWith(64, 10, 2024);
                 });
+
+                test("writes the winner LAST — after slot fill, pick swap, and canonical record", async () => {
+                    // The winner field is the poll's retry gate: every other step
+                    // must commit first so a mid-resolution failure is retried.
+                    await updateTeamRecords(10, 20, 0, 64, 5, 1, 2024);
+                    const winnerOrder = mockGameRepository.updateWinner.mock.invocationCallOrder[0];
+                    expect(mockGameRepository.updateNextGameTeam.mock.invocationCallOrder[0]).toBeLessThan(winnerOrder);
+                    expect(mockUpdateEntrywithNewSchools.mock.invocationCallOrder[0]).toBeLessThan(winnerOrder);
+                    expect(mockTeamRepository.createCanonicalSchoolRecord.mock.invocationCallOrder[0]).toBeLessThan(winnerOrder);
+                });
+
+                test("does NOT mark the game resolved if the pick swap fails (poll can retry)", async () => {
+                    mockUpdateEntrywithNewSchools.mockRejectedValue(new Error("swap failed"));
+                    await expect(updateTeamRecords(10, 20, 0, 64, 5, 1, 2024)).rejects.toThrow("swap failed");
+                    expect(mockGameRepository.updateWinner).not.toHaveBeenCalled();
+                });
+
+                test("does NOT mark the game resolved if the canonical record create fails", async () => {
+                    mockTeamRepository.createCanonicalSchoolRecord.mockRejectedValue(new Error("canonical failed"));
+                    await expect(updateTeamRecords(10, 20, 0, 64, 5, 1, 2024)).rejects.toThrow("canonical failed");
+                    expect(mockGameRepository.updateWinner).not.toHaveBeenCalled();
+                });
+
+                test("a failed resolution converges when the next poll run retries it", async () => {
+                    // Run 1: the pick swap fails mid-resolution → winner never written,
+                    // so the game stays in the poll's unresolved set.
+                    mockUpdateEntrywithNewSchools.mockRejectedValueOnce(new Error("transient"));
+                    await expect(updateTeamRecords(10, 20, 0, 64, 5, 1, 2024)).rejects.toThrow("transient");
+                    expect(mockGameRepository.updateNextGameTeam).toHaveBeenCalledTimes(1);
+                    expect(mockTeamRepository.createCanonicalSchoolRecord).not.toHaveBeenCalled();
+                    expect(mockGameRepository.updateWinner).not.toHaveBeenCalled();
+
+                    // Run 2 (next poll cycle): every idempotent step re-runs and the
+                    // winner is finally committed exactly once.
+                    await updateTeamRecords(10, 20, 0, 64, 5, 1, 2024);
+                    expect(mockGameRepository.updateNextGameTeam).toHaveBeenCalledTimes(2);
+                    expect(mockUpdateEntrywithNewSchools).toHaveBeenCalledTimes(2);
+                    expect(mockTeamRepository.createCanonicalSchoolRecord).toHaveBeenCalledTimes(1);
+                    expect(mockGameRepository.updateWinner).toHaveBeenCalledTimes(1);
+                    expect(mockGameRepository.updateWinner).toHaveBeenCalledWith(64, 10, 2024);
+                });
             });
 
             describe("undoTeamRecords round 0", () => {
-                test("clears winner on the FF game", async () => {
+                test("clears winner on the FF game with a manual hold (poll must not re-resolve)", async () => {
                     await undoTeamRecords(10, 20, 0, 64, 5, 1, 2024);
-                    expect(mockGameRepository.updateWinner).toHaveBeenCalledWith(64, null, 2024);
+                    expect(mockGameRepository.clearWinnerWithHold).toHaveBeenCalledWith(64, 2024);
+                    expect(mockGameRepository.updateWinner).not.toHaveBeenCalled();
                 });
 
                 test("clears team from R1 game slot", async () => {
@@ -568,10 +621,21 @@ describe("TourneyService", () => {
                     expect(mockGameRepository.updateNextGameTeam).toHaveBeenCalledWith(5, 1, null, 2024);
                 });
 
-                test("reverses pick swap: winner → loser (fallback when no team1ID)", async () => {
-                    // No team1ID provided → fallback path: [[loser, winner]]
+                test("reverses pick swap: winner → loser (last-resort fallback when no team1ID and no game doc)", async () => {
+                    // No team1ID provided AND the game doc can't be found
+                    // (getFirstFourGames mocked empty) → fallback: [[loser, winner]]
                     await undoTeamRecords(10, 20, 0, 64, 5, 1, 2024);
                     expect(mockUpdateEntrywithNewSchools).toHaveBeenCalledWith([[20, 10]], 2024);
+                });
+
+                test("derives team1ID from the game doc when the caller omits it", async () => {
+                    // team1 (100) won. The blind reverse-swap would move picks to
+                    // the LOSER (200); derivation must normalize to team1 instead.
+                    mockGameRepository.getFirstFourGames.mockResolvedValue([
+                        { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: 100 },
+                    ]);
+                    await undoTeamRecords(100, 200, 0, 64, 5, 1, 2024);
+                    expect(mockUpdateEntrywithNewSchools).toHaveBeenCalledWith([[100, 200]], 2024);
                 });
 
                 test("deletes canonical school record for winner", async () => {
@@ -588,7 +652,43 @@ describe("TourneyService", () => {
                 test("skips updateNextGameTeam when nextGame is falsy", async () => {
                     await undoTeamRecords(10, 20, 0, 64, null, null, 2024);
                     expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
-                    expect(mockGameRepository.updateWinner).toHaveBeenCalledWith(64, null, 2024);
+                    expect(mockGameRepository.clearWinnerWithHold).toHaveBeenCalledWith(64, 2024);
+                });
+
+                test("clears the winner LAST — after pick repick, canonical delete, and slot clear", async () => {
+                    // Mirror of resolution: a mid-undo failure must leave the game
+                    // resolved so the admin can retry and the poll keeps skipping it.
+                    await undoTeamRecords(10, 20, 0, 64, 5, 1, 2024);
+                    const clearOrder = mockGameRepository.clearWinnerWithHold.mock.invocationCallOrder[0];
+                    expect(mockUpdateEntrywithNewSchools.mock.invocationCallOrder[0]).toBeLessThan(clearOrder);
+                    expect(mockTeamRepository.deleteCanonicalSchoolRecord.mock.invocationCallOrder[0]).toBeLessThan(clearOrder);
+                    expect(mockGameRepository.updateNextGameTeam.mock.invocationCallOrder[0]).toBeLessThan(clearOrder);
+                });
+
+                test("does NOT reopen the game if the pick repick fails", async () => {
+                    mockUpdateEntrywithNewSchools.mockRejectedValue(new Error("repick failed"));
+                    await expect(undoTeamRecords(10, 20, 0, 64, 5, 1, 2024)).rejects.toThrow("repick failed");
+                    expect(mockGameRepository.clearWinnerWithHold).not.toHaveBeenCalled();
+                });
+
+                test("a failed undo converges when the admin retries it", async () => {
+                    // Attempt 1: canonical-record delete fails after the repick →
+                    // winner stays set, so the poll keeps skipping the game and the
+                    // admin sees the failure and clicks Undo again.
+                    mockTeamRepository.deleteCanonicalSchoolRecord.mockRejectedValueOnce(new Error("transient"));
+                    await expect(undoTeamRecords(200, 100, 0, 64, 5, 1, 2024, 100)).rejects.toThrow("transient");
+                    expect(mockUpdateEntrywithNewSchools).toHaveBeenCalledTimes(1);
+                    expect(mockGameRepository.updateNextGameTeam).not.toHaveBeenCalled();
+                    expect(mockGameRepository.clearWinnerWithHold).not.toHaveBeenCalled();
+
+                    // Attempt 2: repick is a no-op (already normalized), delete and
+                    // slot-clear complete, and the winner is cleared with the hold.
+                    await undoTeamRecords(200, 100, 0, 64, 5, 1, 2024, 100);
+                    expect(mockUpdateEntrywithNewSchools).toHaveBeenCalledTimes(2);
+                    expect(mockTeamRepository.deleteCanonicalSchoolRecord).toHaveBeenCalledTimes(2);
+                    expect(mockGameRepository.updateNextGameTeam).toHaveBeenCalledTimes(1);
+                    expect(mockGameRepository.clearWinnerWithHold).toHaveBeenCalledTimes(1);
+                    expect(mockGameRepository.clearWinnerWithHold).toHaveBeenCalledWith(64, 2024);
                 });
 
                 describe("swap logic with team1ID provided", () => {
@@ -622,6 +722,64 @@ describe("TourneyService", () => {
         beforeEach(() => {
             setViewServiceRepositories(mockViewRepository, mockGameRepository, mockEntryRepository);
         });
+
+        describe("normalizeFirstFourPicks", () => {
+            // FF game 64: team1=100, team2=200. Non-FF pick 50 must pass through.
+            test("unresolved FF game: either FF team normalizes to team1ID (combined convention)", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([
+                    { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: null },
+                ]);
+                expect(await normalizeFirstFourPicks([100, 50], 2024)).toEqual([100, 50]);
+                expect(await normalizeFirstFourPicks([200, 50], 2024)).toEqual([100, 50]);
+            });
+
+            test("resolved FF game: any FF-team pick normalizes to the winner — regardless of who was picked", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([
+                    { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: 200 },
+                ]);
+                // combined pick, loser pick, and winner pick all land on the winner
+                expect(await normalizeFirstFourPicks([100, 50], 2024)).toEqual([200, 50]);
+                expect(await normalizeFirstFourPicks([200, 50], 2024)).toEqual([200, 50]);
+            });
+
+            test("heals a pre-existing stranded loser pick on the next edit", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([
+                    { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: 100 },
+                ]);
+                expect(await normalizeFirstFourPicks([200], 2024)).toEqual([100]);
+            });
+
+            test("submitting both FF teams of one game collapses to a duplicate (caught by validation upstream)", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([
+                    { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: null },
+                ]);
+                expect(await normalizeFirstFourPicks([100, 200], 2024)).toEqual([100, 100]);
+            });
+
+            test("multiple FF games normalize independently", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([
+                    { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: null },
+                    { gameID: 65, round: 0, team1ID: 300, team2ID: 400, winner: 400 },
+                ]);
+                expect(await normalizeFirstFourPicks([200, 300, 50], 2024)).toEqual([100, 400, 50]);
+            });
+
+            test("no FF games: picks pass through untouched (new array)", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([]);
+                const picks = [1, 2, 3];
+                const result = await normalizeFirstFourPicks(picks, 2024);
+                expect(result).toEqual([1, 2, 3]);
+                expect(result).not.toBe(picks);
+            });
+
+            test("string-typed pick ids still match FF teams (Number coercion)", async () => {
+                mockGameRepository.getFirstFourGames.mockResolvedValue([
+                    { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: 200 },
+                ]);
+                expect(await normalizeFirstFourPicks(["100"], 2024)).toEqual([200]);
+            });
+        });
+
         describe("createNewEntry", () => {
             test("should create new entry with correct parameters", async () => {
                 const email = "test@example.com";
@@ -631,11 +789,9 @@ describe("TourneyService", () => {
                 const picks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
                 mockEntryRepository.createEntry.mockResolvedValue();
+                mockGameRepository.getEntryById.mockResolvedValue(null); // id is free
 
-                // Mock Math.random to return a predictable value
-                vi.spyOn(Math, "random").mockReturnValue(0.5);
                 vi.spyOn(Date.prototype, "toISOString").mockReturnValue("2024-01-01T00:00:00.000Z");
-                vi.spyOn(Date, "now").mockReturnValue(1700000000000);
 
                 await createNewEntry(
                     email,
@@ -646,7 +802,7 @@ describe("TourneyService", () => {
                 );
 
                 expect(mockEntryRepository.createEntry).toHaveBeenCalledWith(
-                    1700000000500, // Date.now() + Math.floor(0.5 * 1000)
+                    expect.any(Number), // cryptographically-random id
                     email,
                     teamName,
                     picks,
@@ -668,10 +824,9 @@ describe("TourneyService", () => {
                 const maxPoints = 150;
 
                 mockEntryRepository.createEntry.mockResolvedValue();
+                mockGameRepository.getEntryById.mockResolvedValue(null); // id is free
 
-                vi.spyOn(Math, "random").mockReturnValue(0.5);
                 vi.spyOn(Date.prototype, "toISOString").mockReturnValue("2024-01-01T00:00:00.000Z");
-                vi.spyOn(Date, "now").mockReturnValue(1700000000000);
 
                 await createNewEntry(
                     email,
@@ -684,7 +839,7 @@ describe("TourneyService", () => {
                 );
 
                 expect(mockEntryRepository.createEntry).toHaveBeenCalledWith(
-                    1700000000500, // Date.now() + Math.floor(0.5 * 1000)
+                    expect.any(Number), // cryptographically-random id
                     email,
                     teamName,
                     picks,
@@ -1110,56 +1265,69 @@ describe("TourneyService", () => {
             const year = 2024;
 
             beforeEach(() => {
-                mockEntryRepository.updateMultipleEntryPicks = vi.fn().mockResolvedValue();
+                mockEntryRepository.updateEntryPicksWithSwaps = vi.fn().mockResolvedValue(true);
+                mockGameRepository.getEntriesContainingTeams = vi.fn().mockResolvedValue([]);
             });
 
             test("applies all school changes to a single entry that matches multiple removals", async () => {
-                mockGameRepository.getAllEntries.mockResolvedValue([
+                mockGameRepository.getEntriesContainingTeams.mockResolvedValue([
                     { id: 1, picks: [1, 2, 3] },
                 ]);
 
                 await tourneyService.updateEntrywithNewSchools([[101, 1], [202, 2]], year);
 
-                expect(mockEntryRepository.updateMultipleEntryPicks).toHaveBeenCalledWith(
-                    [{ entryId: 1, picks: [101, 202, 3] }],
+                expect(mockGameRepository.getEntriesContainingTeams).toHaveBeenCalledWith(
+                    year,
+                    [1, 2]
+                );
+                expect(mockEntryRepository.updateEntryPicksWithSwaps).toHaveBeenCalledWith(
+                    1,
+                    [[101, 1], [202, 2]],
                     year
                 );
             });
 
             test("produces one update object per entry, not one per school change", async () => {
-                mockGameRepository.getAllEntries.mockResolvedValue([
+                mockGameRepository.getEntriesContainingTeams.mockResolvedValue([
                     { id: 1, picks: [1, 2] },
                 ]);
 
                 await tourneyService.updateEntrywithNewSchools([[101, 1], [202, 2]], year);
 
-                const calls = mockEntryRepository.updateMultipleEntryPicks.mock.calls[0][0];
-                const entry1Updates = calls.filter((u) => u.entryId === 1);
-                expect(entry1Updates).toHaveLength(1);
+                expect(mockEntryRepository.updateEntryPicksWithSwaps).toHaveBeenCalledTimes(1);
             });
 
             test("skips entries whose picks are unaffected by any school change", async () => {
-                mockGameRepository.getAllEntries.mockResolvedValue([
-                    { id: 1, picks: [5, 6] },
+                // Since getEntriesContainingTeams only returns entries that have the teams,
+                // entry 1 (picks: [5, 6]) wouldn't be returned by the DB query.
+                mockGameRepository.getEntriesContainingTeams.mockResolvedValue([
                     { id: 2, picks: [1, 2] },
                 ]);
 
                 await tourneyService.updateEntrywithNewSchools([[101, 1], [202, 2]], year);
 
-                const updates = mockEntryRepository.updateMultipleEntryPicks.mock.calls[0][0];
-                expect(updates).toHaveLength(1);
-                expect(updates[0].entryId).toBe(2);
+                expect(mockEntryRepository.updateEntryPicksWithSwaps).toHaveBeenCalledTimes(1);
+                expect(mockEntryRepository.updateEntryPicksWithSwaps).toHaveBeenCalledWith(
+                    2,
+                    [[101, 1], [202, 2]],
+                    year
+                );
             });
 
             test("skips changes where removeSID is falsy", async () => {
-                mockGameRepository.getAllEntries.mockResolvedValue([
+                mockGameRepository.getEntriesContainingTeams.mockResolvedValue([
                     { id: 1, picks: [1] },
                 ]);
 
                 await tourneyService.updateEntrywithNewSchools([[101, null], [202, 1]], year);
 
-                expect(mockEntryRepository.updateMultipleEntryPicks).toHaveBeenCalledWith(
-                    [{ entryId: 1, picks: [202] }],
+                expect(mockGameRepository.getEntriesContainingTeams).toHaveBeenCalledWith(
+                    year,
+                    [1]
+                );
+                expect(mockEntryRepository.updateEntryPicksWithSwaps).toHaveBeenCalledWith(
+                    1,
+                    [[101, null], [202, 1]],
                     year
                 );
             });

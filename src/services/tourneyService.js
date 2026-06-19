@@ -6,6 +6,7 @@ import {
 } from "../repositories/index.js";
 import Logger from "../utils/logger.js";
 import { ValidationError } from "../utils/errors.js";
+import pLimit from "p-limit";
 
 let tourneyRepository = _tourneyRepository;
 let gameRepository = _gameRepository;
@@ -100,9 +101,13 @@ if (
 async function prepareRegionVerifyData(regions, year) {
   // Use the master regionID collection so lookup works before the year's subcollection exists
   const allRegionTypes = await tourneyRepository.getAllRegionTypes();
+
+  const regionTypeMap = new Map(
+    allRegionTypes.map((r) => [Number(r.regionID), r.regionName])
+  );
+
   const regionNames = regions.map(
-    (regionId) =>
-      allRegionTypes.find((r) => Number(r.regionID) === Number(regionId))?.regionName
+    (regionId) => regionTypeMap.get(Number(regionId))
   );
 
   const [allTeams, conferences] = await Promise.all([
@@ -118,6 +123,23 @@ async function prepareRegionVerifyData(regions, year) {
     conferences,
     seeds,
   };
+}
+
+
+function createFutureGameRow(gameID, regionID, year, round, nextGameID, nextSpot) {
+  return [
+    gameID,
+    regionID,
+    year,
+    null, // team1ID
+    null, // team2ID
+    null, // winner
+    round,
+    nextGameID,
+    nextSpot,
+    null, // team1Seed
+    null, // team2Seed
+  ];
 }
 
 function createNewBracketStructure(gamesData, year, regionArray) {
@@ -189,36 +211,30 @@ function createNewBracketStructure(gamesData, year, regionArray) {
     nextGameCounter = 0;
     regionArray.forEach((reg) => {
       for (let j = 0; j < PER_REGION_R2PLUS; j++) {
-        gamesFormat.push([
-          BRACKET_R2PLUS_GAME_ID[nextGameCounter],
-          parseInt(reg), // regionID
-          parseInt(year),
-          null, // team1ID
-          null, // team2ID
-          null, // winner
-          BRACKET_R2PLUS_ROUND[nextGameCounter],
-          BRACKET_R2PLUS_NEXT_GAME[nextGameCounter],
-          BRACKET_R2PLUS_NEXT_SPOT[nextGameCounter],
-          null, // team1Seed
-          null, // team2Seed
-        ]);
+        gamesFormat.push(
+          createFutureGameRow(
+            BRACKET_R2PLUS_GAME_ID[nextGameCounter],
+            parseInt(reg),
+            parseInt(year),
+            BRACKET_R2PLUS_ROUND[nextGameCounter],
+            BRACKET_R2PLUS_NEXT_GAME[nextGameCounter],
+            BRACKET_R2PLUS_NEXT_SPOT[nextGameCounter]
+          )
+        );
         nextGameCounter++;
       }
     });
     for (let q = 0; q < INTER_REGION_COUNT; q++) {
-      gamesFormat.push([
-        BRACKET_R2PLUS_GAME_ID[nextGameCounter],
-        BRACKET_INTER_REGION_IDS[q],
-        parseInt(year),
-        null, // team1ID
-        null, // team2ID
-        null, // winner
-        BRACKET_R2PLUS_ROUND[nextGameCounter],
-        BRACKET_R2PLUS_NEXT_GAME[nextGameCounter],
-        BRACKET_R2PLUS_NEXT_SPOT[nextGameCounter],
-        null, // team1Seed
-        null, // team2Seed
-      ]);
+      gamesFormat.push(
+        createFutureGameRow(
+          BRACKET_R2PLUS_GAME_ID[nextGameCounter],
+          BRACKET_INTER_REGION_IDS[q],
+          parseInt(year),
+          BRACKET_R2PLUS_ROUND[nextGameCounter],
+          BRACKET_R2PLUS_NEXT_GAME[nextGameCounter],
+          BRACKET_R2PLUS_NEXT_SPOT[nextGameCounter]
+        )
+      );
       nextGameCounter++;
     }
   }
@@ -321,8 +337,10 @@ async function updateBracket(gamesData, year, regionArray) {
 
   const existingSIDs = existingRecords.map((rec) => rec.sID);
   const newSIDs = teamRecordFormat.map((rec) => rec.sID);
-  const sIDsToAdd = newSIDs.filter((sid) => !existingSIDs.includes(sid));
-  const sIDsToRemove = existingSIDs.filter((sid) => !newSIDs.includes(sid));
+  const existingSIDsSet = new Set(existingSIDs);
+  const newSIDsSet = new Set(newSIDs);
+  const sIDsToAdd = newSIDs.filter((sid) => !existingSIDsSet.has(sid));
+  const sIDsToRemove = existingSIDs.filter((sid) => !newSIDsSet.has(sid));
 
   // A balanced add/remove set is required so every pick on a removed school
   // can be migrated to a specific replacement. An imbalance means the producer
@@ -346,28 +364,19 @@ async function updateBracket(gamesData, year, regionArray) {
 }
 
 async function updateEntrywithNewSchools(schoolChanges, year) {
-  //schoolChanges is an array of [addSID, removeSID]
-  const allEntries = await gameRepository.getAllEntries(year);
+  // schoolChanges is an array of [addSID, removeSID]
+  const removeSIDs = schoolChanges.map(([, removeSID]) => removeSID).filter(Boolean);
+  if (removeSIDs.length === 0) return;
 
-  // Build the complete set of pick updates across all school changes, then
-  // write them all in a single batched operation instead of one write per entry.
-  const updates = [];
-  for (const entry of allEntries) {
-    let currentPicks = [...entry.picks];
-    let hasChanged = false;
-    for (const [addSID, removeSID] of schoolChanges) {
-      if (!removeSID) continue;
-      if (currentPicks.includes(removeSID)) {
-        currentPicks = currentPicks.map((pick) => (pick === removeSID ? addSID : pick));
-        hasChanged = true;
-      }
-    }
-    if (hasChanged) {
-      updates.push({ entryId: entry.id, picks: currentPicks.map(Number) });
-    }
-  }
+  const affectedEntries = await gameRepository.getEntriesContainingTeams(year, removeSIDs);
+  if (affectedEntries.length === 0) return;
 
-  await entryRepository.updateMultipleEntryPicks(updates, year);
+  const limit = pLimit(5);
+  await Promise.all(
+    affectedEntries.map((entry) =>
+      limit(() => entryRepository.updateEntryPicksWithSwaps(entry.id, schoolChanges, year))
+    )
+  );
 }
 
 async function prepareNewTournamentData() {

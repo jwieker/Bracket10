@@ -3,7 +3,6 @@ import {
   successResponse,
   errorResponse,
   validateRequest,
-  getPaginationParams,
   parseYear,
   parseYearOrDefault,
   parsePositiveInt,
@@ -88,38 +87,6 @@ describe('validateRequest', () => {
   test('passes with empty required fields list', () => {
     const req = mockReq();
     expect(() => validateRequest(req, [])).not.toThrow();
-  });
-});
-
-describe('getPaginationParams', () => {
-  test('returns defaults for missing query params', () => {
-    const req = mockReq({ query: {} });
-    expect(getPaginationParams(req)).toEqual({ page: 1, limit: 10, offset: 0 });
-  });
-
-  test('clamps page to at least 1', () => {
-    const req = mockReq({ query: { page: '-5' } });
-    expect(getPaginationParams(req).page).toBe(1);
-  });
-
-  test('computes correct offset', () => {
-    const req = mockReq({ query: { page: '3', limit: '10' } });
-    expect(getPaginationParams(req).offset).toBe(20);
-  });
-
-  test('clamps limit to 100 max', () => {
-    const req = mockReq({ query: { limit: '999' } });
-    expect(getPaginationParams(req).limit).toBe(100);
-  });
-
-  test('clamps negative limit to 1', () => {
-    const req = mockReq({ query: { limit: '-5' } });
-    expect(getPaginationParams(req).limit).toBe(1);
-  });
-
-  test('handles NaN page gracefully', () => {
-    const req = mockReq({ query: { page: 'abc' } });
-    expect(getPaginationParams(req).page).toBe(1);
   });
 });
 
@@ -242,6 +209,12 @@ describe('validateConferencePayload', () => {
 });
 
 describe('controllerWrapper', () => {
+  const prevDebug = process.env.DEBUG_ERRORS;
+  afterEach(() => {
+    if (prevDebug === undefined) delete process.env.DEBUG_ERRORS;
+    else process.env.DEBUG_ERRORS = prevDebug;
+  });
+
   test('calls inner function and returns result', async () => {
     const res = mockRes();
     const req = mockReq();
@@ -251,7 +224,7 @@ describe('controllerWrapper', () => {
     expect(inner).toHaveBeenCalledWith(req, res);
   });
 
-  test('returns 400 json for ValidationError', async () => {
+  test('returns 400 json for ValidationError (field is non-sensitive, kept)', async () => {
     const res = mockRes();
     const req = mockReq();
     const inner = vi.fn().mockRejectedValue(new ValidationError('bad field', 'email'));
@@ -265,7 +238,27 @@ describe('controllerWrapper', () => {
     }));
   });
 
-  test('returns 500 json for ServiceError', async () => {
+  // #168 regression: the internal `service` name and raw message must NOT be
+  // disclosed by default (production / no DEBUG_ERRORS) — matching
+  // errorMiddleware's gate. Previously they leaked unconditionally.
+  test('returns 500 json for ServiceError WITHOUT leaking service/raw message by default', async () => {
+    delete process.env.DEBUG_ERRORS;
+    const res = mockRes();
+    const req = mockReq();
+    const inner = vi.fn().mockRejectedValue(new ServiceError('svc down', 'myService'));
+    const wrapped = controllerWrapper(inner);
+    await wrapped(req, res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload).not.toHaveProperty('service');
+    expect(payload).toEqual({
+      error: 'Service Error',
+      message: 'A service error occurred.',
+    });
+  });
+
+  test('returns 500 json for ServiceError WITH verbose fields when DEBUG_ERRORS=1', async () => {
+    process.env.DEBUG_ERRORS = '1';
     const res = mockRes();
     const req = mockReq();
     const inner = vi.fn().mockRejectedValue(new ServiceError('svc down', 'myService'));
@@ -275,6 +268,7 @@ describe('controllerWrapper', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       error: 'Service Error',
       message: 'svc down',
+      service: 'myService',
     }));
   });
 

@@ -1,5 +1,8 @@
+import { Filter, FieldValue } from '@google-cloud/firestore';
 import { db } from "../config/firestore.js";
 import { thisYear, APP_CONFIG } from "../config/app.js";
+import Logger from "../utils/logger.js";
+import { cacheGet, cacheSet, cacheDel, invalidateCache } from "../utils/cacheUtils.js";
 
 // Entries whose only group is in this list are filtered out of standard listings.
 // Historically "Bad" was a sandbox group whose entries shouldn't appear in pick
@@ -8,8 +11,7 @@ const EXCLUDED_GROUPS = new Set(APP_CONFIG.tournament.excludedGroups || []);
 function isExcludedOnlyGroup(groups) {
     return groups.length === 1 && EXCLUDED_GROUPS.has(groups[0]);
 }
-import Logger from "../utils/logger.js";
-import { cacheGet, cacheSet, cacheDel, invalidateCache } from "../utils/cacheUtils.js";
+export const _isExcludedOnlyGroupForTests = isExcludedOnlyGroup;
 
 // ─── Path helpers ─────────────────────────────────────────────────
 
@@ -23,6 +25,30 @@ function yearCol(year, sub) {
 /** Direct doc ref inside a year-scoped subcollection */
 function yearDoc(year, sub, docId) {
     return yearCol(year, sub).doc(String(docId));
+}
+
+/**
+ * Orders entries by registration time. Entry ids used to be timestamp-based,
+ * so sorting by `a.id - b.id` happened to yield registration order. Ids are now
+ * cryptographically random (and unordered), so sort by the `created_at` field
+ * instead, with the id as a stable tiebreaker for any legacy rows missing it.
+ */
+function byRegistrationOrder(a, b) {
+    // created_at is normally an ISO string, but tolerate native Date and
+    // Firestore Timestamp values (which expose .toDate()) for legacy/admin rows.
+    const toMs = (val) => {
+        if (!val) return 0;
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (val instanceof Date) return val.getTime();
+        return Date.parse(val) || 0;
+    };
+    const ta = toMs(a.created_at);
+    const tb = toMs(b.created_at);
+    if (ta !== tb) return ta - tb;
+    // Stable tiebreaker (relational compare works for numeric and string ids).
+    if (a.id < b.id) return -1;
+    if (a.id > b.id) return 1;
+    return 0;
 }
 
 // ─── Cached reference-data helpers ────────────────────────────────
@@ -111,12 +137,44 @@ export class EntryRepository {
     async updateMultipleEntryPoints(pointsChunk, year = thisYear) {
         Logger.debug('DB CALL: H.EntryRepository.updateMultipleEntryPoints');
         try {
-            const batch = db.batch();
-            for (const { entryID, points, possPoints } of pointsChunk) {
-                const ref = yearDoc(year, 'entries', toNum(entryID));
-                batch.update(ref, { totalPoints: points, possPoints });
+            const updates = pointsChunk.map(({ entryID, points, possPoints }) => ({
+                ref: yearDoc(year, 'entries', toNum(entryID)),
+                data: { totalPoints: points, possPoints },
+            }));
+            try {
+                const batch = db.batch();
+                for (const { ref, data } of updates) {
+                    batch.update(ref, data);
+                }
+                await batch.commit();
+            } catch (error) {
+                // Firestore batches are atomic: one missing doc (an entry deleted
+                // between the caller's read and this commit) fails all ≤500 updates
+                // in the chunk. Retry with only the docs that still exist so a
+                // single deletion can't leave a whole chunk's standings stale.
+                Logger.warn(`updateMultipleEntryPoints: batch commit failed (${error.message}); retrying with existence check`);
+                const snapshots = await db.getAll(...updates.map(u => u.ref));
+                const retryBatch = db.batch();
+                let retried = 0;
+                snapshots.forEach((snap, i) => {
+                    if (snap.exists) {
+                        retryBatch.update(updates[i].ref, updates[i].data);
+                        retried++;
+                    }
+                });
+                if (retried > 0) await retryBatch.commit();
+                Logger.info(`updateMultipleEntryPoints: retried ${retried}/${updates.length} entries (skipped ${updates.length - retried} missing)`);
             }
-            await batch.commit();
+            // Bust standings caches so targeted points updates (ESPN poll path,
+            // which never calls clearAllCache) are visible immediately on THIS
+            // process. The poll job runs in its own container and web instances
+            // each keep a private cache, so cross-process freshness is bounded
+            // only by the cache TTLs (300s on all live-scoring keys).
+            invalidateCache('groupTeams_');
+            invalidateCache('entriesForGroup_');
+            invalidateCache(`gameViewData_${year}_`);
+            cacheDel(`allEntries_${year}`);
+            cacheDel(`entriesByNameRaw_${year}`);
         } catch (error) {
             Logger.error("Error in updateMultipleEntryPoints:", error);
             throw error;
@@ -141,6 +199,9 @@ export class EntryRepository {
             cacheDel(`groupTeams_${g}_${year}`);
             cacheDel(`entriesForGroup_${g}_${year}`);
             cacheDel(`gameViewData_${year}_${g}`);
+            // A group's first entry of a new year must show up in its year
+            // dropdown without waiting out the yearsForGroup_ TTL.
+            cacheDel(`yearsForGroup_${g}`);
         });
         cacheDel(`allEntries_${year}`);
         cacheDel(`entriesByNameRaw_${year}`);
@@ -210,26 +271,70 @@ export class EntryRepository {
     async updateEntryPicks(entryId, newPicks, year) {
         Logger.debug('DB CALL: H.EntryRepository.updateEntryPicks');
         await yearDoc(year, 'entries', entryId).update({ picks: newPicks });
+        // groupTeams_/gameViewData_ also hold per-entry picks — without these
+        // busts the results page keeps serving the old picks for a full TTL
+        // on the very instance that processed the edit.
+        invalidateCache('groupTeams_');
+        invalidateCache(`gameViewData_${year}_`);
         invalidateCache('entriesForGroup_');
         cacheDel(`allEntries_${year}`);
         cacheDel(`entriesByNameRaw_${year}`);
+    }
+
+    async updateEntryPicksWithSwaps(entryId, swaps, year) {
+        Logger.debug('DB CALL: H.EntryRepository.updateEntryPicksWithSwaps');
+        const ref = yearDoc(year, 'entries', entryId);
+        const updated = await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(ref);
+            if (!doc.exists) return false;
+            const data = doc.data();
+            const picks = data.picks || [];
+            let currentPicks = [...picks];
+            let hasChanged = false;
+            for (const [addSID, removeSID] of swaps) {
+                if (!removeSID) continue;
+                if (currentPicks.includes(removeSID)) {
+                    currentPicks = currentPicks.map((pick) => (pick === removeSID ? addSID : pick));
+                    hasChanged = true;
+                }
+            }
+            if (!hasChanged) return false;
+            transaction.update(ref, { picks: currentPicks.map(Number) });
+            return true;
+        });
+        if (updated) {
+            invalidateCache('groupTeams_');
+            invalidateCache(`gameViewData_${year}_`);
+            invalidateCache('entriesForGroup_');
+            cacheDel(`allEntries_${year}`);
+            cacheDel(`entriesByNameRaw_${year}`);
+        }
+        return updated;
     }
 
     async updateMultipleEntryPicks(updates, year) {
         Logger.debug('DB CALL: H.EntryRepository.updateMultipleEntryPicks');
         if (updates.length === 0) return;
         const BATCH_SIZE = 500;
+        const commitPromises = [];
         for (let i = 0; i < updates.length; i += BATCH_SIZE) {
             const chunk = updates.slice(i, i + BATCH_SIZE);
             const batch = db.batch();
             for (const { entryId, picks } of chunk) {
                 batch.update(yearDoc(year, 'entries', entryId), { picks });
             }
-            await batch.commit();
+            commitPromises.push(batch.commit());
         }
-        invalidateCache('entriesForGroup_');
-        cacheDel(`allEntries_${year}`);
-        cacheDel(`entriesByNameRaw_${year}`);
+        try {
+            await Promise.all(commitPromises);
+        } finally {
+            // finally: bust caches even on partial commit failure so stale picks aren't served.
+            invalidateCache('groupTeams_');
+            invalidateCache(`gameViewData_${year}_`);
+            invalidateCache('entriesForGroup_');
+            cacheDel(`allEntries_${year}`);
+            cacheDel(`entriesByNameRaw_${year}`);
+        }
     }
 
     async getUnsentEmailEntries(groupName, year = thisYear) {
@@ -339,11 +444,177 @@ export class ViewRepository {
 export class GameRepository {
     async updateWinner(gameID, winner, year = thisYear) {
         Logger.debug('DB CALL: H.GameRepository.updateWinner');
-        await yearDoc(year, 'games', gameID).update({ winner });
+        // Resolving a game always releases any manual hold so a poll-skipped
+        // game can be brought back into play by recording its result.
+        await yearDoc(year, 'games', gameID).update({ winner, manualHold: false });
         cacheDel(`tournamentDetails_${year}`);
         cacheDel(`activeGames_${year}`);
         cacheDel(`activeFutureGames_${year}`);
         invalidateCache(`gameViewData_${year}_`);
+    }
+
+    /**
+     * Undo a game result. Clears the winner and sets manualHold in the same
+     * document update so the ESPN poll (which still sees the game in its feed
+     * for ~48h) cannot re-resolve it before an admin releases the hold.
+     */
+    async clearWinnerWithHold(gameID, year = thisYear) {
+        Logger.debug('DB CALL: H.GameRepository.clearWinnerWithHold');
+        await yearDoc(year, 'games', gameID).update({ winner: null, manualHold: true });
+        cacheDel(`tournamentDetails_${year}`);
+        cacheDel(`activeGames_${year}`);
+        cacheDel(`activeFutureGames_${year}`);
+        invalidateCache(`gameViewData_${year}_`);
+    }
+
+    /**
+     * Atomically resolves a non-First-Four game: records the winner (releasing
+     * any manual hold), fills the winner into the next round's slot, and writes
+     * both teams' points/gameStatus — all in one Firestore transaction.
+     *
+     * These used to be four parallel independent writes; a partial failure
+     * (winner recorded, points never credited) produced a torn state no later
+     * poll run could see — resolved games drop out of the unresolved set — so
+     * it persisted until manual intervention.
+     */
+    async resolveGame(
+        { gameID, winner, loser, nextGame, nextGameSpot, winnerPoints, winnerStatus, loserPoints, loserStatus },
+        year = thisYear
+    ) {
+        Logger.debug('DB CALL: H.GameRepository.resolveGame');
+        await db.runTransaction(async (transaction) => {
+            // All reads first (Firestore transaction contract). A team's sID can
+            // match multiple schoolRecords docs (ff_ + canonical) — update all.
+            const [winnerSnap, loserSnap] = await Promise.all([
+                transaction.get(yearCol(year, 'schoolRecords').where('sID', '==', toNum(winner))),
+                transaction.get(yearCol(year, 'schoolRecords').where('sID', '==', toNum(loser))),
+            ]);
+
+            transaction.update(yearDoc(year, 'games', gameID), { winner, manualHold: false });
+
+            if (nextGame) {
+                let teamName = null;
+                let teamSeed = null;
+                if (!winnerSnap.empty) {
+                    const recData = winnerSnap.docs[0].data();
+                    teamName = recData.nameNick || recData.schoolName || null;
+                    teamSeed = recData.seed ?? null;
+                }
+                const prefix = nextGameSpot === 1 ? 'team1' : 'team2';
+                transaction.update(yearDoc(year, 'games', nextGame), {
+                    [`${prefix}ID`]: winner,
+                    [`${prefix}Name`]: teamName,
+                    [`${prefix}Seed`]: teamSeed,
+                });
+            }
+
+            winnerSnap.docs.forEach(doc =>
+                transaction.update(doc.ref, { points: winnerPoints, gameStatus: winnerStatus }));
+            loserSnap.docs.forEach(doc =>
+                transaction.update(doc.ref, { points: loserPoints, gameStatus: loserStatus }));
+        });
+        cacheDel(`tournamentDetails_${year}`);
+        cacheDel(`activeGames_${year}`);
+        cacheDel(`activeFutureGames_${year}`);
+        cacheDel(`allTeamNames_${year}`);
+        invalidateCache(`gameViewData_${year}_`);
+    }
+
+    /**
+     * Atomically undoes a non-First-Four game result: restores both teams'
+     * pre-game points/gameStatus, clears the winner's next-round slot, and
+     * clears the game's winner while setting manualHold (so the poll, whose
+     * ESPN feed still lists the game as completed, can't re-apply the result).
+     * Mirror of resolveGame — same single-transaction guarantee.
+     */
+    async undoResolvedGame(
+        { gameID, winner, loser, nextGame, nextGameSpot, restorePoints, restoreStatus },
+        year = thisYear
+    ) {
+        Logger.debug('DB CALL: H.GameRepository.undoResolvedGame');
+        await db.runTransaction(async (transaction) => {
+            const [winnerSnap, loserSnap] = await Promise.all([
+                transaction.get(yearCol(year, 'schoolRecords').where('sID', '==', toNum(winner))),
+                transaction.get(yearCol(year, 'schoolRecords').where('sID', '==', toNum(loser))),
+            ]);
+
+            transaction.update(yearDoc(year, 'games', gameID), { winner: null, manualHold: true });
+
+            if (nextGame) {
+                const prefix = nextGameSpot === 1 ? 'team1' : 'team2';
+                transaction.update(yearDoc(year, 'games', nextGame), {
+                    [`${prefix}ID`]: null,
+                    [`${prefix}Name`]: null,
+                    [`${prefix}Seed`]: null,
+                });
+            }
+
+            for (const snap of [winnerSnap, loserSnap]) {
+                snap.docs.forEach(doc =>
+                    transaction.update(doc.ref, { points: restorePoints, gameStatus: restoreStatus }));
+            }
+        });
+        cacheDel(`tournamentDetails_${year}`);
+        cacheDel(`activeGames_${year}`);
+        cacheDel(`activeFutureGames_${year}`);
+        cacheDel(`allTeamNames_${year}`);
+        invalidateCache(`gameViewData_${year}_`);
+    }
+
+    // ── Pending points-recalc marker ──────────────────────────────
+    // Durable record (on tournaments/{year}) of team sIDs whose game results
+    // have been written but whose entry-points recalc has not yet completed.
+    // Without it, a recalc failure was never retried: resolved games drop out
+    // of the poll's unresolved set, so standings stayed wrong until the next
+    // unrelated game completed or an admin intervened.
+
+    async addPendingRecalcSIDs(year, sIDs) {
+        Logger.debug('DB CALL: H.GameRepository.addPendingRecalcSIDs');
+        const numericSIDs = [...new Set(sIDs.map(Number))];
+        if (numericSIDs.length === 0) return;
+        await db.collection('tournaments').doc(String(toNum(year))).set(
+            { pendingRecalcSIDs: FieldValue.arrayUnion(...numericSIDs) },
+            { merge: true }
+        );
+    }
+
+    async getPendingRecalcSIDs(year) {
+        Logger.debug('DB CALL: H.GameRepository.getPendingRecalcSIDs');
+        const doc = await db.collection('tournaments').doc(String(toNum(year))).get();
+        if (!doc.exists) return [];
+        return (doc.data().pendingRecalcSIDs || []).map(Number);
+    }
+
+    async clearPendingRecalcSIDs(year, sIDs) {
+        Logger.debug('DB CALL: H.GameRepository.clearPendingRecalcSIDs');
+        const numericSIDs = [...new Set(sIDs.map(Number))];
+        if (numericSIDs.length === 0) return;
+        // arrayRemove (not a wholesale delete) so sIDs appended by a concurrent
+        // run after our read survive for that run's own recalc.
+        await db.collection('tournaments').doc(String(toNum(year))).set(
+            { pendingRecalcSIDs: FieldValue.arrayRemove(...numericSIDs) },
+            { merge: true }
+        );
+    }
+
+    async setGameManualHold(gameID, hold, year = thisYear) {
+        Logger.debug('DB CALL: H.GameRepository.setGameManualHold');
+        await yearDoc(year, 'games', gameID).update({ manualHold: !!hold });
+        cacheDel(`tournamentDetails_${year}`);
+        cacheDel(`activeGames_${year}`);
+        cacheDel(`activeFutureGames_${year}`);
+        invalidateCache(`gameViewData_${year}_`);
+    }
+
+    /**
+     * Uncached read of the First Four (round 0) games. Used by write-time pick
+     * normalization, which must see live winner state rather than the 300s
+     * tournamentDetails cache.
+     */
+    async getFirstFourGames(year = thisYear) {
+        Logger.debug('DB CALL: H.GameRepository.getFirstFourGames');
+        const snap = await yearCol(year, 'games').where('round', '==', 0).get();
+        return snap.docs.map(doc => doc.data());
     }
 
     async updateNextGameTeam(nextGame, nextGameSpot, winner, year = thisYear) {
@@ -463,14 +734,17 @@ export class GameRepository {
             .get();
         const result = snapshot.docs
             .map(doc => doc.data())
-            .sort((a, b) => a.id - b.id)
+            .sort(byRegistrationOrder)
             .map(data => ({
                 id: data.id, teamName: data.teamName, picks: data.picks,
                 totalPoints: data.totalPoints, person: data.person,
                 groups: data.groups || (data.group ? [data.group] : [])
             }));
 
-        cacheSet(cacheKey, result); // Default TTL; busted by clearAllCache after point updates
+        // 300s: holds live totalPoints. In-process busts (updateMultipleEntryPoints
+        // et al.) don't reach the poll container or sibling web instances, so the
+        // TTL is the real cross-process freshness bound.
+        cacheSet(cacheKey, result, 300);
         return result;
     }
 
@@ -487,14 +761,16 @@ export class GameRepository {
                 const groups = data.groups || (data.group ? [data.group] : []);
                 return !isExcludedOnlyGroup(groups);
             })
-            .sort((a, b) => a.id - b.id)
+            .sort(byRegistrationOrder)
             .map(data => ({
                 id: data.id, teamName: data.teamName, picks: data.picks,
                 totalPoints: data.totalPoints, person: data.person,
                 groups: data.groups || (data.group ? [data.group] : [])
             }));
 
-        cacheSet(cacheKey, result); // Default TTL; busted by clearAllCache after point updates
+        // 300s: holds live totalPoints — see getEntriesForGroup for why the TTL
+        // (not cache busting) is the cross-process freshness bound.
+        cacheSet(cacheKey, result, 300);
         return result;
     }
 
@@ -530,7 +806,11 @@ export class GameRepository {
                 return (a.regionName || '').localeCompare(b.regionName || '');
             });
 
-        cacheSet(cacheKey, result, 86400);
+        // 300s, not 24h: points/gameStatus are live scoring data. The poll job
+        // writes them from a separate container whose cache busts never reach
+        // web instances, so a long TTL here let admin ranking views compute
+        // from team records up to a day old.
+        cacheSet(cacheKey, result, 300);
         return result;
     }
 
@@ -676,28 +956,81 @@ export class GameRepository {
         const years = [];
 
         // Check each year in parallel for entries belonging to this group.
-        // Run two queries: one for the new `groups` array field and one for
-        // the old singular `group` string field (legacy entries).
+        // Run a single Filter.or query to check both the new `groups` array field
+        // and the old singular `group` string field (legacy entries) in one pass.
         await Promise.all(tournamentsSnap.docs.map(async (doc) => {
             const year = doc.id;
-            const [newSnap, legacySnap] = await Promise.all([
-                yearCol(year, 'entries')
-                    .where('groups', 'array-contains', groupName)
-                    .limit(1)
-                    .get(),
-                yearCol(year, 'entries')
-                    .where('group', '==', groupName)
-                    .limit(1)
-                    .get(),
-            ]);
-            if (!newSnap.empty || !legacySnap.empty) {
+            const snap = await yearCol(year, 'entries')
+                .where(Filter.or(
+                    Filter.where('groups', 'array-contains', groupName),
+                    Filter.where('group', '==', groupName)
+                ))
+                .limit(1)
+                .get();
+
+            if (!snap.empty) {
                 years.push(toNum(year));
             }
         }));
 
         const result = years.sort((a, b) => b - a).map(year => ({ year }));
-        cacheSet(cacheKey, result, 31536000); // 365 days — busted by clearAllCache on writes
+        // 1h, not 365d: createEntry busts this key on the writing instance, but
+        // other instances only converge via TTL — a year-long TTL could hide a
+        // group's first entry of a new season from their dropdowns indefinitely.
+        cacheSet(cacheKey, result, 3600);
         return result;
+    }
+
+    /**
+     * getEntriesByEmail — returns every entry across all tournament years whose
+     * `email` matches the given address (case-insensitive), tagged with its year
+     * and sorted newest-year-first (registration order within a year).
+     *
+     * Mirrors getAllYearsForGroup: reads the small top-level `tournaments`
+     * collection first, then queries each year's `entries` subcollection in
+     * parallel — avoiding collectionGroup (and its manually-created index).
+     * Single-field `where('email','==')` uses Firestore's automatic index.
+     *
+     * Firestore equality is byte-exact. New registrations are stored lowercased
+     * (see createNewEntry), but to stay robust against any legacy un-normalized
+     * rows we query both the raw input and its lowercased form, de-dupe by doc
+     * id, and filter in memory as a final ownership guard.
+     *
+     * Pass `year` to scope to a single tournament year — this skips the
+     * `tournaments` read and avoids scanning every year (used by the per-request
+     * results-page highlight, which only needs one year).
+     */
+    async getEntriesByEmail(email, year = null) {
+        Logger.debug('DB CALL: H.GameRepository.getEntriesByEmail');
+        const raw = String(email || '').trim();
+        if (!raw) return [];
+        const emailLower = raw.toLowerCase();
+        const variants = [...new Set([raw, emailLower])];
+
+        const years = year != null
+            ? [String(year)]
+            : (await db.collection('tournaments').get()).docs.map((doc) => doc.id);
+
+        const perYear = await Promise.all(years.map(async (yr) => {
+            const snaps = await Promise.all(
+                variants.map((value) =>
+                    yearCol(yr, 'entries').where('email', '==', value).get()
+                )
+            );
+            const byId = new Map();
+            for (const snap of snaps) {
+                for (const d of snap.docs) {
+                    const data = d.data();
+                    byId.set(d.id, { ...data, id: data.id ?? d.id, year: toNum(yr) });
+                }
+            }
+            return [...byId.values()];
+        }));
+
+        return perYear
+            .flat()
+            .filter((e) => e.email?.toLowerCase() === emailLower)
+            .sort((a, b) => (a.year !== b.year ? b.year - a.year : byRegistrationOrder(a, b)));
     }
 
     /**
@@ -744,6 +1077,8 @@ export class GameRepository {
         }
 
         await ref.update(updatePayload);
+        invalidateCache('groupTeams_');
+        invalidateCache(`gameViewData_${entry.year}_`);
         invalidateCache('entriesForGroup_');
         cacheDel(`allEntries_${entry.year}`);
         cacheDel(`entriesByNameRaw_${entry.year}`);
@@ -1279,5 +1614,49 @@ export class ConferenceRepository {
         Logger.debug('DB CALL: H.ConferenceRepository.updateConference');
         await db.collection('conferences').doc(slug).update({ name, shortName, division, active });
         cacheDel('allConferences');
+    }
+}
+
+// ─── SessionRepository ────────────────────────────────────────────
+
+export class SessionRepository {
+    /**
+     * Deletes every session document that belongs to a Google-authenticated
+     * identity — i.e. one whose stored session has `userEmail` (participant) or
+     * `adminEmail` (site admin) set. Anonymous sessions are left untouched.
+     *
+     * The session store keeps the express-session payload under a `session` field
+     * (see `FirestoreStore.set`), so we inspect `data.session` rather than the
+     * document root. Scans the whole collection because Firestore can't express an
+     * "either field exists" filter; this runs only on a manual admin action, so the
+     * read volume stays well inside the free tier.
+     *
+     * @returns {Promise<number>} the number of sessions deleted.
+     */
+    async clearAuthenticatedSessions() {
+        Logger.debug('DB CALL: H.SessionRepository.clearAuthenticatedSessions');
+        const snapshot = await db.collection("express-sessions").get();
+        const toDelete = snapshot.docs.filter((doc) => {
+            const sess = (doc.data() || {}).session || {};
+            return sess.userEmail || sess.adminEmail;
+        });
+        const BATCH_SIZE = 450;
+        const commitPromises = [];
+        for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+            const batch = db.batch();
+            toDelete.slice(i, i + BATCH_SIZE).forEach((doc) => batch.delete(doc.ref));
+            commitPromises.push(batch.commit());
+        }
+
+        try {
+            await Promise.all(commitPromises);
+        } catch (error) {
+            Logger.error('Error clearing some authenticated sessions', { error });
+            // Log for visibility and rethrow so the caller (admin action) surfaces the failure;
+            // sessions already deleted stay deleted.
+            throw error;
+        }
+
+        return toDelete.length;
     }
 }

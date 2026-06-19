@@ -23,8 +23,8 @@ vi.mock('google-auth-library', () => {
 });
 
 import {
-  getMonthToDateSpend,
-  getDailySpend,
+  _getMonthToDateSpendForTests,
+  _getDailySpendForTests,
   getBudgetStatus,
   triggerProductionDeploy,
   _clearBudgetCacheForTests,
@@ -42,11 +42,13 @@ describe('cloudService', () => {
     delete process.env.GCP_BILLING_EXPORT_TABLE;
     delete process.env.GCP_BILLING_ACCOUNT_ID;
     delete process.env.GCP_CLOUD_BUILD_TRIGGER_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GCP_PROJECT_ID;
   });
 
-  describe('getMonthToDateSpend', () => {
+  describe('_getMonthToDateSpendForTests', () => {
     test('returns unconfigured if GCP_BILLING_EXPORT_TABLE is not set', async () => {
-      const result = await getMonthToDateSpend();
+      const result = await _getMonthToDateSpendForTests();
       expect(result).toEqual({
         configured: false,
         spent: null,
@@ -72,7 +74,7 @@ describe('cloudService', () => {
         }
       });
 
-      const result = await getMonthToDateSpend();
+      const result = await _getMonthToDateSpendForTests();
 
       expect(mockRequest).toHaveBeenCalledWith(expect.objectContaining({
         url: 'https://bigquery.googleapis.com/bigquery/v2/projects/my-project/queries',
@@ -95,7 +97,7 @@ describe('cloudService', () => {
       process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
       mockRequest.mockResolvedValue({ data: { rows: [] } });
 
-      const result = await getMonthToDateSpend();
+      const result = await _getMonthToDateSpendForTests();
       expect(result).toEqual({
         configured: true,
         spent: 0,
@@ -115,7 +117,7 @@ describe('cloudService', () => {
       };
       mockRequest.mockRejectedValue(apiError);
 
-      const result = await getMonthToDateSpend();
+      const result = await _getMonthToDateSpendForTests();
       expect(result).toEqual({
         configured: true,
         spent: null,
@@ -151,7 +153,7 @@ describe('cloudService', () => {
           }
         });
 
-      const result = await getMonthToDateSpend();
+      const result = await _getMonthToDateSpendForTests();
 
       expect(mockRequest).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
@@ -163,9 +165,9 @@ describe('cloudService', () => {
     });
   });
 
-  describe('getDailySpend', () => {
+  describe('_getDailySpendForTests', () => {
     test('returns unconfigured if GCP_BILLING_EXPORT_TABLE is not set', async () => {
-      const result = await getDailySpend();
+      const result = await _getDailySpendForTests();
       expect(result).toEqual({
         configured: false,
         days: [],
@@ -191,7 +193,7 @@ describe('cloudService', () => {
         }
       });
 
-      const result = await getDailySpend();
+      const result = await _getDailySpendForTests();
       expect(result.configured).toBe(true);
       expect(result.currency).toBe('USD');
       expect(result.days.length).toBe(now.getUTCDate());
@@ -213,7 +215,7 @@ describe('cloudService', () => {
         .mockRejectedValueOnce(missingCreditsErr)
         .mockResolvedValueOnce({ data: { rows: [] } });
 
-      const result = await getDailySpend();
+      const result = await _getDailySpendForTests();
       expect(mockRequest).toHaveBeenCalledTimes(2);
       expect(result.configured).toBe(true);
       expect(result.error).toMatch(/missing `credits` column/);
@@ -225,7 +227,7 @@ describe('cloudService', () => {
       apiError.response = { status: 403, data: { error: { message: 'Access Denied' } } };
       mockRequest.mockRejectedValue(apiError);
 
-      const result = await getDailySpend();
+      const result = await _getDailySpendForTests();
       expect(result).toEqual({
         configured: true,
         days: [],
@@ -439,10 +441,10 @@ describe('cloudService', () => {
       process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
       process.env.GCP_CLOUD_BUILD_TRIGGER_ID = 'trigger-uuid-123';
 
-      const spend = await getMonthToDateSpend();
+      const spend = await _getMonthToDateSpendForTests();
       expect(spend.error).toContain('GCP project ID could not be determined');
 
-      const daily = await getDailySpend();
+      const daily = await _getDailySpendForTests();
       expect(daily.error).toContain('GCP project ID could not be determined');
 
       const deploy = await triggerProductionDeploy();
@@ -453,7 +455,7 @@ describe('cloudService', () => {
       mockProjectIdValue = 'throw'; // First attempt throws/fails transiently
       process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
 
-      const firstAttempt = await getMonthToDateSpend();
+      const firstAttempt = await _getMonthToDateSpendForTests();
       expect(firstAttempt.error).toContain('GCP project ID could not be determined');
 
       // Now resolve the transient issue
@@ -466,7 +468,7 @@ describe('cloudService', () => {
         }
       });
 
-      const secondAttempt = await getMonthToDateSpend();
+      const secondAttempt = await _getMonthToDateSpendForTests();
       expect(secondAttempt.error).toBeUndefined();
       expect(secondAttempt.spent).toBe(124.50);
     });

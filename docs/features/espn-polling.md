@@ -1,6 +1,6 @@
 ---
 tags: [features, espn, polling, cloud-scheduler]
-updated: 2026-05-09
+updated: 2026-06-09
 ---
 
 # ESPN Game Score Auto-Polling
@@ -16,7 +16,9 @@ Cloud Scheduler (every 15 min, tournament windows)
       → pollService.runEspnPoll(year)
         → espnService.fetchCompletedTournamentGames()  ← ESPN API
         → match ESPN team displayNames → internal sID via espnTeamMap.json
-        → call updateTeamRecords() + updateTotalPointsJustYear() for new winners
+        → call updateTeamRecords() per new winner, then one
+          updatePointsForAffectedEntries(year, affectedSIDs) — targeted recalc,
+          not the full-year updateTotalPointsJustYear() the manual admin path uses
 ```
 
 Admin console dry-run (no DB writes):
@@ -25,11 +27,30 @@ POST /admin/trigger-espn-poll  (session-authenticated)
   → gameController.triggerEspnPoll → pollService.runEspnPoll(year, { dryRun: true })
 ```
 
+## Manual hold (undo vs. the poll)
+
+An admin **undo** clears the game's `winner` AND sets `manualHold: true` in the
+same document update (`clearWinnerWithHold`). The poll skips held games — this
+matters because ESPN's today+yesterday feed still lists the game as completed
+for ~48h, and without the hold the poll would re-resolve an undone game within
+one 15-minute cycle. The hold is released two ways:
+
+- recording any result for the game (`updateWinner` writes `manualHold: false`), or
+- the **Release Hold** button on `/admin/tournament` (`POST /releaseGameHold`),
+  which lets the poll re-apply the ESPN result on its next run.
+
+Resolution and undo also order their writes so the `winner` field is the
+*commit marker*: on resolution it is written last (a mid-resolution failure
+leaves the game unresolved and the next poll run retries every idempotent
+step); on undo it is cleared last (a mid-undo failure leaves the game resolved
+so the admin can simply retry). For First Four games this includes the entry
+pick swap/repick — see `gameService.js` round-0 paths.
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/services/espnService.js` | Fetches ESPN scoreboard for today's date. Returns completed games with winner/loser `displayName`. |
+| `src/services/espnService.js` | Fetches ESPN scoreboard for today's date. Returns completed games with winner/loser `displayName`. Also exposes the shared `loadTeamMap()` helper (loads `espnTeamMap.json` via `createRequire`). |
 | `src/services/pollService.js` | `runEspnPoll(year, { dryRun })` — matches ESPN results to DB, writes if `dryRun: false` (default). |
 | `src/config/espnTeamMap.json` | Static JSON mapping ESPN `displayName` → internal `sID`. Must be populated before tournament. |
 | `jobs/espn-poll.js` | Cloud Run Job entrypoint. Reads `POLL_YEAR` env var, calls `runEspnPoll`, exits 0/1. |
@@ -51,7 +72,7 @@ The bundle uses an ESM banner polyfill to handle `require()` and `__dirname` cal
 --banner:js="import {createRequire as __cjsRequire} from 'module'; ..."
 ```
 
-`espnTeamMap.json` is loaded at runtime via `createRequire` inside `pollService.js`. esbuild cannot statically inline it through that pattern, so it is resolved from the bundled `require` polyfill at runtime (the path resolves relative to the bundle file). This works correctly in the container.
+`espnTeamMap.json` is loaded at runtime by the shared `loadTeamMap()` helper in `src/services/espnService.js`, which uses `createRequire` (both `pollService.js` and `tourneyController.js` call this helper instead of loading the map themselves). esbuild cannot statically inline it through that pattern, so it is resolved from the bundled `require` polyfill at runtime (the path resolves relative to the bundle file). This works correctly in the container.
 
 ## Keeping `jobs/` Dependencies in Sync
 

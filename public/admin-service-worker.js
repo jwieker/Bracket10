@@ -1,4 +1,4 @@
-const CACHE_NAME = 'admin-bracket10-v3';
+const CACHE_NAME = 'admin-bracket10-v6';
 const OFFLINE_PAGE = '/offline.html';
 
 // Assets to cache on install

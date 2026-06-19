@@ -91,7 +91,7 @@
         <%- include('partials/scripts') %>
     </div>
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         function esc(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -128,20 +128,53 @@
                         const teams = await response.json();
 
                         const modalBody = document.getElementById('findTeamModalBody');
-                        modalBody.innerHTML = '';
+                        modalBody.textContent = '';
 
                         if (teams.length === 0) {
-                            modalBody.innerHTML = '<p>No schools found matching that name.</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'No schools found matching that name.';
+                            modalBody.appendChild(p);
                         } else {
                             teams.forEach(team => {
                                 const teamDiv = document.createElement('div');
-                                teamDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewTeam?teamId=${esc(String(team.sid))}">${esc(String(team.sid))}</a><br>
-                                    <strong>Name:</strong> ${esc(team.name)}<br>
-                                    <strong>Mascot:</strong> ${esc(team.mascot)}<br>
-                                    <strong>Short Name:</strong> ${esc(team.nameNick)}<br>
-                                    <strong>Conference ID:</strong> ${esc(String(team.confID))}
-                                </p><hr>`;
+
+                                const p = document.createElement('p');
+
+                                const strongId = document.createElement('strong');
+                                strongId.textContent = 'ID: ';
+                                p.appendChild(strongId);
+
+                                const aId = document.createElement('a');
+                                aId.href = `/viewTeam?teamId=${encodeURIComponent(String(team.sid))}`;
+                                aId.textContent = String(team.sid);
+                                p.appendChild(aId);
+                                p.appendChild(document.createElement('br'));
+
+                                const strongName = document.createElement('strong');
+                                strongName.textContent = 'Name: ';
+                                p.appendChild(strongName);
+                                p.appendChild(document.createTextNode(team.name));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongMascot = document.createElement('strong');
+                                strongMascot.textContent = 'Mascot: ';
+                                p.appendChild(strongMascot);
+                                p.appendChild(document.createTextNode(team.mascot ?? ''));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongNick = document.createElement('strong');
+                                strongNick.textContent = 'Short Name: ';
+                                p.appendChild(strongNick);
+                                p.appendChild(document.createTextNode(team.nameNick ?? ''));
+                                p.appendChild(document.createElement('br'));
+
+                                const strongConf = document.createElement('strong');
+                                strongConf.textContent = 'Conference ID: ';
+                                p.appendChild(strongConf);
+                                p.appendChild(document.createTextNode(String(team.confID)));
+
+                                teamDiv.appendChild(p);
+                                teamDiv.appendChild(document.createElement('hr'));
                                 modalBody.appendChild(teamDiv);
                             });
                         }

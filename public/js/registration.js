@@ -26,7 +26,7 @@ function updateConferenceStatsUI() {
 
     // Re-render badges
     const sortedConferences = Object.entries(conferenceStatsData).sort((a, b) => b[1].total - a[1].total);
-    container.innerHTML = '';
+    container.replaceChildren();
 
     sortedConferences.forEach(([confName, stats]) => {
         const badge = document.createElement('span');
