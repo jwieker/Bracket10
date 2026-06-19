@@ -32,12 +32,3 @@ export const TOURNAMENT_ROUNDS = {
   },
 };
 
-export const regionMap = {
-  1: "East",
-  2: "West",
-  3: "South",
-  4: "Midwest",
-  5: "Final Four",
-  6: "Championship",
-  7: "First Four",
-};

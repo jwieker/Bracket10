@@ -24,7 +24,7 @@
 
   <div class="container-fluid pt-3 pb-5 px-2 px-md-4 px-xl-5">
     <div class="d-flex justify-content-end mb-3">
-      <button class="btn btn-sm btn-outline-danger" id="clearAllBtn" onclick="clearAll()" style="display:none">
+      <button class="btn btn-sm btn-outline-danger" id="clearAllBtn" style="display:none">
         Clear All
       </button>
     </div>
@@ -93,9 +93,79 @@
     </div>
   </div>
 
+  <!-- Templates for client-side rendering (kept out of innerHTML strings) -->
+  <template id="gameCardTpl">
+    <div class="game-card">
+      <div class="d-flex align-items-center justify-content-between mb-1">
+        <div class="d-flex align-items-center gap-2 me-2 overflow-hidden">
+          <span class="badge bg-secondary flex-shrink-0 js-seed1"></span>
+          <span class="fw-semibold text-truncate js-name1"></span>
+        </div>
+        <button class="btn btn-sm btn-outline-success flex-shrink-0 js-pick1" data-action="pick">
+          Pick &nbsp;&#9654;
+        </button>
+      </div>
+      <div class="text-center text-muted" style="font-size:.75rem;margin:-2px 0">vs</div>
+      <div class="d-flex align-items-center justify-content-between mt-1">
+        <div class="d-flex align-items-center gap-2 me-2 overflow-hidden">
+          <span class="badge bg-secondary flex-shrink-0 js-seed2"></span>
+          <span class="fw-semibold text-truncate js-name2"></span>
+        </div>
+        <button class="btn btn-sm btn-outline-success flex-shrink-0 js-pick2" data-action="pick">
+          Pick &nbsp;&#9654;
+        </button>
+      </div>
+    </div>
+  </template>
+
+  <template id="simItemTpl">
+    <div class="d-flex align-items-center justify-content-between mb-1 gap-2">
+      <span class="small text-truncate">
+        <span class="text-success fw-bold">&#10003;</span>
+        <strong class="js-winner"></strong>
+        <span class="text-muted">beat <span class="js-loser"></span></span>
+      </span>
+      <button class="btn btn-link btn-sm text-danger p-0 flex-shrink-0 js-undo" data-action="undo">
+        &times; Undo
+      </button>
+    </div>
+  </template>
+
+  <template id="standingsRowTpl">
+    <tr>
+      <td class="ps-3 js-rankCell"></td>
+      <td>
+        <div class="fw-semibold js-person"></div>
+        <div class="text-muted small js-teamName"></div>
+      </td>
+      <td class="text-center text-muted js-totalPoints"></td>
+      <td class="text-center text-muted js-teamsRemaining"></td>
+      <td class="text-center fw-semibold js-simPoints"></td>
+      <td class="text-center fw-semibold js-simTeams"></td>
+    </tr>
+  </template>
+
+  <template id="standingsCardTpl">
+    <div class="card mb-2">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div class="overflow-hidden">
+            <div class="fw-semibold js-personLine"></div>
+            <div class="text-muted small js-teamName"></div>
+          </div>
+          <div class="text-end flex-shrink-0">
+            <div class="text-muted small js-now"></div>
+            <div class="fw-bold js-simPts"></div>
+            <div class="small js-simTeamsLine"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- Embedded data for client-side simulation -->
   <% const safeJson=obj=> JSON.stringify(obj).replace(/</g, '\\u003c' ); %>
-    <script>
+    <script nonce="<%= cspNonce %>">
       const PLAYGROUND_DATA = {
         entries:       <%- safeJson(entries) %>,
         schoolRecords: <%- safeJson(schoolRecords) %>,
@@ -108,7 +178,7 @@
 
     <%- include('partials/scripts') %>
 
-      <script>
+      <script nonce="<%= cspNonce %>">
         // ─────────────────────────────────────────────────
         // State
         // ─────────────────────────────────────────────────
@@ -302,18 +372,24 @@
           const rounds = [...new Set(displayGames.map(g => g.round))].sort((a, b) => a - b);
           const container = document.getElementById('roundFilterBtns');
           const isAllActive = currentFilter === 'all';
-          container.innerHTML = `<button class="btn btn-sm btn-warning${isAllActive ? ' active' : ''}" data-action="filter" data-round="all">All</button>`;
+          const allBtn = document.createElement('button');
+          allBtn.className = `btn btn-sm btn-warning${isAllActive ? ' active' : ''}`;
+          allBtn.dataset.action = 'filter';
+          allBtn.dataset.round = 'all';
+          allBtn.textContent = 'All';
+          const nodes = [allBtn];
           rounds.forEach(r => {
             const meta = PLAYGROUND_DATA.roundNames.find(rn => rn.round === r);
             const rName = meta ? meta.name : `Round ${r}`;
             const isActive = currentFilter == r;
             const btn = document.createElement('button');
             btn.className = `btn btn-sm btn-outline-secondary${isActive ? ' active' : ''}`;
-            btn.setAttribute('data-round', r);
+            btn.dataset.round = r;
+            btn.dataset.action = 'filter';
             btn.textContent = rName;
-            btn.setAttribute('data-action', 'filter');
-            container.appendChild(btn);
+            nodes.push(btn);
           });
+          container.replaceChildren(...nodes);
         }
 
         function renderGames(displayGames) {
@@ -325,8 +401,10 @@
 
           if (filtered.length === 0) {
             const allDone = simulatedWinners.length > 0 && displayGames.length === 0;
-            panel.innerHTML = `<p class="text-muted small text-center py-2">${allDone ? 'All available games have been simulated.' : 'No games match this filter.'
-              }</p>`;
+            const p = document.createElement('p');
+            p.className = 'text-muted small text-center py-2';
+            p.textContent = allDone ? 'All available games have been simulated.' : 'No games match this filter.';
+            panel.replaceChildren(p);
             return;
           }
 
@@ -337,41 +415,45 @@
             byRound[g.round].push(g);
           });
 
-          let html = '';
+          const tpl = document.getElementById('gameCardTpl');
+          const nodes = [];
           Object.keys(byRound).sort((a, b) => a - b).forEach(round => {
             const games = byRound[round];
             if (currentFilter === 'all') {
-              html += `<div class="small text-muted fw-semibold mb-1 mt-2 text-uppercase" style="letter-spacing:.04em">${escHtml(games[0].roundName)}</div>`;
+              const header = document.createElement('div');
+              header.className = 'small text-muted fw-semibold mb-1 mt-2 text-uppercase';
+              header.style.letterSpacing = '.04em';
+              header.textContent = games[0].roundName ?? '';
+              nodes.push(header);
             }
             games.forEach(g => {
-              html += `
-            <div class="game-card">
-              <div class="d-flex align-items-center justify-content-between mb-1">
-                <div class="d-flex align-items-center gap-2 me-2 overflow-hidden">
-                  <span class="badge bg-secondary flex-shrink-0">${g.team1Seed != null ? g.team1Seed : '?'}</span>
-                  <span class="fw-semibold text-truncate">${escHtml(g.team1Name)}</span>
-                </div>
-                <button class="btn btn-sm btn-outline-success flex-shrink-0"
-                  data-action="pick" data-game-id="${g.gameID}" data-winner-sid="${g.team1ID}" data-winner-name="${escHtml(g.team1Name)}" data-loser-sid="${g.team2ID}" data-loser-name="${escHtml(g.team2Name)}" data-round="${g.round}">
-                  Pick &nbsp;&#9654;
-                </button>
-              </div>
-              <div class="text-center text-muted" style="font-size:.75rem;margin:-2px 0">vs</div>
-              <div class="d-flex align-items-center justify-content-between mt-1">
-                <div class="d-flex align-items-center gap-2 me-2 overflow-hidden">
-                  <span class="badge bg-secondary flex-shrink-0">${g.team2Seed != null ? g.team2Seed : '?'}</span>
-                  <span class="fw-semibold text-truncate">${escHtml(g.team2Name)}</span>
-                </div>
-                <button class="btn btn-sm btn-outline-success flex-shrink-0"
-                  data-action="pick" data-game-id="${g.gameID}" data-winner-sid="${g.team2ID}" data-winner-name="${escHtml(g.team2Name)}" data-loser-sid="${g.team1ID}" data-loser-name="${escHtml(g.team1Name)}" data-round="${g.round}">
-                  Pick &nbsp;&#9654;
-                </button>
-              </div>
-            </div>`;
+              const card = tpl.content.firstElementChild.cloneNode(true);
+              card.querySelector('.js-seed1').textContent = g.team1Seed != null ? g.team1Seed : '?';
+              card.querySelector('.js-name1').textContent = g.team1Name ?? '';
+              card.querySelector('.js-seed2').textContent = g.team2Seed != null ? g.team2Seed : '?';
+              card.querySelector('.js-name2').textContent = g.team2Name ?? '';
+
+              const pick1 = card.querySelector('.js-pick1');
+              pick1.dataset.gameId = g.gameID;
+              pick1.dataset.winnerSid = g.team1ID;
+              pick1.dataset.winnerName = g.team1Name ?? '';
+              pick1.dataset.loserSid = g.team2ID;
+              pick1.dataset.loserName = g.team2Name ?? '';
+              pick1.dataset.round = g.round;
+
+              const pick2 = card.querySelector('.js-pick2');
+              pick2.dataset.gameId = g.gameID;
+              pick2.dataset.winnerSid = g.team2ID;
+              pick2.dataset.winnerName = g.team2Name ?? '';
+              pick2.dataset.loserSid = g.team1ID;
+              pick2.dataset.loserName = g.team1Name ?? '';
+              pick2.dataset.round = g.round;
+
+              nodes.push(card);
             });
           });
 
-          panel.innerHTML = html;
+          panel.replaceChildren(...nodes);
         }
 
         function renderSimulatedList(appliedGameIDs) {
@@ -387,72 +469,79 @@
 
           section.style.display = '';
           const sorted = [...applied].sort((a, b) => a.round - b.round);
-          list.innerHTML = sorted.map(sw => `
-        <div class="d-flex align-items-center justify-content-between mb-1 gap-2">
-          <span class="small text-truncate">
-            <span class="text-success fw-bold">&#10003;</span>
-            <strong>${escHtml(sw.winnerName)}</strong>
-            <span class="text-muted">beat ${escHtml(sw.loserName)}</span>
-          </span>
-          <button class="btn btn-link btn-sm text-danger p-0 flex-shrink-0" data-action="undo" data-game-id="${sw.gameID}">
-            &times; Undo
-          </button>
-        </div>`).join('');
+          const tpl = document.getElementById('simItemTpl');
+          const nodes = sorted.map(sw => {
+            const item = tpl.content.firstElementChild.cloneNode(true);
+            item.querySelector('.js-winner').textContent = sw.winnerName ?? '';
+            item.querySelector('.js-loser').textContent = sw.loserName ?? '';
+            item.querySelector('.js-undo').dataset.gameId = sw.gameID;
+            return item;
+          });
+          list.replaceChildren(...nodes);
+        }
+
+        function rankArrowEl(rankChange) {
+          if (rankChange === 0) return null;
+          const span = document.createElement('span');
+          span.className = rankChange > 0 ? 'rank-up me-1' : 'rank-down me-1';
+          span.textContent = rankChange > 0 ? '↑' : '↓';
+          return span;
         }
 
         function renderStandings(simEntries) {
           const tbody = document.getElementById('standingsTbody');
           const mobileDiv = document.getElementById('standingsMobile');
-          let tbodyHtml = '';
-          let mobileHtml = '';
+          const rowTpl = document.getElementById('standingsRowTpl');
+          const cardTpl = document.getElementById('standingsCardTpl');
+          const rows = [];
+          const cards = [];
 
           simEntries.forEach(e => {
             const rankChange = e.rank - e.simRank; // positive = moved up (rank number decreased)
             const rowClass = rankChange > 0 ? 'row-up' : rankChange < 0 ? 'row-down' : '';
             const cardClass = rankChange > 0 ? 'card-up' : rankChange < 0 ? 'card-down' : '';
-
-            const rankArrow = rankChange > 0
-              ? `<span class="rank-up me-1">&#8593;</span>`
-              : rankChange < 0
-                ? `<span class="rank-down me-1">&#8595;</span>`
-                : '';
-
             const simPtsClass = e.simPoints > e.totalPoints ? 'delta-pos' : e.simPoints < e.totalPoints ? 'delta-neg' : '';
             const simTeamsClass = e.simTeamsRemaining < e.teamsRemaining ? 'delta-neg' : '';
 
-            tbodyHtml += `
-          <tr class="${rowClass}">
-            <td class="ps-3">${rankArrow}${e.simRank}</td>
-            <td>
-              <div class="fw-semibold">${escHtml(e.person)}</div>
-              <div class="text-muted small">${escHtml(e.teamName)}</div>
-            </td>
-            <td class="text-center text-muted">${e.totalPoints}</td>
-            <td class="text-center text-muted">${e.teamsRemaining}</td>
-            <td class="text-center fw-semibold ${simPtsClass}">${e.simPoints}</td>
-            <td class="text-center fw-semibold ${simTeamsClass}">${e.simTeamsRemaining}</td>
-          </tr>`;
+            // Desktop table row
+            const row = rowTpl.content.firstElementChild.cloneNode(true);
+            if (rowClass) row.classList.add(rowClass);
+            const rankCell = row.querySelector('.js-rankCell');
+            const rowArrow = rankArrowEl(rankChange);
+            if (rowArrow) rankCell.appendChild(rowArrow);
+            rankCell.appendChild(document.createTextNode(String(e.simRank)));
+            row.querySelector('.js-person').textContent = e.person ?? '';
+            row.querySelector('.js-teamName').textContent = e.teamName ?? '';
+            row.querySelector('.js-totalPoints').textContent = e.totalPoints;
+            row.querySelector('.js-teamsRemaining').textContent = e.teamsRemaining;
+            const simPtsCell = row.querySelector('.js-simPoints');
+            simPtsCell.textContent = e.simPoints;
+            if (simPtsClass) simPtsCell.classList.add(simPtsClass);
+            const simTeamsCell = row.querySelector('.js-simTeams');
+            simTeamsCell.textContent = e.simTeamsRemaining;
+            if (simTeamsClass) simTeamsCell.classList.add(simTeamsClass);
+            rows.push(row);
 
-            mobileHtml += `
-          <div class="card mb-2 ${cardClass}">
-            <div class="card-body py-2 px-3">
-              <div class="d-flex justify-content-between align-items-start gap-2">
-                <div class="overflow-hidden">
-                  <div class="fw-semibold">${rankArrow}#${e.simRank} ${escHtml(e.person)}</div>
-                  <div class="text-muted small">${escHtml(e.teamName)}</div>
-                </div>
-                <div class="text-end flex-shrink-0">
-                  <div class="text-muted small">Now: ${e.totalPoints} pts &middot; ${e.teamsRemaining} teams</div>
-                  <div class="fw-bold ${simPtsClass}">${e.simPoints} pts</div>
-                  <div class="small ${simTeamsClass}">${e.simTeamsRemaining} teams left</div>
-                </div>
-              </div>
-            </div>
-          </div>`;
+            // Mobile card
+            const card = cardTpl.content.firstElementChild.cloneNode(true);
+            if (cardClass) card.classList.add(cardClass);
+            const personLine = card.querySelector('.js-personLine');
+            const cardArrow = rankArrowEl(rankChange);
+            if (cardArrow) personLine.appendChild(cardArrow);
+            personLine.appendChild(document.createTextNode(`#${e.simRank} ${e.person ?? ''}`));
+            card.querySelector('.js-teamName').textContent = e.teamName ?? '';
+            card.querySelector('.js-now').textContent = `Now: ${e.totalPoints} pts · ${e.teamsRemaining} teams`;
+            const simPtsLine = card.querySelector('.js-simPts');
+            simPtsLine.textContent = `${e.simPoints} pts`;
+            if (simPtsClass) simPtsLine.classList.add(simPtsClass);
+            const simTeamsLine = card.querySelector('.js-simTeamsLine');
+            simTeamsLine.textContent = `${e.simTeamsRemaining} teams left`;
+            if (simTeamsClass) simTeamsLine.classList.add(simTeamsClass);
+            cards.push(card);
           });
 
-          tbody.innerHTML = tbodyHtml;
-          mobileDiv.innerHTML = mobileHtml;
+          tbody.replaceChildren(...rows);
+          mobileDiv.replaceChildren(...cards);
         }
 
         function renderSimCount() {
@@ -468,15 +557,6 @@
         // ─────────────────────────────────────────────────
         // Utilities
         // ─────────────────────────────────────────────────
-
-        function escHtml(str) {
-          if (str == null) return '';
-          return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-        }
 
         function escJs(str) {
           if (str == null) return '';

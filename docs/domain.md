@@ -9,27 +9,16 @@ Core concepts and vocabulary for the bracket application. Use these definitions 
 
 ## Entities
 
-**Tournament (Bracket)**
-A structured single-elimination competition. Typically 68 teams, 67 games (4 play-ins + 63 main bracket), 7 rounds (including Round 0). The bracket represents the full sequence of games and how teams advance to one winner.
-
-**Game**
-A single matchup between two Teams within a Tournament. Results in one winner (who advances) and one loser (who is eliminated). Stored in `tournaments/{year}/games/{gameID}`.
-
-**Team (School)**
-A participating entity representing a university. Stored in the `school` collection (static reference data) and in `tournaments/{year}/schoolRecords/{DocID}` (denormalized with tournament-year data). Doc IDs are either canonical `{regionID}_{seed}` or First Four `ff_{gameID}_{slot}`.
-
-**Entry**
-A list of exactly **10 Teams** selected by a participant — their predictions for which teams will advance deepest. Stored in `tournaments/{year}/entries/{entryId}`.
-
-**Group**
-A collection of Entries competing together in a friendly competition. Stored in the `groups` collection (spans all years). Example group used in dev/testing: **"Bob"**.
-
-**Conference**
-A college basketball conference (e.g. SEC, ACC). Stored in the `conferences` collection.
+* **Tournament (Bracket)**: Structured single-elimination competition. Typically 68 teams, 67 games, and 7 rounds. Tracks team advancement to a single champion.
+* **Game**: Matchup between two Teams in a Tournament. One winner advances; one loser is eliminated. Stored at `tournaments/{year}/games/{gameID}`.
+* **Team (School)**: Represented statically in `school` collection and dynamically in `tournaments/{year}/schoolRecords/{DocID}`. Doc IDs are canonical (`{regionID}_{seed}`) or First Four (`ff_{gameID}_{slot}`).
+* **Entry**: Exactly **10 Teams** picked by a user. Stored at `tournaments/{year}/entries/{entryId}`.
+* **Group**: Collection of Entries competing together. Stored in `groups` collection. Example: **"Bob"**.
+* **Conference**: College athletic conference (e.g. SEC, ACC). Stored in `conferences` collection.
 
 ## Points System
 
-Points are awarded for each game a picked team wins, with increasing value per round:
+Points are cumulative. A team reaching the Elite Eight earns 2+3+5+9 = 19 total points. The `points` field on `schoolRecord` stores this value. Round weights:
 
 | Round | Teams Remaining | Points | round (int) |
 |-------|----------------|--------|-------------|
@@ -41,11 +30,18 @@ Points are awarded for each game a picked team wins, with increasing value per r
 | Final Four | 4 → 2 | 17 | 5 |
 | Championship | 2 → 1 | 33 | 6 |
 
-Points are cumulative: a team that reaches the Elite Eight has earned 2+3+5+9 = 19 total points. The `points` field on `schoolRecord` documents stores this cumulative value.
+**First Four pick lifecycle:** participants pick a First Four matchup as ONE
+combined option ("Team A / Team B", stored as `team1ID`) worth 0 points win or
+lose. When the FF game resolves, every entry holding that slot is auto-swapped
+to the winner — whoever the user picked, they get the winner. Picks submitted
+through any create/edit flow are normalized against live game state at write
+time (`normalizeFirstFourPicks`). If an admin undoes an FF game, picks revert
+to the combined value and the game is held from poll re-resolution until a
+result is recorded or the hold is released.
 
 ## Tournament Structure
 
-The bracket is divided into 4 regional brackets before the Final Four:
+Divided into 4 quadrants before the Final Four:
 
 | Region ID | Name |
 |-----------|------|
@@ -57,23 +53,17 @@ The bracket is divided into 4 regional brackets before the Final Four:
 | 6 | Championship |
 | 7 | First Four |
 
-Each region has 16 teams seeded 1–16. Game ID blocks per region: Region 1 → games 1–15, Region 2 → games 16–30, Region 3 → games 31–45, Region 4 → games 46–60. First Four games start at 64. Championship is game 63.
+Each region has seeds 1–16. Game ID ranges: Region 1 (1–15), Region 2 (16–30), Region 3 (31–45), Region 4 (46–60). First Four starts at 64. Championship is game 63.
 
 ## Key Field Names
 
 | Field | Location | Meaning |
 |-------|----------|---------|
-| `sID` | school, schoolRecord | Internal school ID — primary key for team lookups |
-| `gameID` | games | Internal game identifier |
-| `nextGameID` | games | ID of the game the winner advances to |
-| `nextGameSpot` | games | Whether winner goes to `team1ID` or `team2ID` of next game |
-| `gameStatus` | schoolRecord | Array of `"W"`/`"L"` entries tracking a team's round-by-round result |
-| `picks` | entry | Array of 10 `sID` values the participant selected |
-| `emailSent` | entry | `true` if the bracket confirmation email has been sent |
-| `round` | games | Stored as a **number** (e.g. `1` for Round 1) — check types in tests |
-
-## Related Files
-
-- `docs/architecture/database.md` — Firestore collection schemas and document IDs
-- `docs/features/complex-features.md` — Scoring algorithms, max possible points logic
-- `docs/private/development/testing.md` — Test data constraints (10 picks, 63 games, seed counts)
+| `sID` | school, schoolRecord | Internal school ID (primary key for team lookups) |
+| `gameID` | games | Unique game identifier |
+| `nextGameID` | games | Destination game ID for the winner |
+| `nextGameSpot` | games | Destination slot (`team1ID` or `team2ID`) in the next game |
+| `gameStatus` | schoolRecord | Array of `"W"`/`"L"` tracking round results |
+| `picks` | entry | Array of 10 picked `sID` values |
+| `emailSent` | entry | `true` if confirmation email was sent |
+| `round` | games | Round number (0–6) — stored as a number, check types in tests |

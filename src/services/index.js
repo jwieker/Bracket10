@@ -59,10 +59,13 @@ export {
     addPickCount,
     calculateMaxPossiblePoints,
     getAllYearsforGroup,
+    getEntriesForUser,
+    getEntryIdsForUserInGroup,
     getRegionsForYear,
     findEntriesByName,
     addNewGroup,
     getRegionIDForYear,
+    normalizeFirstFourPicks,
     buildFullGridData,
     buildGameViewData,
 } from './viewService.js';

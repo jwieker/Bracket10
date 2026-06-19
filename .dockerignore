@@ -55,12 +55,15 @@ cloudbuild*.yaml
 # AI assistant config and rules (local only)
 claude.md
 gemini.md
+jules.md
 fixpolling.md
 ESPN-POLLING-SETUP.md
 .clinerules
 .cursorrules
 .windsurfrules
+.julesrules
 .claude/
+.jules/
 .skills/
 ai_private/skills/bracket-emails.skill
 
@@ -68,8 +71,7 @@ ai_private/skills/bracket-emails.skill
 council-report*.html
 council-transcript*.md
 
-# App Engine / Heroku config (not needed in Docker)
-app.yaml
+# Heroku config (not needed in Docker)
 Procfile
 
 # Test config

@@ -10,6 +10,7 @@ class RepositoryManager {
         this._tourneyRepository = null;
         this._teamRepository = null;
         this._conferenceRepository = null;
+        this._sessionRepository = null;
     }
 
     get entryRepository() {
@@ -54,6 +55,13 @@ class RepositoryManager {
         return this._conferenceRepository;
     }
 
+    get sessionRepository() {
+        if (!this._sessionRepository) {
+            this._sessionRepository = new repos.SessionRepository();
+        }
+        return this._sessionRepository;
+    }
+
     // Method to set repositories (for testing)
     setRepositories(repositories) {
         this._entryRepository = repositories.entryRepository;
@@ -62,6 +70,7 @@ class RepositoryManager {
         this._tourneyRepository = repositories.tourneyRepository;
         this._teamRepository = repositories.teamRepository;
         this._conferenceRepository = repositories.conferenceRepository;
+        this._sessionRepository = repositories.sessionRepository;
     }
 }
 
@@ -76,6 +85,7 @@ export const {
     tourneyRepository,
     teamRepository,
     conferenceRepository,
+    sessionRepository,
 } = repositoryManager;
 
 // Export classes
@@ -86,4 +96,5 @@ export const {
     TourneyRepository,
     TeamRepository,
     ConferenceRepository,
+    SessionRepository,
 } = repos;

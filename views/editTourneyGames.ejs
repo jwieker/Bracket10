@@ -26,6 +26,7 @@
             </div>
             <!-- this is meant to fail -->
             <form action="/tournamentGamesUpdate" method="post">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="year" value="<%= year %>" />
                 <input type="hidden" name="region" value="<%= regions %>" />
                 <% regions.forEach((regionId, regIndex)=> { %>
@@ -50,7 +51,7 @@
                                     <div class="col-10">
                                         <div class="search-dropdown">
                                             <input type="text" class="search-input" placeholder="Search..."
-                                                aria-label="Search teams" onkeyup="filterDropdown(this)">
+                                                aria-label="Search teams" data-filter-dropdown>
                                             <select class="form-selector" required
                                                 id="gameSelect-<%= regIndex %>-<%= game.gameID %>-<%= j %>"
                                                 name="games">
@@ -79,7 +80,8 @@
                                             </div>
             </form>
 
-            <form action="/deleteTournament" method="post" id="deleteTournamentForm" onsubmit="return confirmDelete()">
+            <form action="/deleteTournament" method="post" id="deleteTournamentForm" data-confirm-submit="confirmDelete">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="year" value="<%= year %>" />
                 <div class="container pb-5">
                     <button type="submit" class="btn btn-danger">
@@ -100,7 +102,7 @@
     </div>
 
 
-    <script>
+    <script nonce="<%= cspNonce %>">
         const selectedTeams = new Set(); // Track selected teams
         const selectedTeams2 = new Set(); // Track selected teams
 

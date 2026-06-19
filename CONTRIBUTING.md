@@ -12,7 +12,7 @@ npm install
 npm run dev                      # http://localhost:8080
 ```
 
-You'll need Node.js **v20.6+** (for native `--env-file-if-exists` support). The Dockerfile pins Node 24.14.
+You'll need Node.js **v20.6+** (for native `--env-file-if-exists` support). The Dockerfile pins Node 24.16.
 
 To exercise admin features locally, you'll need a Google OAuth client (free) and a Firestore database. See [`README.md`](./README.md) for the full setup walkthrough.
 
@@ -57,11 +57,13 @@ Feature requests are welcome too — say what problem you're trying to solve, no
 
 ## Code style
 
-There is no enforced formatter yet (this is on the open-source TODO list — see [`docs/private/OPEN_SOURCE_PLAN.md`](./docs/private/OPEN_SOURCE_PLAN.md)). For now, match the surrounding style: 2-space indent, ESM imports, `const` by default. Try not to introduce new lint warnings.
+There is no enforced formatter yet. For now, match the surrounding style: 2-space indent, ESM imports, `const` by default. Try not to introduce new lint warnings.
 
 ## Cost contract
 
 This project tries to stay close to **$0/month** on its existing GCP / Cloud Run / Firestore stack. If your change introduces recurring spend (new API call, new always-on service, new third-party integration), call that out in the PR description and add a kill switch.
+
+The CSP violation endpoint (`POST /csp-report`) follows this contract: it logs to **stdout only** (no Firestore, no third party), is rate-limited, and is fully disabled by `CSP_REPORT_ONLY=off`.
 
 ## Security
 

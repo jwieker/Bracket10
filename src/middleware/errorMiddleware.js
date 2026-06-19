@@ -1,13 +1,12 @@
 import Logger from "../utils/logger.js";
-import { ValidationError, ServiceError, DatabaseError } from "../utils/errors.js";
+import { ValidationError, ServiceError, DatabaseError, debugErrorsEnabled } from "../utils/errors.js";
 
 // Verbose error fields (operation, service, internal messages) are exposed only
-// when DEBUG_ERRORS is explicitly enabled. Previously these leaked for any
-// non-production NODE_ENV — but "non-prod" isn't the same as "safe to expose
-// schema names and internal exception text". Opt-in via env keeps the default
-// safe even in staging / preview environments.
-const debugErrorsEnabled = () =>
-    process.env.DEBUG_ERRORS === "1" || process.env.DEBUG_ERRORS === "true";
+// when DEBUG_ERRORS is explicitly enabled (see debugErrorsEnabled in errors.js —
+// the single source of truth shared with controllerWrapper). Previously these
+// leaked for any non-production NODE_ENV — but "non-prod" isn't the same as
+// "safe to expose schema names and internal exception text". Opt-in via env
+// keeps the default safe even in staging / preview environments.
 
 // Global Express error handling middleware
 export function errorMiddleware(err, req, res, next) {

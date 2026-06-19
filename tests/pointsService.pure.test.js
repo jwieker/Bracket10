@@ -1,8 +1,11 @@
 import {
-  getFuturePoints,
-  minPoints,
   getHighestPlace,
+  minPoints,
+  getFuturePoints,
+} from '../src/utils/pointsUtils.js';
+import {
   calculateEntryPointsAndPaths,
+  enrichEntriesWithPotentialRankings,
   getNextFutureGame,
   findNextGameId,
 } from '../src/services/pointsService.js';
@@ -88,6 +91,32 @@ describe('Points Service Pure Functions', () => {
       ];
       const result = minPoints(futureGames, 0);
       expect(result).toBe(0);
+    });
+
+    it('should calculate cascading clashes exactly when sortedGames and incomingGames are provided', () => {
+      const futureGames = [
+        ['W', 9, 13, 15],
+        ['W', 9, 13, 15],
+        ['W', 'W', 13, 15]
+      ];
+
+      const sortedGames = [
+        { gameID: 1, round: 1, nextGameID: 9 },
+        { gameID: 2, round: 1, nextGameID: 9 },
+        { gameID: 9, round: 2, nextGameID: 13 },
+        { gameID: 10, round: 2, nextGameID: 13 },
+        { gameID: 13, round: 3, nextGameID: 15 },
+        { gameID: 15, round: 4, nextGameID: 0 }
+      ];
+
+      const incomingGames = new Map([
+        [9, [1, 2]],
+        [13, [9, 10]],
+        [15, [13]]
+      ]);
+
+      const result = minPoints(futureGames, 10, sortedGames, incomingGames);
+      expect(result).toBe(10 + 3 + 5);
     });
   });
 
@@ -667,14 +696,86 @@ describe('First Four (FF) scenarios', () => {
     // in the internal team-to-game map if built purely by gameID.
     const resolvedFF = { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: 100, nextGameID: 5 };
     const unresolvedR1 = { gameID: 5, round: 1, team1ID: 100, team2ID: 50, winner: null, nextGameID: 0 };
-    
+
     // Explicitly order them so gameID 64 is last
     const games = [unresolvedR1, resolvedFF];
     const teams = [{ sID: 100, points: 0, gameStatus: [] }];
-    
+
     const { maxPoints } = calculateEntryPointsAndPaths([100], teams, games);
     // Should get points for the unresolved R1 game (2 points)
     expect(maxPoints).toBe(2);
+  });
+});
+
+// ─── Max score boundary: First Four (round 0) vs Round 1 ────────────────────
+//
+// Validates the two scoring invariants around the FF/R1 boundary:
+//   1. FF games are worth exactly 0 — win or lose, they never move max score.
+//   2. Round 1 games affect max score only by converting potential points to
+//      earned points: a pick winning its R1 game leaves the entry's max score
+//      unchanged; losing collapses the pick's contribution to what was earned.
+//
+describe('max score boundary: First Four (round 0) vs Round 1', () => {
+  const ffGame = { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: null, nextGameID: 5, nextGameSpot: 1 };
+  const r1Game = { gameID: 5,  round: 1, team1ID: null, team2ID: 50,  winner: null, nextGameID: 9  };
+  const r2Game = { gameID: 9,  round: 2, team1ID: null, team2ID: null, winner: null, nextGameID: 13 };
+  const r3Game = { gameID: 13, round: 3, team1ID: null, team2ID: null, winner: null, nextGameID: 15 };
+  const r4Game = { gameID: 15, round: 4, team1ID: null, team2ID: null, winner: null, nextGameID: 61 };
+  const r5Game = { gameID: 61, round: 5, team1ID: null, team2ID: null, winner: null, nextGameID: 63 };
+  const r6Game = { gameID: 63, round: 6, team1ID: null, team2ID: null, winner: null, nextGameID: 0  };
+  const fullRunPoints = R(1) + R(2) + R(3) + R(4) + R(5) + R(6);
+
+  it('a combined FF pick\'s max score is EXACTLY the R1→R6 sum — the FF game adds zero', () => {
+    const games = [ffGame, r1Game, r2Game, r3Game, r4Game, r5Game, r6Game];
+    const teams = [{ sID: 100, points: null, gameStatus: [] }];
+    const { currentPoints, maxPoints } = calculateEntryPointsAndPaths([100], teams, games);
+    expect(currentPoints).toBe(0);
+    expect(maxPoints).toBe(fullRunPoints);
+  });
+
+  it('WINNING the FF game does not change max score (0 points for the win)', () => {
+    // After resolution: winner 100 advanced into R1 game 5 slot 1, canonical
+    // record still has points:null / gameStatus:[] (FF wins are never credited).
+    const resolvedFF = { ...ffGame, winner: 100 };
+    const filledR1 = { ...r1Game, team1ID: 100 };
+    const games = [resolvedFF, filledR1, r2Game, r3Game, r4Game, r5Game, r6Game];
+    const teams = [{ sID: 100, points: null, gameStatus: [] }];
+    const { currentPoints, maxPoints } = calculateEntryPointsAndPaths([100], teams, games);
+    expect(currentPoints).toBe(0);            // win earned nothing
+    expect(maxPoints).toBe(fullRunPoints);    // and cost nothing
+  });
+
+  it('WINNING a Round 1 game does not change max score — R1 points move from potential to earned', () => {
+    const before = (() => {
+      const games = [{ ...r1Game, team1ID: 60 }, r2Game, r3Game, r4Game, r5Game, r6Game];
+      const teams = [{ sID: 50, points: null, gameStatus: [] }];
+      return calculateEntryPointsAndPaths([50], teams, games);
+    })();
+    const after = (() => {
+      // Game 5 resolved in team 50's favor; team advanced into R2 game 9.
+      const games = [
+        { ...r1Game, team1ID: 60, winner: 50 },
+        { ...r2Game, team2ID: 50 },
+        r3Game, r4Game, r5Game, r6Game,
+      ];
+      const teams = [{ sID: 50, points: R(1), gameStatus: ['W'] }];
+      return calculateEntryPointsAndPaths([50], teams, games);
+    })();
+
+    expect(before.currentPoints).toBe(0);
+    expect(after.currentPoints).toBe(R(1));
+    expect(after.maxPoints).toBe(before.maxPoints); // max score unmoved by the R1 result
+  });
+
+  it('LOSING a Round 1 game collapses the pick\'s max contribution to its earned points', () => {
+    const games = [
+      { ...r1Game, team1ID: 60, winner: 60 },
+      r2Game, r3Game, r4Game, r5Game, r6Game,
+    ];
+    const teams = [{ sID: 50, points: 0, gameStatus: ['L'] }];
+    const { currentPoints, maxPoints } = calculateEntryPointsAndPaths([50], teams, games);
+    expect(currentPoints).toBe(0);
+    expect(maxPoints).toBe(0); // eliminated: no future potential
   });
 });
 
@@ -702,6 +803,19 @@ describe('calculateEntryPointsAndPaths — edge cases', () => {
     expect(futureGamePaths).toEqual([[], []]);
   });
 
+  it('dedupes a duplicated pick so its points are not double-counted (#157)', () => {
+    const allTeams = [{ sID: 1, points: 5, gameStatus: ['W', 'L'] }];
+    const activeGames = [];
+
+    const single = calculateEntryPointsAndPaths([1], allTeams, activeGames);
+    const duped = calculateEntryPointsAndPaths([1, 1], allTeams, activeGames);
+
+    // A duplicate must not inflate cumulative/max points or add a phantom path.
+    expect(duped.currentPoints).toBe(single.currentPoints);
+    expect(duped.maxPoints).toBe(single.maxPoints);
+    expect(duped.futureGamePaths).toHaveLength(1);
+  });
+
   it('eliminated team contributes its cumulative points but an empty future path', () => {
     const picks = [1];
     const allTeams = [{ sID: 1, points: 5, gameStatus: ['W', 'L'] }]; // eliminated in R2
@@ -712,6 +826,49 @@ describe('calculateEntryPointsAndPaths — edge cases', () => {
     expect(currentPoints).toBe(5);
     expect(maxPoints).toBe(5);    // no future points
     expect(futureGamePaths[0]).toEqual([]);
+  });
+});
+
+// ─── enrichEntriesWithPotentialRankings — duplicate-pick alignment (#157) ────
+//
+// getHighestPlace pairs entry.picks[i] with entry.futureGames[i] by index.
+// calculateEntryPointsAndPaths returns futureGames deduped, so the enrichment
+// must dedupe picks/pickSet identically or the coupling desyncs on a duplicated
+// pick (undefined paths → NaN / crash). These guard that invariant.
+describe('enrichEntriesWithPotentialRankings — duplicate-pick alignment (#157)', () => {
+  const allTeams = [
+    { sID: 1, points: 5, gameStatus: ['W', 'W'] },
+    { sID: 3, points: 5, gameStatus: ['W', 'W'] },
+  ];
+  const activeGames = [
+    { gameID: 13, team1ID: 1, team2ID: 9, winner: null, nextGameID: 15 },
+    { gameID: 14, team1ID: 3, team2ID: 8, winner: null, nextGameID: 15 },
+    { gameID: 15, team1ID: null, team2ID: null, winner: null, nextGameID: 0 },
+  ];
+
+  it('dedupes picks so picks/pickSet/futureGames stay index-aligned and points are not doubled', () => {
+    const [dup, clean] = enrichEntriesWithPotentialRankings(
+      [
+        { id: 1, picks: [1, 1, 3], teamName: 'Dup', group: 'G' },
+        { id: 2, picks: [1, 3],    teamName: 'Clean', group: 'G' },
+      ],
+      allTeams,
+      activeGames
+    );
+
+    // Duplicate collapsed: arrays stay the same length (the coupling invariant).
+    expect(dup.picks).toEqual([1, 3]);
+    expect(dup.picks.length).toBe(dup.futureGames.length);
+    expect(dup.pickSet.size).toBe(2);
+
+    // Cumulative points not double-counted, and identical to the clean entry.
+    expect(dup.points).toBe(10);
+    expect(dup.points).toBe(clean.points);
+    expect(dup.maxPoints).toBe(clean.maxPoints);
+
+    // Ranking is finite (no NaN from undefined paths) and ties the clean twin.
+    expect(Number.isFinite(dup.highestPlace)).toBe(true);
+    expect(dup.highestPlace).toBe(clean.highestPlace);
   });
 });
 

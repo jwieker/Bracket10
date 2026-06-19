@@ -29,7 +29,7 @@ export function getOAuthClient() {
   return _client;
 }
 
-export function getRedirectUri() {
+function getRedirectUri() {
   // Explicit override — use this for tunnels, preview envs, or any setup
   // where the callback URL doesn't follow the `https://<APP_HOST>/...` pattern.
   if (process.env.REDIRECT_URI) {
@@ -60,3 +60,5 @@ export function isAdminEmail(email) {
     .filter(Boolean);
   return adminEmails.includes(email.toLowerCase());
 }
+
+export const _getRedirectUriForTests = getRedirectUri;

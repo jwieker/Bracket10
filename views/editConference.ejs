@@ -21,6 +21,7 @@
                 </div>
 
                 <form action="<%= isNew ? '/addConference' : '/updateConference' %>" method="post" class="p-3">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <!-- Slug: editable on add, hidden on edit -->
                     <% if (isNew) { %>
                         <div class="mb-3">

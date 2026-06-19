@@ -86,6 +86,7 @@
 
                 <!-- create a for loop that goes for 4 times that shows the input regions in a dropdown -->
                 <form action="/regionVerify" method="post">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <input type="hidden" name="year" value="<%= year %>" />
                     <% for( let i=0; i < 4; i++ ) { %>
                         <div class="container pb-3">
@@ -138,17 +139,7 @@
         <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
     </div>
 
-    <script>
-        function esc(str) {
-            if (str === null || str === undefined) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
-
+    <script nonce="<%= cspNonce %>">
         document.addEventListener('DOMContentLoaded', () => {
             const toggleManageTeamsBtn = document.getElementById('toggleManageTeamsBtn');
             const reviewTeamForm = document.getElementById('reviewTeamForm');
@@ -196,21 +187,35 @@
                         const teams = await response.json();
 
                         const modalBody = document.getElementById('findTeamModalBody');
-                        modalBody.innerHTML = ''; // Clear previous results
+                        modalBody.replaceChildren(); // Clear previous results
 
                         if (teams.length === 0) {
-                            modalBody.innerHTML = '<p>No schools found matching that name.</p>';
+                            const p = document.createElement('p');
+                            p.textContent = 'No schools found matching that name.';
+                            modalBody.appendChild(p);
                         } else {
                             teams.forEach(team => {
-                                const teamDiv = document.createElement('div');
-                                teamDiv.innerHTML = `<p>
-                                    <strong>ID:</strong> <a href="/viewTeam?teamId=${esc(String(team.sid))}">${esc(String(team.sid))}</a><br>
-                                    <strong>Name:</strong> ${esc(team.name)}<br>
-                                    <strong>Mascot:</strong> ${esc(team.mascot)}<br>
-                                    <strong>Short Name:</strong> ${esc(team.nameNick)}<br>
-                                    <strong>Conference ID:</strong> ${esc(String(team.confID))}
-                                </p><hr>`;
-                                modalBody.appendChild(teamDiv);
+                                const p = document.createElement('p');
+
+                                const idStrong = document.createElement('strong');
+                                idStrong.textContent = 'ID:';
+                                const link = document.createElement('a');
+                                link.href = '/viewTeam?teamId=' + encodeURIComponent(String(team.sid));
+                                link.textContent = String(team.sid);
+                                p.append(idStrong, ' ', link, document.createElement('br'));
+
+                                [
+                                    ['Name:', team.name],
+                                    ['Mascot:', team.mascot],
+                                    ['Short Name:', team.nameNick],
+                                    ['Conference ID:', String(team.confID)],
+                                ].forEach(([label, value]) => {
+                                    const strong = document.createElement('strong');
+                                    strong.textContent = label;
+                                    p.append(strong, ' ' + (value ?? ''), document.createElement('br'));
+                                });
+
+                                modalBody.append(p, document.createElement('hr'));
                             });
                         }
 

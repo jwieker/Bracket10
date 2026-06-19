@@ -61,12 +61,13 @@ Year-scoped data lives under `tournaments/{year}` subcollections:
 
 *   `tournaments/{year}` — Tournament-level document (year, timestamps, `hasFirstFour`, `firstFourGameCount`)
     *   `tournaments/{year}/regions/{regionID}` — Region info (regionID, regionName)
-    *   `tournaments/{year}/games/{gameID}` — Game data (teams, winner, round, nextGameID)
+    *   `tournaments/{year}/games/{gameID}` — Game data (teams, winner, round, nextGameID, `manualHold` — set `true` by an admin undo so the ESPN poll skips the game; cleared by recording a result or `POST /releaseGameHold`)
     *   `tournaments/{year}/entries/{entryId}` — User entries (picks, groups, points)
     *   `tournaments/{year}/schoolRecords/{DocID}` — School records **fully denormalized** — see below for doc IDs
 *   `school/{sid}` — Static school reference data (name, mascot, nameNick, confID, espn nested map)
 *   `groups/{groupName}` — User-created groups (spans all years)
 *   `conferences/{conferenceId}` — Conference reference data (name, shortName, active, slug)
+*   `express-sessions/{sid}` — Express-session documents containing serialized session data (`session` map with `userEmail`/`adminEmail`/etc., an `expires` millisecond timestamp, and an `expireAt` Firestore `Timestamp` for the TTL reap policy — see [deployment.md](./deployment.md#firestore-one-time-setup))
 
 Key benefits: no `where('year', '==', ...)` filters needed, `getTournamentTeams` is a single subcollection read (no 3-way join), and the game view render requires no joins at all.
 

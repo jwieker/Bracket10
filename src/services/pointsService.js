@@ -1,4 +1,9 @@
-import { TOURNAMENT_ROUNDS, APP_CONFIG } from "../config/app.js";
+import {
+  getHighestPlace,
+  minPoints,
+  getFuturePoints,
+} from "../utils/pointsUtils.js";
+import { TOURNAMENT_ROUNDS, APP_CONFIG, thisYear } from "../config/app.js";
 import { gameRepository as _gameRepository, entryRepository as _entryRepository, tourneyRepository as _tourneyRepository } from "../repositories/index.js";
 
 let gameRepository = _gameRepository;
@@ -13,11 +18,12 @@ export function setRepositories(newGameRepository, newEntryRepository, newTourne
 }
 import Logger from "../utils/logger.js";
 import { withErrorHandling } from "../utils/errors.js";
+import pLimit from "p-limit";
 
-// Tolerance for tie detection in `possibleRanking`. Point increments are integers
-// (min 1), so any window below 1 cannot collapse genuinely distinct totals while
-// safely absorbing float-accumulation drift from upstream Firestore values.
-const POINTS_EPSILON = 1e-9;
+
+// Firestore caps a single batch at 500 write operations. updateMultipleEntryPoints
+// emits exactly one write per entry, so we can chunk by entry count up to 500.
+const MAX_BATCH_SIZE = 500;
 
 
 async function getTournamentData(year) {
@@ -59,6 +65,20 @@ function buildLookupMaps(allTeams, activeGames) {
   return { teamMap, gameByTeam, gameById };
 }
 
+function mapEntryToPointsData(entry, allTeams, activeGames, maps) {
+  const { currentPoints, maxPoints, futureGamePaths } =
+    calculateEntryPointsAndPaths(entry.picks, allTeams, activeGames, maps);
+
+  return {
+    entryID: Number(entry.id),
+    points: Number(currentPoints),
+    possPoints: Number(maxPoints),
+    futureGames: futureGamePaths,
+    name: entry.teamName,
+    groupName: entry.group,
+  };
+}
+
 /**
  * Calculates current points, max possible points, and future game paths for a given set of picks.
  * @param {number[]} picks - Array of team sIDs for the entry.
@@ -71,10 +91,16 @@ function buildLookupMaps(allTeams, activeGames) {
 function calculateEntryPointsAndPaths(picks, allTeams, activeGames, prebuiltMaps = null) {
   const { teamMap, gameByTeam, gameById } = prebuiltMaps ?? buildLookupMaps(allTeams, activeGames);
 
+  // Belt-and-suspenders dedupe: a duplicated pick would double-count its
+  // cumulative points below and fabricate a head-to-head "clash" in minPoints
+  // (two identical paths read as a guaranteed-advance pair). Entry create/update
+  // flows reject duplicates, but corrupted or legacy data must not skew scoring.
+  const uniquePicks = picks ? [...new Set(picks)] : [];
+
   let currentPoints = 0;
   const futureGamePaths = [];
 
-  for (const pickId of picks) {
+  for (const pickId of uniquePicks) {
     const team = teamMap.get(pickId);
     if (!team) {
       Logger.warn(`Team with sID ${pickId} not found in allTeams. Skipping pick.`);
@@ -123,21 +149,11 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
 
   const maps = buildLookupMaps(allTeams, activeGames);
 
-  const pointsArray = allEntries.map((entry) => {
-    const { currentPoints, maxPoints, futureGamePaths } =
-      calculateEntryPointsAndPaths(entry.picks, allTeams, activeGames, maps);
+  const pointsArray = allEntries.map((entry) =>
+    mapEntryToPointsData(entry, allTeams, activeGames, maps)
+  );
 
-    return {
-      entryID: Number(entry.id),
-      points: Number(currentPoints),
-      possPoints: Number(maxPoints),
-      futureGames: futureGamePaths,
-      name: entry.teamName,
-      groupName: entry.group,
-    };
-  });
-
-  const chunkSize = APP_CONFIG.tournament.chunkSize;
+  const chunkSize = MAX_BATCH_SIZE;
   const chunks = [];
   for (let i = 0; i < pointsArray.length; i += chunkSize) {
     chunks.push(pointsArray.slice(i, i + chunkSize));
@@ -145,8 +161,9 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
 
   const totalStartTime = Date.now();
 
+  const limit = pLimit(5);
   await Promise.all(
-    chunks.map(async (chunk, index) => {
+    chunks.map((chunk, index) => limit(async () => {
       const startTime = Date.now();
       Logger.info(
         `Updating chunk number ${index} of total chunks ${chunks.length} for year ${year}`
@@ -154,7 +171,7 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
       await entryRepository.updateMultipleEntryPoints(chunk, year);
       const duration = Date.now() - startTime;
       Logger.performance(`Chunk update`, duration);
-    })
+    }))
   );
 
   const totalEndTime = Date.now();
@@ -176,27 +193,44 @@ function enrichEntriesWithPotentialRankings(
 ) {
   const maps = buildLookupMaps(allTeamsData, activeGamesData);
 
+  const sortedGames = [...activeGamesData].sort((a, b) => (a.round || 0) - (b.round || 0));
+  const incomingGames = new Map();
+  for (const g of activeGamesData) {
+    if (g.nextGameID) {
+      if (!incomingGames.has(g.nextGameID)) {
+        incomingGames.set(g.nextGameID, []);
+      }
+      incomingGames.get(g.nextGameID).push(g.gameID);
+    }
+  }
+
   // Single pass: compute points, paths, pickSet, and minPoints together
   const enrichedEntries = entriesToEnrich.map((entry) => {
+    // Dedupe picks here too, because getHighestPlace pairs entry.picks[i] with
+    // entry.futureGames[i] by index. calculateEntryPointsAndPaths returns
+    // futureGamePaths deduped, so picks/pickSet must dedupe identically (same
+    // insertion order) or the index-coupling desyncs on corrupted data (#157).
+    const picks = entry.picks ? [...new Set(entry.picks)] : [];
     const { currentPoints, maxPoints, futureGamePaths } =
-      calculateEntryPointsAndPaths(entry.picks, allTeamsData, activeGamesData, maps);
+      calculateEntryPointsAndPaths(picks, allTeamsData, activeGamesData, maps);
 
     return {
       ...entry,
+      picks,
       entryID: Number(entry.id || entry.entryID),
       name: entry.teamName || entry.name,
       points: Number(currentPoints),
       maxPoints: Number(maxPoints),
       futureGames: futureGamePaths,
-      pickSet: new Set(entry.picks),
-      minPoints: minPoints(futureGamePaths, Number(currentPoints)),
+      pickSet: new Set(picks),
+      minPoints: minPoints(futureGamePaths, Number(currentPoints), sortedGames, incomingGames),
     };
   });
 
   // Calculate highest possible place for each entry
   const otherMinCaches = new Map();
   for (const entry of enrichedEntries) {
-    const { highestPlace, ties } = getHighestPlace(entry, enrichedEntries, otherMinCaches);
+    const { highestPlace, ties } = getHighestPlace(entry, enrichedEntries, otherMinCaches, sortedGames, incomingGames);
     entry.highestPlace = highestPlace;
     entry.ties = ties;
   }
@@ -232,141 +266,10 @@ async function possibleRanking(year = thisYear, group = APP_CONFIG.tournament.de
   });
 }
 
-function getHighestPlace(entry, allBobEntries, otherMinCaches = null) {
-  let highestPlace = 1;
-  let ties = 0;
-
-  const entryPickSet = entry.pickSet ?? new Set(entry.picks);
-  const entryMaxPoints = entry.maxPoints;
-  const entryCurrentPoints = entry.points;
-
-  // Memoize potentialFromUniquePicks keyed by the bitmask of entry-picks that
-  // are unique vs. each otherEntry. Many otherEntries share the same overlap
-  // subset, so the cache turns the hot O(N²) inner work into O(distinct-masks).
-  // maxPicksPerEntry is 10, so a 32-bit signed int is plenty (bit 30 max).
-  const picksLen = entry.picks.length;
-  console.assert(picksLen < 32, `getHighestPlace: picks.length=${picksLen} exceeds 32-bit mask`);
-  const uniquePotentialCache = new Map();
-
-  for (const otherEntry of allBobEntries) {
-    if (otherEntry.entryID === entry.entryID) continue;
-
-    // ── Early-exit bounds checks ──
-    // When absolute bounds are available (from enrichEntriesWithPotentialRankings),
-    // we can skip the expensive unique-pick analysis for clear-cut pairs.
-    if (entryMaxPoints != null && otherEntry.maxPoints != null) {
-      // If our ceiling is below their current points, they beat us in every scenario.
-      if (entryMaxPoints < otherEntry.points) {
-        highestPlace++;
-        continue;
-      }
-      // If our current points already exceed their ceiling, we beat them in every scenario.
-      if (entryCurrentPoints > otherEntry.maxPoints) {
-        continue;
-      }
-    }
-
-    const otherPickSet = otherEntry.pickSet ?? new Set(otherEntry.picks);
-
-    // A's ceiling: unique future potential only (picks not shared with B).
-    // Build a mask of which entry picks are unique vs. this otherEntry, then
-    // look up (or compute and cache) the resulting future points.
-    let uniqueMask = 0;
-    for (let i = 0; i < picksLen; i++) {
-      if (!otherPickSet.has(entry.picks[i])) {
-        uniqueMask |= (1 << i);
-      }
-    }
-
-    let potentialFromUniquePicks = uniquePotentialCache.get(uniqueMask);
-    if (potentialFromUniquePicks === undefined) {
-      const uniqueToEntryPaths = [];
-      for (let i = 0; i < picksLen; i++) {
-        if (uniqueMask & (1 << i)) {
-          uniqueToEntryPaths.push(entry.futureGames[i]);
-        }
-      }
-      potentialFromUniquePicks = getFuturePoints(uniqueToEntryPaths, entry.points);
-      uniquePotentialCache.set(uniqueMask, potentialFromUniquePicks);
-    }
-
-    // B's relative floor: only clashes among B's UNIQUE picks (shared picks excluded).
-    // We bitmask the unique-picks subset of B (otherEntry) and use it as a cache
-    // key (per otherEntry) for otherRelativeMin. Across the O(N²) outer pairing,
-    // most (otherEntry, mask) pairs recur, so the cache turns repeat minPoints
-    // calls into O(1) lookups.
-    const otherPicksLen = otherEntry.picks.length;
-    let otherUniqueMask = 0;
-    for (let i = 0; i < otherPicksLen; i++) {
-      if (!entryPickSet.has(otherEntry.picks[i])) {
-        otherUniqueMask |= (1 << i);
-      }
-    }
-
-    let otherRelativeMin;
-    let otherCacheForEntry = otherMinCaches?.get(otherEntry.entryID);
-    if (otherCacheForEntry) {
-      otherRelativeMin = otherCacheForEntry.get(otherUniqueMask);
-    } else if (otherMinCaches) {
-      otherCacheForEntry = new Map();
-      otherMinCaches.set(otherEntry.entryID, otherCacheForEntry);
-    }
-
-    if (otherRelativeMin === undefined) {
-      const otherUniquePaths = [];
-      for (let i = 0; i < otherPicksLen; i++) {
-        if (otherUniqueMask & (1 << i)) {
-          otherUniquePaths.push(otherEntry.futureGames[i]);
-        }
-      }
-      otherRelativeMin = minPoints(otherUniquePaths, otherEntry.points);
-      if (otherCacheForEntry) {
-        otherCacheForEntry.set(otherUniqueMask, otherRelativeMin);
-      }
-    }
-
-    // Use epsilon-tolerant equality for the tie branch. Point values are
-    // integers today, but `points` reads from Firestore which has no integer
-    // type, so any upstream change that introduces fractional arithmetic could
-    // desync mathematically-equal values via float accumulation. A 1e-9 window
-    // is far below the smallest possible point increment (1) so it cannot
-    // collapse genuinely distinct totals.
-    if (potentialFromUniquePicks < otherRelativeMin - POINTS_EPSILON) {
-      highestPlace++;
-    } else if (Math.abs(potentialFromUniquePicks - otherRelativeMin) < POINTS_EPSILON) {
-      ties++;
-    }
-  }
-
-  return { highestPlace, ties };
-}
 
 /**
  * Calculates the minimum guaranteed points for an entry.
  */
-function minPoints(futureGames, currentPoints = 0) {
-  let guaranteedRoundPointsFromClashes = 0;
-  const slotCounts = new Map();
-
-  for (const pickPath of futureGames) {
-    for (let roundIndex = 0; roundIndex < pickPath.length; roundIndex++) {
-      if (pickPath[roundIndex] !== "W") {
-        const gameId = pickPath[roundIndex];
-        const prev = slotCounts.get(gameId) || 0;
-        if (prev === 1) {
-          const round = roundIndex + 1;
-          const roundConfig = TOURNAMENT_ROUNDS[round];
-          if (roundConfig && roundConfig.roundPoints) {
-            guaranteedRoundPointsFromClashes += roundConfig.roundPoints;
-          }
-        }
-        slotCounts.set(gameId, prev + 1);
-        break;
-      }
-    }
-  }
-  return currentPoints + guaranteedRoundPointsFromClashes;
-}
 
 function findNextGameId(teamId, activeGames) {
   const game = activeGames.find(
@@ -419,42 +322,6 @@ function getNextFutureGame(futureGames, activeGamesOrMap, nextGameID) {
   return collected;
 }
 
-function getFuturePoints(futureGames, currentPoints) {
-  // Previously this function swallowed errors and returned `currentPoints`,
-  // making "no future points" and "calculation crashed" indistinguishable to
-  // callers — a silent ranking corruption hazard. Now we log with the full
-  // input shape and rethrow so the boundary (controller / job) can decide
-  // whether to fail the request or skip the entry explicitly.
-  try {
-    // Single pass: walk each pick's projected path and accumulate round points
-    // for games we haven't already credited. When two picks collide on the same
-    // future game, only the first path through it scores — subsequent paths
-    // stop at the collision (the team would be knocked out there).
-    let totalPoints = currentPoints;
-    const seenGames = new Set();
-
-    for (const path of futureGames) {
-      for (let i = 0; i < path.length; i++) {
-        const game = path[i];
-        if (game === "W") continue;
-        if (seenGames.has(game)) break;
-        seenGames.add(game);
-        const roundConfig = TOURNAMENT_ROUNDS[i + 1];
-        if (roundConfig) {
-          totalPoints += roundConfig.roundPoints || 0;
-        }
-      }
-    }
-    return totalPoints;
-  } catch (error) {
-    Logger.error("getFuturePoints failed", {
-      message: error?.message,
-      currentPoints,
-      futureGamesLength: Array.isArray(futureGames) ? futureGames.length : null,
-    });
-    throw error;
-  }
-}
 
 async function updatePointsForAffectedEntries(year, affectedSIDs) {
   const [activeGames, affectedEntries, allTeams] = await Promise.all([
@@ -467,40 +334,31 @@ async function updatePointsForAffectedEntries(year, affectedSIDs) {
 
   const maps = buildLookupMaps(allTeams, activeGames);
 
-  const pointsArray = affectedEntries.map((entry) => {
-    const { currentPoints, maxPoints, futureGamePaths } =
-      calculateEntryPointsAndPaths(entry.picks, allTeams, activeGames, maps);
-    return {
-      entryID: Number(entry.id),
-      points: Number(currentPoints),
-      possPoints: Number(maxPoints),
-      futureGames: futureGamePaths,
-      name: entry.teamName,
-      groupName: entry.group,
-    };
-  });
+  const pointsArray = affectedEntries.map((entry) =>
+    mapEntryToPointsData(entry, allTeams, activeGames, maps)
+  );
 
-  const chunkSize = APP_CONFIG.tournament.chunkSize;
+  const chunkSize = MAX_BATCH_SIZE;
   const chunks = [];
   for (let i = 0; i < pointsArray.length; i += chunkSize) {
     chunks.push(pointsArray.slice(i, i + chunkSize));
   }
 
+  const limit = pLimit(5);
   await Promise.all(
-    chunks.map((chunk) => entryRepository.updateMultipleEntryPoints(chunk, year))
+    chunks.map((chunk) => limit(() => entryRepository.updateMultipleEntryPoints(chunk, year)))
   );
 }
 
 export {
+  getFuturePoints,
+  minPoints,
   updatePossiblePoints,
   updatePointsForAffectedEntries,
-  getFuturePoints,
   findNextGameId,
   getTournamentData,
   possibleRanking,
   calculateEntryPointsAndPaths,
   enrichEntriesWithPotentialRankings,
   getNextFutureGame,
-  minPoints,
-  getHighestPlace,
 };

@@ -5,7 +5,7 @@ A self-hostable web app for running a march basketball bracket pool with your fr
 [![Tests](https://github.com/jwieker/bracket10/actions/workflows/test.yml/badge.svg)](https://github.com/jwieker/bracket10/actions/workflows/test.yml)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](./LICENSE)
 
-> **What you get:** a public bracket-entry flow with email + an admin dashboard, live ESPN score polling during the tournament, a leaderboard with possible-points projections, and a dual-PWA setup so the admin and public surfaces cache independently.
+> **What you get:** a public bracket-entry flow with email, optional participant **Google sign-in** for a "My Brackets" dashboard (see all your entries across every year and edit the current one during the window), an admin dashboard, live ESPN score polling during the tournament, a leaderboard with possible-points projections, and a dual-PWA setup so the admin and public surfaces cache independently.
 
 ![Bracket 10 mobile screenshot](./public/screenshot-mobile.png)
 
@@ -13,16 +13,16 @@ A self-hostable web app for running a march basketball bracket pool with your fr
 
 ## Getting Started
 
-There are two paths. Pick whichever matches what you want:
+Two paths:
 
-- **🚀 [Quick local boot](#path-1--quick-local-boot)** — get the app running on your laptop in ~10 minutes. No GCP account required; uses the free Firestore emulator. Good for kicking the tires or contributing a PR.
-- **🏆 [Self-host a real pool](#path-2--self-host-a-real-pool)** — deploy your own copy for your friend group. ~1–2 hours of setup the first time. Free tier covers most pools.
+- **🚀 [Quick local boot](#path-1--quick-local-boot)** — running on your laptop in ~10 minutes. No GCP account needed; uses the free Firestore emulator. Good for kicking the tires or contributing a PR.
+- **🏆 [Self-host a real pool](#path-2--self-host-a-real-pool)** — deploy your own copy for your friend group. ~1–2 hours of setup. Free tier covers most pools.
 
-> **In a hurry? Use an AI assistant.** Most of the GCP wiring is mechanical — see [Setting it up with AI](#setting-it-up-with-ai) below for copy-paste prompts.
+> **In a hurry?** GCP wiring is mechanical — see [Setting it up with AI](#setting-it-up-with-ai) for copy-paste prompts.
 
 ### Prerequisites (both paths)
 
-- **Node.js v20.6+** (`node --version`). v20.6 is the minimum because the app uses Node's native `--env-file-if-exists` flag. The Dockerfile pins 24.14.
+- **Node.js v20.6+** (`node --version`). v20.6 is the minimum because the app uses Node's native `--env-file-if-exists` flag. The Dockerfile pins 24.16.
 - **Git**.
 - A terminal you're comfortable in.
 
@@ -129,7 +129,7 @@ For a proper CI-driven setup (Cloud Build trigger on `main`, custom domain, IAM 
 
 ### Setting it up with AI
 
-Most of the GCP / OAuth / Cloud Run config is mechanical busywork. If you're using an AI assistant (Claude Code, ChatGPT, Cursor, etc.), these prompts will get you most of the way. Paste them one at a time — give the assistant a chance to ask follow-ups.
+GCP / OAuth / Cloud Run config is mechanical. Use these prompts with any AI assistant (Claude Code, ChatGPT, Cursor). Paste them one at a time.
 
 **1. To bootstrap GCP from scratch:**
 
@@ -157,23 +157,19 @@ Most of the GCP / OAuth / Cloud Run config is mechanical busywork. If you're usi
 
 #### 1. Quick local emulator seeding
 
-To populate your local Firestore emulator for development or testing, use the emulator seeding utility script. It automatically targets `localhost:8085` and `local-dev` by default:
-
-Loads all ~360+ real D-I schools, active conferences, region mappings, mock groups, PII-free mock bracket entries, and the 2022 bracket (games + school records) from `/data/seed/` (committed in Git) into the emulator:
+Loads ~360+ D-I schools, conferences, region mappings, mock groups, PII-free mock entries, and the 2022 bracket from `/data/seed/` into the emulator (targets `localhost:8085` by default):
 
 ```bash
 node scripts/seed-emulator.mjs
 ```
 
-The seeder picks up every NDJSON file in `data/seed/`. Top-level files (e.g. `school.json`) write to root collections; year-suffixed files (e.g. `games.2022.json`, `schoolRecord.2022.json`) write to the hierarchical `tournaments/{year}/...` subcollections. Drop a `<collection>.<year>.json` file in `data/seed/` to seed a new year.
+Picks up every NDJSON file in `data/seed/`. Top-level files (e.g. `school.json`) write to root collections. Year-suffixed files (e.g. `games.2022.json`) write to `tournaments/{year}/...` subcollections. Add a `<collection>.<year>.json` to seed a new year.
 
 #### 2. Production seeding (All D-I teams & conferences)
 
-When setting up a brand-new production database, it starts completely empty. The fastest and most reliable way to populate it with all ~360+ NCAA Division I schools, active conferences, and region mappings is to restore them from the pre-existing backups in `/databasebackup/`.
+A fresh production database starts empty. Restore from `/databasebackup/` to populate ~360+ D-I schools, conferences, and region mappings. Backups include ESPN slugs, branding colors, abbreviations, and logo URLs.
 
-These backups already contain all D-I teams pre-enriched with their ESPN slugs, branding colors, abbreviations, and logo URLs.
-
-To restore these core collections (`school`, `conferences`, `regionID`, `groups`) to your production database, run:
+Restore the core collections (`school`, `conferences`, `regionID`, `groups`):
 
 ```bash
 GCP_PROJECT_ID=your-gcp-project-id node scripts/restore-db.mjs
@@ -190,16 +186,16 @@ For a local emulator restore, simply prepend the emulator environment variables:
 FIRESTORE_EMULATOR_HOST=localhost:8085 GCP_PROJECT_ID=local-dev node scripts/restore-db.mjs
 ```
 
-#### 3. Regenerating and enriching team maps from scratch
+#### 3. Regenerating team maps from scratch
 
-If you ever need to regenerate the ESPN team maps or fetch live branding data directly from ESPN for new teams:
+Only needed if ESPN IDs change or new teams are added.
 
-1. Run the conservative full-map builder to fetch all D-I teams from ESPN and match them to database schools:
+1. Fetch all D-I teams from ESPN and match to database schools:
    ```bash
    node scripts/buildFullD1Map.js
    ```
-2. Any unmatched teams will be written to `src/config/espnTeamMap.json` with `null` values. Manually resolve their `sID`s at the bottom of the file.
-3. Once the map is fully populated, fetch evergreen colors, abbreviations, and logo URLs from ESPN and write them back into your Firestore `school` collection:
+2. Manually resolve unmatched teams (written as `null` in `src/config/espnTeamMap.json`).
+3. Fetch colors, abbreviations, and logos into Firestore:
    ```bash
    GCP_PROJECT_ID=your-gcp-project-id node scripts/enrichEspnData.js --force
    ```
@@ -229,11 +225,11 @@ Tests run automatically on every push to `main` and every PR via [`.github/workf
 **Live E2E tests** hit a real Firestore database, are gated behind `LIVE_E2E=true`, and are intentionally not run in CI. Set up `GOOGLE_APPLICATION_CREDENTIALS` (or `gcloud auth application-default login`) before running:
 
 ```bash
-npm run test:live-e2e        # small 4-game synthetic bracket
-npm run test:live-e2e-v2     # full real 2022 bracket (64 teams, 63 games)
+npm run test:live-e2e-v3     # ESPN poll, cache invalidation & conference history
+npm run test:live-e2e-v4     # full real 2022 bracket, ranking/ties, idempotency, email lifecycle
 ```
 
-See `tests/e2e-v2.live.md` for full details.
+See `tests/e2e-v4.live.md` for full details.
 
 ### Troubleshooting
 
@@ -279,13 +275,13 @@ For utilities, caching, security, PWA, and error handling details, start with [d
 
 ## Security Notes
 
-Current security invariants future contributors should preserve:
+Preserve these invariants when contributing:
 
-- Admin Google OAuth uses a session-backed `state` parameter before exchanging the authorization code.
-- Public entry edit authorization is keyed by `year:entryId`, re-reads the stored entry before writes, and preserves server-owned fields (email, groups, payment, email-sent metadata).
-- Production `DatabaseError` and `ServiceError` JSON payloads return generic messages while full details stay in server logs.
+- OAuth uses a session-backed `state` parameter before exchanging the authorization code.
+- Public entry edits are keyed by `year:entryId`. Server re-reads the entry before writes and preserves server-owned fields (email, groups, payment, email-sent metadata).
+- Production `DatabaseError` and `ServiceError` payloads are generic. Full details stay in server logs.
 
-The broader security architecture lives in [docs/architecture/security.md](./docs/architecture/security.md).
+Full security architecture: [docs/architecture/security.md](./docs/architecture/security.md).
 
 ## Dependency Notes
 
@@ -297,10 +293,10 @@ Runtime dependencies are intentionally kept small and boring:
 
 Recent cleanup removed two app-level dependencies:
 
-| Removed dependency   | Replacement                                                                              | Notes                                                                                                                             |
-| -------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `node-cache`         | Local TTL `Map` cache in [src/utils/cacheUtils.js](./src/utils/cacheUtils.js)            | Preserves `cacheGet`, `cacheSet`, `cacheDel`, `invalidateCache`, `clearAllCache`, cache stats, and debug headers used by the app. |
-| `express-rate-limit` | Local focused middleware in [src/middleware/rateLimit.js](./src/middleware/rateLimit.js) | Preserves the current fixed-window per-client route limits and standard rate-limit headers.                                       |
+| Removed dependency   | Replacement                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `node-cache`         | Local TTL `Map` cache in [src/utils/cacheUtils.js](./src/utils/cacheUtils.js)            |
+| `express-rate-limit` | Local middleware in [src/middleware/rateLimit.js](./src/middleware/rateLimit.js)         |
 
 Measured production install impact:
 
@@ -309,7 +305,7 @@ Measured production install impact:
 | Root app, `npm ci --omit=dev` | 52,344 KB | 51,728 KB | -616 KB |
 | `jobs`, `npm ci --omit=dev`   | 45,816 KB | 45,700 KB | -116 KB |
 
-The percentage is small because the Firestore/Google dependency tree dominates the production install. The `jobs` image still uses `esbuild` as a dev/build dependency, but [Dockerfile.poll](./Dockerfile.poll) ships only the bundled `poll.mjs` into the production image.
+The Firestore dependency tree dominates, so the percentage is small. The `jobs` image uses `esbuild` for building but ships only the bundled `poll.mjs`.
 
 ## Databases
 

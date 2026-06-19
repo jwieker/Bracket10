@@ -34,7 +34,7 @@
 
 
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
         integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
         crossorigin="anonymous"></script>
     <div class="container-lg pt-3" id="regcont">
@@ -53,7 +53,7 @@
                     <% } %>
                     <div class="container pb-3">
                         <label for="inputName">Your Name</label>
-                        <input type="text" name="name" class="form-control" onfocus="this.placeholder = ''"
+                        <input type="text" name="name" class="form-control" data-clear-placeholder
                             id="inputName" placeholder="John Doe" required
                             value="<%= typeof formValues !== 'undefined' ? formValues.name : '' %>">
                         <div class="invalid-feedback">
@@ -63,7 +63,7 @@
                     <div class="container pb-3">
                         <label for="inputTeam">Team Name</label>
                         <input type="text" name="team" class="form-control" maxlength="25"
-                            onfocus="this.placeholder = ''" id="inputTeam" placeholder="Winning team!" required
+                            data-clear-placeholder id="inputTeam" placeholder="Winning team!" required
                             value="<%= typeof formValues !== 'undefined' ? formValues.team : '' %>">
                         <div class="invalid-feedback">
                             Team name cannot be blank.
@@ -87,7 +87,7 @@
                             <path
                                 d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
                         </svg>
-                        <input type="email" class="form-control" name="email" onfocus="this.placeholder = ''"
+                        <input type="email" class="form-control" name="email" data-clear-placeholder
                             id="exampleInputEmail1" aria-describedby="emailHelp" placeholder="john.doe@gmail.com"
                             required value="<%= typeof formValues !== 'undefined' ? formValues.email : '' %>">
                         <div class="invalid-feedback">
@@ -165,11 +165,11 @@
 
 
 
-    <script type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="conferenceStatsDataJson"><%- JSON.stringify(conferenceStats || {}).replace(/</g, '\\u003c') %></script>
-    <script type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
-    <script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="conferenceStatsDataJson"><%- JSON.stringify(conferenceStats || {}).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>">
         const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
         const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);
         const conferenceStatsData = JSON.parse(document.getElementById('conferenceStatsDataJson').textContent);
@@ -181,7 +181,7 @@
         document.getElementById('regionTopRight').textContent = regionData[2];
         document.getElementById('regionBottomRight').textContent = regionData[3];
     </script>
-    <script src="/js/registration.js"></script>
+    <script nonce="<%= cspNonce %>" src="/js/registration.js"></script>
 
 </body>
 

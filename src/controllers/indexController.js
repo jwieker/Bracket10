@@ -18,7 +18,13 @@ const index = controllerWrapper(async (req, res) => {
     : showCont2      ? 'tournament'
     :                  'registration';
 
-  res.render('index', { state, error, createError, thisYear });
+  res.render('index', {
+    state,
+    error,
+    createError,
+    thisYear,
+    userEmail: req.session?.userEmail || null,
+  });
 }, "index");
 
 export {

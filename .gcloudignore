@@ -37,12 +37,15 @@ vitest.config.js
 
 # AI assistant config and rules (local only)
 claude.md
+jules.md
 fixpolling.md
 ESPN-POLLING-SETUP.md
 .clinerules
 .cursorrules
 .windsurfrules
+.julesrules
 .claude/
+.jules/
 .skills/
 ai_private/skills/bracket-emails.skill
 

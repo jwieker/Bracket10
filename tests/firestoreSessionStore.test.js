@@ -80,6 +80,30 @@ describe('FirestoreStore.get', () => {
     expect(result).toBeNull();
   });
 
+  test('opportunistically deletes an expired session doc on read', async () => {
+    const { dataset, docFns } = mockDataset({
+      docData: { session: { user: 'old' }, expires: Date.now() - 1000 },
+    });
+    const store = new FirestoreStore({ dataset });
+
+    const [err, result] = await pget(store, 'expired-sid');
+    expect(err).toBeNull();
+    expect(result).toBeNull();
+    expect(docFns.delete).toHaveBeenCalled();
+  });
+
+  test('a failing opportunistic delete does not surface as a get error', async () => {
+    const { dataset } = mockDataset({
+      docData: { session: { user: 'old' }, expires: Date.now() - 1000 },
+      deleteError: new Error('delete rejected'),
+    });
+    const store = new FirestoreStore({ dataset });
+
+    const [err, result] = await pget(store, 'expired-sid');
+    expect(err).toBeNull();
+    expect(result).toBeNull();
+  });
+
   test('propagates errors from Firestore .get() to the callback', async () => {
     const boom = new Error('firestore down');
     const { dataset } = mockDataset({ getError: boom });
@@ -118,6 +142,18 @@ describe('FirestoreStore.set', () => {
     // 86400000 ms = 24h; allow a small window for test execution time
     expect(payload.expires).toBeGreaterThanOrEqual(before + 86400000 - 100);
     expect(payload.expires).toBeLessThanOrEqual(Date.now() + 86400000);
+  });
+
+  test('writes an expireAt Timestamp matching expires so a Firestore TTL policy can reap the doc', async () => {
+    const { dataset, docFns } = mockDataset();
+    const store = new FirestoreStore({ dataset });
+    const cookieExpires = new Date(Date.now() + 8 * 3600 * 1000);
+
+    const err = await pset(store, 'sid-ttl', { cookie: { expires: cookieExpires } });
+    expect(err).toBeNull();
+    const payload = docFns.set.mock.calls[0][0];
+    expect(payload.expireAt).toBeDefined();
+    expect(payload.expireAt.toMillis()).toBe(cookieExpires.getTime());
   });
 
   test('strips non-serializable session fields via JSON round-trip', async () => {

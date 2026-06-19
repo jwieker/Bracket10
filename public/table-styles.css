@@ -98,6 +98,40 @@
 }
 
 
+/* ── Signed-in participant's own entries ──────────────────────────────
+   Brand-orange tint + a solid left accent bar. Tokens flip automatically
+   between light and dark. !important wins over zebra striping and hover. */
+.custom-card-table tbody tr.my-entry td,
+.custom-card-table tbody tr.my-entry:hover td {
+    background-color: var(--primary-soft) !important;
+}
+.custom-card-table tbody tr.my-entry td:first-child {
+    box-shadow: inset 4px 0 0 0 var(--primary-color) !important;
+}
+
+.mob-entry-card.my-entry {
+    background: var(--primary-soft);
+    border-color: var(--primary-color);
+    box-shadow: inset 4px 0 0 0 var(--primary-color), var(--shadow-sm);
+}
+
+/* "You" marker shown next to an owned entry's team name */
+.you-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.45;
+    border-radius: var(--radius-sm);
+    background: var(--primary-soft);
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+
 /* Year Select & Link */
 .year-select-link {
     font-size: 0.8125rem;

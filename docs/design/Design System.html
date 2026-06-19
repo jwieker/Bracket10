@@ -1,2877 +1,1966 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bracket 10 — Design System</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
-  <style>
-    :root {
-      /* Brand — pulled from public/style.css */
-      --primary-color: #ea7b40;
-      --primary-dark: #d96a30;
-      --secondary-color: #212529;
-      --accent-color: #3b82f6;
-      /* blue — links / secondary actions */
-      --blue-link: #1a6bbf;
-      /* entry-name blue from leaderboard */
-      --success-color: #10b981;
-      --danger-color: #ef4444;
-      --warning-color: #f59e0b;
-      --gold: #f59e0b;
-      --silver: #9ca3af;
-      --bronze: #b45309;
-      --green-bg: rgba(16, 185, 129, 0.12);
-
-      /* Neutrals — 'Lifted' ramp: body clearly separated from card */
-      --bg-body: #edeff3;
-      --bg-card: #ffffff;
-      --bg-header: #ffffff;
-      --bg-soft: #f5f6f9;
-      --bg-softer: #eef0f4;
-      --bg-hover: rgba(234, 123, 64, 0.06);
-      --border-color: #e2e5eb;
-      --border-strong: #cfd3dc;
-
-      /* Text */
-      --text-main: #111827;
-      --text-muted: #6b7280;
-      --text-xmuted: #9ca3af;
-      --text-light: #f9fafb;
-
-      /* Spacing */
-      --spacing-xs: 0.25rem;
-      --spacing-sm: 0.5rem;
-      --spacing-md: 1rem;
-      --spacing-lg: 1.5rem;
-      --spacing-xl: 2rem;
-
-      /* Radii */
-      --radius-sm: 0.375rem;
-      --radius-md: 0.5rem;
-      --radius-lg: 1rem;
-
-      /* Shadows */
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-
-      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      --sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
-
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-    }
-
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: var(--sans);
-      background: var(--bg-body);
-      color: var(--text-main);
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* ── Page masthead ──────────────────── */
-    .masthead {
-      background: var(--bg-card);
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .masthead-inner {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 28px 32px 24px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 24px;
-      flex-wrap: wrap;
-    }
-
-    .mast-title {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .mast-logo-mark {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      background: var(--primary-color);
-      color: #fff;
-      display: grid;
-      place-items: center;
-      font-weight: 800;
-      font-size: 20px;
-      letter-spacing: -0.02em;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .mast-title h1 {
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      margin: 0;
-    }
-
-    .mast-title p {
-      margin: 2px 0 0;
-      color: var(--text-muted);
-      font-size: 13px;
-    }
-
-    .mast-meta {
-      display: flex;
-      gap: 16px;
-      font-size: 12px;
-      color: var(--text-muted);
-      font-family: var(--mono);
-    }
-
-    .mast-meta span strong {
-      color: var(--text-main);
-      font-weight: 600;
-    }
-
-    /* ── Mode switcher ───────────────────── */
-    .mode-switcher {
-      display: inline-flex;
-      align-items: center;
-      background: var(--bg-soft);
-      border: 1px solid var(--border-color);
-      border-radius: 999px;
-      padding: 3px;
-      gap: 2px;
-    }
-
-    .mode-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      font-family: var(--sans);
-      text-decoration: none;
-      border: 0;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-      color: var(--text-muted);
-      background: transparent;
-    }
-
-    .mode-btn svg {
-      width: 13px;
-      height: 13px;
-      flex-shrink: 0;
-    }
-
-    .mode-btn.active {
-      background: var(--bg-card);
-      color: var(--text-main);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
-    }
-
-    .mode-btn:hover:not(.active) {
-      color: var(--text-main);
-    }
-
-    /* ── Layout ─────────────────────────── */
-    .page {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 40px 32px 80px;
-      display: grid;
-      grid-template-columns: 200px 1fr;
-      gap: 40px;
-    }
-
-    .toc {
-      position: sticky;
-      top: 24px;
-      align-self: start;
-      font-size: 13px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .toc-label {
-      font-size: 10.5px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 700;
-      color: var(--text-xmuted);
-      padding: 4px 10px 8px;
-    }
-
-    .toc a {
-      display: block;
-      padding: 6px 10px;
-      border-radius: 6px;
-      color: var(--text-muted);
-      text-decoration: none;
-      font-weight: 500;
-      border-left: 2px solid transparent;
-    }
-
-    .toc a:hover {
-      background: var(--bg-soft);
-      color: var(--text-main);
-    }
-
-    .toc a.current {
-      color: var(--primary-color);
-      border-left-color: var(--primary-color);
-      background: rgba(234, 123, 64, 0.08);
-    }
-
-    .content {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 56px;
-    }
-
-    section.block {
-      scroll-margin-top: 16px;
-    }
-
-    .block-head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      margin-bottom: 18px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .block-head h2 {
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      margin: 0;
-    }
-
-    .block-head .block-sub {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-xmuted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .block-lede {
-      color: var(--text-muted);
-      font-size: 14px;
-      max-width: 620px;
-      margin: -6px 0 22px;
-    }
-
-    /* ── Cards ──────────────────────────── */
-    .grid {
-      display: grid;
-      gap: 14px;
-    }
-
-    .grid-2 {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .grid-3 {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .grid-4 {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .ds-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
-      overflow: hidden;
-    }
-
-    .ds-card-head {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #fff;
-    }
-
-    .ds-card-title {
-      font-size: 13px;
-      font-weight: 700;
-    }
-
-    .ds-card-tag {
-      font-family: var(--mono);
-      font-size: 10.5px;
-      color: var(--text-xmuted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .ds-card-body {
-      padding: 20px;
-    }
-
-    .ds-card-body.pad-lg {
-      padding: 28px;
-    }
-
-    .ds-card-body.pad-sm {
-      padding: 12px;
-    }
-
-    .ds-card-body.pad-none {
-      padding: 0;
-    }
-
-    /* ── Colors ─────────────────────────── */
-    .swatch {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      border: 1px solid var(--border-color);
-      background: #fff;
-    }
-
-    .swatch-chip {
-      height: 88px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      padding: 10px 12px;
-      color: #fff;
-      font-family: var(--mono);
-      font-size: 11px;
-      font-weight: 500;
-    }
-
-    .swatch-chip.on-light {
-      color: var(--text-main);
-    }
-
-    .swatch-meta {
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      border-top: 1px solid var(--border-color);
-      background: #fff;
-    }
-
-    .swatch-name {
-      font-weight: 700;
-      font-size: 13px;
-    }
-
-    .swatch-var {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .swatch-hex {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-xmuted);
-    }
-
-    .status-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    /* ── Typography ─────────────────────── */
-    .type-row {
-      display: grid;
-      grid-template-columns: 160px 1fr auto;
-      align-items: baseline;
-      gap: 20px;
-      padding: 16px 0;
-      border-bottom: 1px dashed var(--border-color);
-    }
-
-    .type-row:last-child {
-      border-bottom: none;
-    }
-
-    .type-label {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-xmuted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .type-spec {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-
-    /* Specific type classes matching site */
-    .t-display {
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: -0.025em;
-      line-height: 1.1;
-    }
-
-    .t-h1 {
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      line-height: 1.2;
-    }
-
-    .t-h2 {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      line-height: 1.25;
-    }
-
-    .t-h3 {
-      font-size: 17px;
-      font-weight: 700;
-    }
-
-    .t-body {
-      font-size: 14px;
-      font-weight: 400;
-      line-height: 1.5;
-    }
-
-    .t-small {
-      font-size: 13px;
-      font-weight: 400;
-      color: var(--text-muted);
-    }
-
-    .t-label {
-      font-size: 10.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-    }
-
-    .t-mono {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--text-main);
-    }
-
-    /* ── Spacing & Radii scales ─────────── */
-    .scale-row {
-      display: grid;
-      grid-template-columns: 120px 1fr 110px;
-      align-items: center;
-      gap: 20px;
-      padding: 10px 0;
-      border-bottom: 1px dashed var(--border-color);
-    }
-
-    .scale-row:last-child {
-      border-bottom: none;
-    }
-
-    .scale-name {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--text-main);
-    }
-
-    .scale-bar {
-      height: 16px;
-      background: var(--primary-color);
-      border-radius: 3px;
-    }
-
-    .scale-px {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: right;
-    }
-
-    .radii-grid {
-      display: flex;
-      gap: 18px;
-      flex-wrap: wrap;
-    }
-
-    .radii-demo {
-      width: 100px;
-      height: 100px;
-      background: linear-gradient(135deg, #ffede2, #ffdcc4);
-      border: 1.5px solid var(--primary-color);
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      padding: 8px;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--primary-dark);
-      font-weight: 600;
-    }
-
-    .radii-demo.sm {
-      border-radius: var(--radius-sm);
-    }
-
-    .radii-demo.md {
-      border-radius: var(--radius-md);
-    }
-
-    .radii-demo.lg {
-      border-radius: var(--radius-lg);
-    }
-
-    .radii-demo.pill {
-      border-radius: 999px;
-    }
-
-    .radii-demo.circ {
-      border-radius: 50%;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bracket 10 — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Brand — pulled from public/style.css */
+    --primary-color: #ea7b40;
+    --primary-dark:  #d96a30;
+    --secondary-color: #212529;
+    --accent-color:  #3b82f6;   /* blue — links / secondary actions */
+    --blue-link:     #1a6bbf;   /* entry-name blue from leaderboard */
+    --success-color: #10b981;
+    --danger-color:  #ef4444;
+    --warning-color: #f59e0b;
+    --gold:          #f59e0b;
+    --silver:        #9ca3af;
+    --bronze:        #b45309;
+    --green-bg:      rgba(16,185,129,0.12);
+
+    /* Neutrals — 'Lifted' ramp: body clearly separated from card */
+    --bg-body:    #edeff3;
+    --bg-card:    #ffffff;
+    --bg-header:  #ffffff;
+    --bg-soft:    #f5f6f9;
+    --bg-softer:  #eef0f4;
+    --bg-hover:   rgba(234,123,64,0.06);
+    --border-color: #e2e5eb;
+    --border-strong: #cfd3dc;
+
+    /* Text */
+    --text-main:  #111827;
+    --text-muted: #6b7280;
+    --text-xmuted:#9ca3af;
+    --text-light: #f9fafb;
+
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* Radii */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 1rem;
 
     /* Shadows */
-    .shadow-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 18px;
-    }
-
-    .shadow-demo {
-      background: #fff;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      height: 110px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .shadow-demo.sm {
-      box-shadow: var(--shadow-sm);
-    }
-
-    .shadow-demo.md {
-      box-shadow: var(--shadow-md);
-    }
-
-    .shadow-demo.lg {
-      box-shadow: var(--shadow-lg);
-    }
-
-    /* ── Buttons ────────────────────────── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 18px;
-      border-radius: var(--radius-md);
-      font-size: 13px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      border: 1.5px solid transparent;
-      text-decoration: none;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-      line-height: 1.3;
-    }
-
-    .btn-primary {
-      background: var(--primary-color);
-      color: #fff;
-      border-color: var(--primary-color);
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-dark);
-      border-color: var(--primary-dark);
-    }
-
-    .btn-secondary {
-      background: var(--blue-link);
-      color: #fff;
-      border-color: var(--blue-link);
-    }
-
-    .btn-secondary:hover {
-      background: #155a9f;
-      border-color: #155a9f;
-    }
-
-    .btn-outline {
-      background: #fff;
-      color: var(--text-main);
-      border-color: var(--border-color);
-    }
-
-    .btn-outline:hover {
-      background: var(--bg-soft);
-      border-color: var(--border-strong);
-    }
-
-    .btn-ghost {
-      background: transparent;
-      color: var(--text-muted);
-    }
-
-    .btn-ghost:hover {
-      background: var(--bg-soft);
-      color: var(--text-main);
-    }
-
-    .btn-danger {
-      background: var(--danger-color);
-      color: #fff;
-      border-color: var(--danger-color);
-    }
-
-    .btn-sm {
-      padding: 5px 12px;
-      font-size: 12px;
-    }
-
-    .btn-lg {
-      padding: 11px 22px;
-      font-size: 14px;
-    }
-
-    .btn[disabled],
-    .btn.disabled {
-      opacity: 0.5;
-      pointer-events: none;
-    }
-
-    .btn-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    /* ── Badges / Chips ─────────────────── */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      font-size: 11px;
-      font-weight: 600;
-      border-radius: 4px;
-      background: #f3f4f6;
-      color: #4b5563;
-    }
-
-    .badge-success {
-      background: rgba(16, 185, 129, 0.12);
-      color: #0e7a5a;
-    }
-
-    .badge-warn {
-      background: rgba(245, 158, 11, 0.14);
-      color: #92400e;
-    }
-
-    .badge-danger {
-      background: rgba(239, 68, 68, 0.12);
-      color: #991b1b;
-    }
-
-    .badge-info {
-      background: rgba(59, 130, 246, 0.12);
-      color: #1d4ed8;
-    }
-
-    .badge-zero {
-      background: #f3f4f6;
-      color: var(--text-xmuted);
-    }
-
-    /* Rank badges — pulled from leaderboard-example.html */
-    .rank-badge {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      font-size: 11px;
-      font-weight: 800;
-      flex-shrink: 0;
-      border: 1.5px solid var(--border-color);
-      color: var(--text-muted);
-      background: #f3f4f6;
-    }
-
-    .rank-badge.rank-1 {
-      background: var(--gold);
-      color: #fff;
-      border-color: var(--gold);
-    }
-
-    .rank-badge.rank-2 {
-      background: var(--silver);
-      color: #fff;
-      border-color: var(--silver);
-    }
-
-    .rank-badge.rank-3 {
-      background: var(--bronze);
-      color: #fff;
-      border-color: var(--bronze);
-    }
-
-    /* Teams remaining badges */
-    .teams-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: var(--green-bg);
-      color: #15803d;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .teams-badge.zero {
-      background: #f3f4f6;
-      color: var(--text-xmuted);
-    }
-
-    /* W/L chips */
-    .wl-chip {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 22px;
-      height: 22px;
-      padding: 0 5px;
-      font-size: 11px;
-      font-weight: 700;
-      border-radius: 4px;
-      font-family: var(--mono);
-    }
-
-    .wl-chip.win {
-      background: rgba(16, 185, 129, 0.14);
-      color: #0e7a5a;
-    }
-
-    .wl-chip.loss {
-      background: rgba(239, 68, 68, 0.12);
-      color: #991b1b;
-    }
-
-    .wl-chip.pending {
-      background: #eef0f4;
-      color: var(--text-xmuted);
-    }
-
-    /* Alive dots */
-    .alive-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success-color);
-      vertical-align: middle;
-    }
-
-    .alive-dot.eliminated {
-      background: #e5e7eb;
-    }
-
-    /* ── Forms ──────────────────────────── */
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .field label {
-      font-size: 11.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-    }
-
-    .input {
-      width: 100%;
-      padding: 9px 12px;
-      border: 1.5px solid var(--border-color);
-      border-radius: var(--radius-md);
-      font-size: 14px;
-      font-family: inherit;
-      background: #fff;
-      color: var(--text-main);
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    .input:focus {
-      border-color: var(--primary-color);
-      box-shadow: 0 0 0 3px rgba(234, 123, 64, 0.12);
-    }
-
-    .input::placeholder {
-      color: var(--text-xmuted);
-    }
-
-    .input-help {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .search-wrap {
-      position: relative;
-    }
-
-    .search-wrap .search-icon {
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--text-xmuted);
-      font-size: 14px;
-      pointer-events: none;
-    }
-
-    .search-wrap input {
-      width: 100%;
-      padding: 9px 12px 9px 36px;
-      border: 1.5px solid var(--border-color);
-      border-radius: 20px;
-      font-size: 13px;
-      background: var(--bg-soft);
-      color: var(--text-main);
-      outline: none;
-    }
-
-    .search-wrap input:focus {
-      border-color: var(--primary-color);
-      background: #fff;
-      box-shadow: 0 0 0 3px rgba(234, 123, 64, 0.1);
-    }
-
-    .select {
-      appearance: none;
-      -webkit-appearance: none;
-      padding: 8px 34px 8px 12px;
-      border: 1.5px solid var(--border-color);
-      border-radius: var(--radius-md);
-      background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%236b7280' d='M0 0l5 6 5-6z'/></svg>") no-repeat right 12px center;
-      font-size: 13px;
-      font-family: inherit;
-      color: var(--text-main);
-    }
-
-    /* ── Navbar demo ────────────────────── */
-    .navbar-demo {
-      background: var(--primary-color);
-      padding: 12px 22px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      color: #fff;
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-md);
-    }
-
-    .navbar-demo .brand {
-      font-weight: 800;
-      font-size: 1.2rem;
-      letter-spacing: -0.025em;
-      color: #fff;
-    }
-
-    .navbar-demo nav {
-      display: flex;
-      gap: 20px;
-    }
-
-    .navbar-demo nav a {
-      color: rgba(255, 255, 255, 0.9);
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .navbar-demo nav a:hover {
-      color: #fff;
-    }
-
-    /* ── Leaderboard row demo ───────────── */
-    .lb-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    .lb-table thead th {
-      text-align: left;
-      padding: 10px 14px;
-      font-size: 10.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-      background: var(--bg-soft);
-      border-bottom: 1.5px solid var(--border-color);
-      white-space: nowrap;
-    }
-
-    .lb-table th.num,
-    .lb-table td.num {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .lb-table tbody tr {
-      border-bottom: 1px solid var(--border-color);
-      transition: background 0.1s;
-    }
-
-    .lb-table tbody tr:last-child {
-      border-bottom: none;
-    }
-
-    .lb-table tbody tr:hover {
-      background: var(--bg-hover);
-    }
-
-    .lb-table td {
-      padding: 9px 14px;
-      white-space: nowrap;
-    }
-
-    .entry-cell {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .entry-name {
-      font-weight: 600;
-      color: var(--blue-link);
-      text-decoration: none;
-    }
-
-    .entry-name:hover {
-      text-decoration: underline;
-    }
-
-    .entry-sep {
-      color: var(--text-xmuted);
-      margin: 0 2px;
-    }
-
-    .entry-team {
-      color: var(--text-muted);
-      font-weight: 400;
-    }
-
-    .pts-val {
-      font-weight: 700;
-      font-size: 14px;
-    }
-
-    .pts-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-left: 2px;
-    }
-
-    /* Mobile entry card */
-    .mob-card {
-      background: #fff;
-      border-radius: 12px;
-      border: 1px solid var(--border-color);
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-      overflow: hidden;
-    }
-
-    .mob-card-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-    }
-
-    .mob-content-col {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .mob-name-block {
-      display: flex;
-      align-items: baseline;
-      gap: 4px;
-      flex-wrap: wrap;
-    }
-
-    .mob-person-name {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--blue-link);
-      text-decoration: none;
-    }
-
-    .mob-team {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .mob-stat-strip {
-      display: flex;
-      gap: 10px;
-      font-size: 11.5px;
-      color: var(--text-muted);
-    }
-
-    .mob-stat-strip strong {
-      color: var(--text-main);
-      font-weight: 700;
-    }
-
-    .mob-pts-col {
-      text-align: right;
-    }
-
-    .mob-pts-total {
-      font-size: 18px;
-      font-weight: 800;
-      line-height: 1;
-    }
-
-    .mob-pts-label {
-      font-size: 10px;
-      color: var(--text-muted);
-      margin-top: 2px;
-      display: block;
-    }
-
-    /* ── Bracket mini ───────────────────── */
-    .bracket-mini {
-      display: flex;
-      gap: 18px;
-      align-items: stretch;
-    }
-
-    .bracket-round {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-around;
-      gap: 14px;
-    }
-
-    .bracket-round[data-round] {
-      padding: 4px 0;
-    }
-
-    .bracket-round-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-xmuted);
-      text-align: center;
-      margin-bottom: 8px;
-    }
-
-    .match {
-      background: #fff;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .match-team {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      font-size: 12px;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .match-team:last-child {
-      border-bottom: none;
-    }
-
-    .match-team.picked-win {
-      background: #ecfdf5;
-    }
-
-    .match-team.picked-loss {
-      background: #fef2f2;
-      opacity: 0.7;
-      text-decoration: line-through;
-    }
-
-    .match-team.picked-win .match-score {
-      color: var(--success-color);
-      font-weight: 700;
-    }
-
-    .seed {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text-xmuted);
-      width: 16px;
-    }
-
-    .logo-box {
-      width: 22px;
-      height: 22px;
-      border-radius: 4px;
-      border: 1.5px solid var(--border-strong);
-      background: #fff;
-      display: grid;
-      place-items: center;
-      font-size: 9px;
-      font-weight: 800;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .match-name {
-      flex: 1;
-      font-weight: 600;
-      color: var(--text-main);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .match-score {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    /* ── School logo placeholders ───────── */
-    .logo-grid {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .team-logo-box {
-      width: 42px;
-      height: 42px;
-      border: 2px solid var(--border-strong);
-      border-radius: 4px;
-      display: grid;
-      place-items: center;
-      background: #fff;
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .team-logo-box.a {
-      border-color: #ea7b40;
-      color: #c45e10;
-      background: #fff5ec;
-    }
-
-    .team-logo-box.b {
-      border-color: #1e40af;
-      color: #1e40af;
-      background: #eff4ff;
-    }
-
-    .team-logo-box.c {
-      border-color: #15803d;
-      color: #15803d;
-      background: #ecfdf5;
-    }
-
-    .team-logo-box.d {
-      border-color: #991b1b;
-      color: #991b1b;
-      background: #fef2f2;
-    }
-
-    .team-logo-box.e {
-      border-color: #6b21a8;
-      color: #6b21a8;
-      background: #faf5ff;
-    }
-
-    /* ── Modal header ───────────────────── */
-    .modal-demo {
-      background: #fff;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      box-shadow: var(--shadow-lg);
-      max-width: 520px;
-    }
-
-    .modal-header {
-      background: var(--primary-color);
-      color: #fff;
-      padding: 14px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .modal-header h3 {
-      margin: 0;
-      font-size: 16px;
-      font-weight: 700;
-    }
-
-    .modal-close {
-      color: #fff;
-      font-size: 20px;
-      line-height: 1;
-      cursor: pointer;
-      opacity: 0.8;
-    }
-
-    .modal-body {
-      padding: 18px 20px;
-    }
-
-    .pick-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 10px;
-      border-left: 3px solid var(--primary-color);
-      background: var(--bg-soft);
-      border-radius: 6px;
-      margin-bottom: 6px;
-    }
-
-    .pick-row .pick-team {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .pick-row .pick-name {
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .pick-row .pick-region {
-      font-size: 10.5px;
-      color: var(--text-muted);
-    }
-
-    .pick-wl-chips {
-      display: flex;
-      gap: 3px;
-    }
-
-    .pick-row.eliminated {
-      opacity: 0.55;
-      border-left-color: #9ca3af;
-    }
-
-    .pick-pts {
-      font-weight: 800;
-      font-family: var(--mono);
-      color: var(--primary-dark);
-    }
-
-    /* ── Stat tile ──────────────────────── */
-    .stat-tile {
-      background: #fff;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-    }
-
-    .stat-tile .stat-lbl {
-      font-size: 10.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-    }
-
-    .stat-tile .stat-val {
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      color: var(--text-main);
-      margin-top: 2px;
-    }
-
-    .stat-tile .stat-sub {
-      font-size: 11px;
-      color: var(--text-xmuted);
-      margin-top: 2px;
-    }
-
-    .stat-tile.accent {
-      border-left: 3px solid var(--primary-color);
-    }
-
-    /* ── Code pill ──────────────────────── */
-    code.pill {
-      display: inline-block;
-      font-family: var(--mono);
-      font-size: 11.5px;
-      background: #f3f4f6;
-      color: #1f2937;
-      padding: 1px 6px;
-      border-radius: 4px;
-      border: 1px solid var(--border-color);
-    }
-
-    /* ── Alerts ─────────────────────────── */
-    .alert {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 12px 14px;
-      border-radius: var(--radius-md);
-      font-size: 13px;
-      border: 1px solid;
-    }
-
-    .alert-info {
-      background: #eff6ff;
-      color: #1e3a8a;
-      border-color: #dbeafe;
-    }
-
-    .alert-success {
-      background: #ecfdf5;
-      color: #065f46;
-      border-color: #a7f3d0;
-    }
-
-    .alert-warn {
-      background: #fffbeb;
-      color: #92400e;
-      border-color: #fde68a;
-    }
-
-    .alert-danger {
-      background: #fef2f2;
-      color: #991b1b;
-      border-color: #fecaca;
-    }
-
-    .alert strong {
-      display: block;
-      margin-bottom: 2px;
-    }
-
-    /* tables small variant */
-    .specs-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12.5px;
-    }
-
-    .specs-table th,
-    .specs-table td {
-      text-align: left;
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border-color);
-      vertical-align: top;
-    }
-
-    .specs-table th {
-      background: var(--bg-softer);
-      color: var(--text-muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 10.5px;
-      letter-spacing: 0.06em;
-    }
-
-    .specs-table td code.pill {
-      font-size: 11px;
-    }
-
-    /* narrow responsiveness */
-    @media (max-width: 860px) {
-      .page {
-        grid-template-columns: 1fr;
-        padding: 24px 18px 60px;
-      }
-
-      .toc {
-        position: static;
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 4px;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 16px;
-      }
-
-      .toc-label {
-        display: none;
-      }
-
-      .grid-3,
-      .grid-4 {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    @media (max-width: 520px) {
-
-      .grid-2,
-      .grid-3,
-      .grid-4 {
-        grid-template-columns: 1fr;
-      }
-
-      .shadow-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .masthead-inner {
-        padding: 20px 18px;
-      }
-
-      .type-row {
-        grid-template-columns: 1fr;
-        gap: 6px;
-      }
-    }
-  </style>
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  *,*::before,*::after { box-sizing: border-box; }
+  html,body { margin:0; padding:0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg-body);
+    color: var(--text-main);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Page masthead ──────────────────── */
+  .masthead {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .masthead-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 32px 24px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .mast-title {
+    display:flex; align-items:center; gap:14px;
+  }
+  .mast-logo-mark {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    background: var(--primary-color);
+    color: #fff;
+    display: grid; place-items: center;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    box-shadow: var(--shadow-sm);
+  }
+  .mast-title h1 {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin: 0;
+  }
+  .mast-title p {
+    margin: 2px 0 0; color: var(--text-muted); font-size: 13px;
+  }
+  .mast-meta {
+    display:flex; gap:16px; font-size:12px; color: var(--text-muted);
+    font-family: var(--mono);
+  }
+  .mast-meta span strong { color: var(--text-main); font-weight: 600; }
+
+  /* ── Mode switcher ───────────────────── */
+  .mode-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--sans);
+    text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    color: var(--text-muted);
+    background: transparent;
+  }
+  .mode-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .mode-btn.active {
+    background: var(--bg-card);
+    color: var(--text-main);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .mode-btn:hover:not(.active) { color: var(--text-main); }
+
+  /* ── Layout ─────────────────────────── */
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 40px;
+  }
+  .toc {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    font-size: 13px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .toc-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: var(--text-xmuted);
+    padding: 4px 10px 8px;
+  }
+  .toc a {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    border-left: 2px solid transparent;
+  }
+  .toc a:hover { background: var(--bg-soft); color: var(--text-main); }
+  .toc a.current { color: var(--primary-color); border-left-color: var(--primary-color); background: rgba(234,123,64,0.08); }
+
+  .content { min-width: 0; display: flex; flex-direction: column; gap: 56px; }
+
+  section.block { scroll-margin-top: 16px; }
+  .block-head {
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .block-head h2 {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin: 0;
+  }
+  .block-head .block-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-xmuted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .block-lede {
+    color: var(--text-muted);
+    font-size: 14px;
+    max-width: 620px;
+    margin: -6px 0 22px;
+  }
+
+  /* ── Cards ──────────────────────────── */
+  .grid { display: grid; gap: 14px; }
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .ds-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .ds-card-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display:flex; align-items:center; justify-content:space-between;
+    background: #fff;
+  }
+  .ds-card-title {
+    font-size: 13px; font-weight: 700;
+  }
+  .ds-card-tag {
+    font-family: var(--mono);
+    font-size: 10.5px; color: var(--text-xmuted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .ds-card-body { padding: 20px; }
+  .ds-card-body.pad-lg { padding: 28px; }
+  .ds-card-body.pad-sm { padding: 12px; }
+  .ds-card-body.pad-none { padding: 0; }
+
+  /* ── Colors ─────────────────────────── */
+  .swatch {
+    display: flex; flex-direction: column; gap: 0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    background: #fff;
+  }
+  .swatch-chip {
+    height: 88px;
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding: 10px 12px;
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .swatch-chip.on-light { color: var(--text-main); }
+  .swatch-meta {
+    padding: 10px 12px;
+    display:flex; flex-direction:column; gap:2px;
+    border-top: 1px solid var(--border-color);
+    background: #fff;
+  }
+  .swatch-name { font-weight: 700; font-size: 13px; }
+  .swatch-var { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+  .swatch-hex { font-family: var(--mono); font-size: 11px; color: var(--text-xmuted); }
+
+  .status-row { display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* ── Typography ─────────────────────── */
+  .type-row {
+    display: grid;
+    grid-template-columns: 160px 1fr auto;
+    align-items: baseline;
+    gap: 20px;
+    padding: 16px 0;
+    border-bottom: 1px dashed var(--border-color);
+  }
+  .type-row:last-child { border-bottom: none; }
+  .type-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-xmuted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .type-spec {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* Specific type classes matching site */
+  .t-display { font-size: 36px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.1; }
+  .t-h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+  .t-h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; }
+  .t-h3 { font-size: 17px; font-weight: 700; }
+  .t-body { font-size: 14px; font-weight: 400; line-height: 1.5; }
+  .t-small { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+  .t-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted);
+  }
+  .t-mono { font-family: var(--mono); font-size: 13px; color: var(--text-main); }
+
+  /* ── Spacing & Radii scales ─────────── */
+  .scale-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 110px;
+    align-items: center;
+    gap: 20px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border-color);
+  }
+  .scale-row:last-child { border-bottom: none; }
+  .scale-name { font-family: var(--mono); font-size: 12px; color: var(--text-main); }
+  .scale-bar {
+    height: 16px;
+    background: var(--primary-color);
+    border-radius: 3px;
+  }
+  .scale-px { font-family: var(--mono); font-size: 11px; color: var(--text-muted); text-align:right; }
+
+  .radii-grid { display: flex; gap: 18px; flex-wrap: wrap; }
+  .radii-demo {
+    width: 100px; height: 100px;
+    background: linear-gradient(135deg, #ffede2, #ffdcc4);
+    border: 1.5px solid var(--primary-color);
+    display:flex; align-items:flex-end; justify-content:center;
+    padding: 8px;
+    font-family: var(--mono); font-size: 11px; color: var(--primary-dark);
+    font-weight: 600;
+  }
+  .radii-demo.sm { border-radius: var(--radius-sm); }
+  .radii-demo.md { border-radius: var(--radius-md); }
+  .radii-demo.lg { border-radius: var(--radius-lg); }
+  .radii-demo.pill { border-radius: 999px; }
+  .radii-demo.circ { border-radius: 50%; }
+
+  /* Shadows */
+  .shadow-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .shadow-demo {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    height: 110px;
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+  }
+  .shadow-demo.sm { box-shadow: var(--shadow-sm); }
+  .shadow-demo.md { box-shadow: var(--shadow-md); }
+  .shadow-demo.lg { box-shadow: var(--shadow-lg); }
+
+  /* ── Buttons ────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1.3;
+  }
+  .btn-primary { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+  .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+  .btn-secondary { background: var(--blue-link); color: #fff; border-color: var(--blue-link); }
+  .btn-secondary:hover { background: #155a9f; border-color: #155a9f; }
+  .btn-outline { background: #fff; color: var(--text-main); border-color: var(--border-color); }
+  .btn-outline:hover { background: var(--bg-soft); border-color: var(--border-strong); }
+  .btn-ghost { background: transparent; color: var(--text-muted); }
+  .btn-ghost:hover { background: var(--bg-soft); color: var(--text-main); }
+  .btn-danger { background: var(--danger-color); color: #fff; border-color: var(--danger-color); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-lg { padding: 11px 22px; font-size: 14px; }
+  .btn[disabled], .btn.disabled { opacity: 0.5; pointer-events: none; }
+  .btn .ico { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ── Auth / social buttons ──────────── */
+  .btn-google {
+    background: #ffffff;
+    color: #1f1f1f;
+    border-color: #dadce0;
+    font-weight: 500;
+    gap: 10px;
+    padding: 9px 18px;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-google:hover {
+    background: #f7f8fa;
+    border-color: #d2d5da;
+    color: #1f1f1f;
+    box-shadow: 0 1px 3px rgba(60,64,67,0.18);
+  }
+  .btn-google .g-logo { width: 18px; height: 18px; }
+  .btn-google.btn-sm .g-logo { width: 16px; height: 16px; }
+  .btn-google.btn-lg .g-logo { width: 20px; height: 20px; }
+
+  /* icon-only buttons (square, ≥38px hit target) */
+  .btn-icon {
+    padding: 0;
+    width: 38px; height: 38px;
+    justify-content: center;
+    gap: 0;
+  }
+  .btn-icon.btn-sm { width: 32px; height: 32px; }
+  .btn-icon.btn-lg { width: 46px; height: 46px; }
+  .btn-icon .ico { width: 18px; height: 18px; }
+  .btn-icon.btn-lg .ico { width: 20px; height: 20px; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .btn-col { display: flex; flex-direction: column; gap: 12px; align-items: stretch; max-width: 260px; }
+  .btn-fullw { justify-content: center; width: 100%; }
+  .btn-hint { font-family: var(--mono); font-size: 11px; color: var(--text-xmuted); margin-left: 4px; }
+
+  /* ── Badges / Chips ─────────────────── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 4px;
+    background: #f3f4f6;
+    color: #4b5563;
+  }
+  .badge-success { background: rgba(16,185,129,0.12); color: #0e7a5a; }
+  .badge-warn    { background: rgba(245,158,11,0.14); color: #92400e; }
+  .badge-danger  { background: rgba(239,68,68,0.12); color: #991b1b; }
+  .badge-info    { background: rgba(59,130,246,0.12); color: #1d4ed8; }
+  .badge-zero    { background: #f3f4f6; color: var(--text-xmuted); }
+
+  /* Rank badges — pulled from leaderboard-example.html */
+  .rank-badge {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px;
+    font-weight: 800;
+    flex-shrink: 0;
+    border: 1.5px solid var(--border-color);
+    color: var(--text-muted);
+    background: #f3f4f6;
+  }
+  .rank-badge.rank-1 { background: var(--gold);   color: #fff; border-color: var(--gold); }
+  .rank-badge.rank-2 { background: var(--silver); color: #fff; border-color: var(--silver); }
+  .rank-badge.rank-3 { background: var(--bronze); color: #fff; border-color: var(--bronze); }
+
+  /* Teams remaining badges */
+  .teams-badge {
+    display: inline-flex; align-items: center; gap:4px;
+    background: var(--green-bg); color: #15803d;
+    border-radius: 4px; padding: 2px 7px;
+    font-size: 11px; font-weight: 600;
+  }
+  .teams-badge.zero { background: #f3f4f6; color: var(--text-xmuted); }
+
+  /* W/L chips */
+  .wl-chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 4px;
+    font-family: var(--mono);
+  }
+  .wl-chip.win  { background: rgba(16,185,129,0.14); color: #0e7a5a; }
+  .wl-chip.loss { background: rgba(239,68,68,0.12); color: #991b1b; }
+  .wl-chip.pending { background: #eef0f4; color: var(--text-xmuted); }
+
+  /* Alive dots */
+  .alive-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--success-color); vertical-align: middle;
+  }
+  .alive-dot.eliminated { background: #e5e7eb; }
+
+  /* ── Forms ──────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-muted);
+  }
+  .input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: var(--text-main);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(234, 123, 64, 0.12);
+  }
+  .input::placeholder { color: var(--text-xmuted); }
+  .input-help { font-size: 12px; color: var(--text-muted); }
+
+  .search-wrap {
+    position: relative;
+  }
+  .search-wrap .search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-xmuted); font-size: 14px; pointer-events: none;
+  }
+  .search-wrap input {
+    width: 100%;
+    padding: 9px 12px 9px 36px;
+    border: 1.5px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 13px;
+    background: var(--bg-soft);
+    color: var(--text-main);
+    outline: none;
+  }
+  .search-wrap input:focus {
+    border-color: var(--primary-color);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(234, 123, 64, 0.1);
+  }
+
+  .select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 8px 34px 8px 12px;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%236b7280' d='M0 0l5 6 5-6z'/></svg>") no-repeat right 12px center;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text-main);
+  }
+
+  /* ── Navbar demo ────────────────────── */
+  .navbar-demo {
+    background: var(--primary-color);
+    padding: 12px 22px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #fff;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+  }
+  .navbar-demo .brand {
+    font-weight: 800;
+    font-size: 1.2rem;
+    letter-spacing: -0.025em;
+    color: #fff;
+  }
+  .navbar-demo nav { display:flex; gap: 20px; }
+  .navbar-demo nav a {
+    color: rgba(255,255,255,0.9);
+    text-decoration: none; font-size: 14px; font-weight: 500;
+  }
+  .navbar-demo nav a:hover { color: #fff; }
+
+  /* ── Leaderboard row demo ───────────── */
+  .lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .lb-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    background: var(--bg-soft);
+    border-bottom: 1.5px solid var(--border-color);
+    white-space: nowrap;
+  }
+  .lb-table th.num, .lb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .lb-table tbody tr { border-bottom: 1px solid var(--border-color); transition: background 0.1s; }
+  .lb-table tbody tr:last-child { border-bottom: none; }
+  .lb-table tbody tr:hover { background: var(--bg-hover); }
+  .lb-table td { padding: 9px 14px; white-space: nowrap; }
+  .entry-cell { display: flex; align-items: center; gap: 10px; }
+  .entry-name { font-weight: 600; color: var(--blue-link); text-decoration: none; }
+  .entry-name:hover { text-decoration: underline; }
+  .entry-sep { color: var(--text-xmuted); margin: 0 2px; }
+  .entry-team { color: var(--text-muted); font-weight: 400; }
+  .pts-val { font-weight: 700; font-size: 14px; }
+  .pts-label { font-size: 11px; color: var(--text-muted); margin-left: 2px; }
+
+  /* Mobile entry card */
+  .mob-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+  .mob-card-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .mob-content-col { flex: 1; min-width: 0; display:flex; flex-direction:column; gap:4px; }
+  .mob-name-block { display:flex; align-items:baseline; gap:4px; flex-wrap:wrap; }
+  .mob-person-name {
+    font-size: 14px; font-weight: 700; color: var(--blue-link);
+    text-decoration: none;
+  }
+  .mob-team { font-size: 12px; color: var(--text-muted); }
+  .mob-stat-strip { display:flex; gap:10px; font-size: 11.5px; color: var(--text-muted); }
+  .mob-stat-strip strong { color: var(--text-main); font-weight: 700; }
+  .mob-pts-col { text-align: right; }
+  .mob-pts-total { font-size: 18px; font-weight: 800; line-height: 1; }
+  .mob-pts-label { font-size: 10px; color: var(--text-muted); margin-top: 2px; display:block; }
+
+  /* ── Bracket mini ───────────────────── */
+  .bracket-mini {
+    display: flex;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .bracket-round {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 14px;
+  }
+  .bracket-round[data-round] { padding: 4px 0; }
+  .bracket-round-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-xmuted);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .match {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .match-team {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .match-team:last-child { border-bottom: none; }
+  .match-team.picked-win  { background: #ecfdf5; }
+  .match-team.picked-loss { background: #fef2f2; opacity: 0.7; text-decoration: line-through; }
+  .match-team.picked-win .match-score { color: var(--success-color); font-weight: 700; }
+  .seed { font-family: var(--mono); font-size: 10px; color: var(--text-xmuted); width: 16px; }
+  .logo-box {
+    width: 22px; height: 22px; border-radius: 4px;
+    border: 1.5px solid var(--border-strong);
+    background: #fff;
+    display: grid; place-items: center;
+    font-size: 9px; font-weight: 800;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .match-name { flex: 1; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match-score { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+
+  /* ── School logo placeholders ───────── */
+  .logo-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+  .team-logo-box {
+    width: 42px; height: 42px;
+    border: 2px solid var(--border-strong);
+    border-radius: 4px;
+    display: grid; place-items: center;
+    background: #fff;
+    font-size: 11px; font-weight: 800;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .team-logo-box.a { border-color: #ea7b40; color: #c45e10; background: #fff5ec; }
+  .team-logo-box.b { border-color: #1e40af; color: #1e40af; background: #eff4ff; }
+  .team-logo-box.c { border-color: #15803d; color: #15803d; background: #ecfdf5; }
+  .team-logo-box.d { border-color: #991b1b; color: #991b1b; background: #fef2f2; }
+  .team-logo-box.e { border-color: #6b21a8; color: #6b21a8; background: #faf5ff; }
+
+  /* ── Modal header ───────────────────── */
+  .modal-demo {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    max-width: 520px;
+  }
+  .modal-header {
+    background: var(--primary-color);
+    color: #fff;
+    padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h3 { margin: 0; font-size: 16px; font-weight: 700; }
+  .modal-close { color: #fff; font-size: 20px; line-height: 1; cursor: pointer; opacity: 0.8; }
+  .modal-body { padding: 18px 20px; }
+  .pick-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--primary-color);
+    background: var(--bg-soft);
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  .pick-row .pick-team { flex:1; display:flex; flex-direction:column; }
+  .pick-row .pick-name { font-size: 13px; font-weight: 600; }
+  .pick-row .pick-region { font-size: 10.5px; color: var(--text-muted); }
+  .pick-wl-chips { display: flex; gap: 3px; }
+  .pick-row.eliminated { opacity: 0.55; border-left-color: #9ca3af; }
+  .pick-pts { font-weight: 800; font-family: var(--mono); color: var(--primary-dark); }
+
+  /* ── Stat tile ──────────────────────── */
+  .stat-tile {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .stat-tile .stat-lbl {
+    font-size: 10.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .stat-tile .stat-val {
+    font-size: 24px; font-weight: 800; letter-spacing: -0.02em;
+    color: var(--text-main); margin-top: 2px;
+  }
+  .stat-tile .stat-sub { font-size: 11px; color: var(--text-xmuted); margin-top: 2px; }
+  .stat-tile.accent { border-left: 3px solid var(--primary-color); }
+
+  /* ── Code pill ──────────────────────── */
+  code.pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: #f3f4f6;
+    color: #1f2937;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+  }
+
+  /* ── Alerts ─────────────────────────── */
+  .alert {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    border: 1px solid;
+  }
+  .alert-info    { background: #eff6ff; color: #1e3a8a; border-color: #dbeafe; }
+  .alert-success { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+  .alert-warn    { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+  .alert-danger  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+  .alert strong { display: block; margin-bottom: 2px; }
+
+  /* tables small variant */
+  .specs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .specs-table th, .specs-table td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+  }
+  .specs-table th {
+    background: var(--bg-softer);
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+  }
+  .specs-table td code.pill { font-size: 11px; }
+
+  /* narrow responsiveness */
+  @media (max-width: 860px) {
+    .page { grid-template-columns: 1fr; padding: 24px 18px 60px; }
+    .toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; }
+    .toc-label { display:none; }
+    .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .shadow-grid { grid-template-columns: 1fr; }
+    .masthead-inner { padding: 20px 18px; }
+    .type-row { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
 </head>
-
 <body>
 
-  <header class="masthead">
-    <div class="masthead-inner">
-      <div class="mast-title">
-        <div class="mast-logo-mark">B10</div>
-        <div>
-          <h1>Bracket 10 — Design System</h1>
-          <p>Tokens, components &amp; patterns pulled from the live app</p>
-        </div>
-      </div>
-      <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
-        <div class="mast-meta">
-          <span><strong>v1.0</strong> · 2026 tourney</span>
-          <span>Source: <strong>public/style.css</strong> + <strong>table-styles.css</strong></span>
-        </div>
-        <nav class="mode-switcher" aria-label="Color mode">
-          <a class="mode-btn active" href="Design System.html" aria-current="page">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="8" cy="8" r="3.5" />
-              <path
-                d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.9 11.9l1.06 1.06M3.05 12.95l1.06-1.06M11.9 4.1l1.06-1.06" />
-            </svg>
-            Light
-          </a>
-          <a class="mode-btn" href="Design System Dark.html">
-            <svg viewBox="0 0 16 16" fill="currentColor">
-              <path d="M13.5 10.5A5.5 5.5 0 0 1 6 3.2a.5.5 0 0 0-.6-.65A6.5 6.5 0 1 0 13.95 11a.5.5 0 0 0-.45-.5z" />
-            </svg>
-            Dark
-          </a>
-        </nav>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="mast-title">
+      <div class="mast-logo-mark">B10</div>
+      <div>
+        <h1>Bracket 10 — Design System</h1>
+        <p>Tokens, components &amp; patterns pulled from the live app</p>
       </div>
     </div>
-  </header>
+    <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+      <div class="mast-meta">
+        <span><strong>v1.0</strong> · 2026 tourney</span>
+        <span>Source: <strong>public/style.css</strong> + <strong>table-styles.css</strong></span>
+      </div>
+      <nav class="mode-switcher" aria-label="Color mode">
+        <a class="mode-btn active" href="Design System.html" aria-current="page">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="3.5"/>
+            <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.9 11.9l1.06 1.06M3.05 12.95l1.06-1.06M11.9 4.1l1.06-1.06"/>
+          </svg>
+          Light
+        </a>
+        <a class="mode-btn" href="Design System Dark.html">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.5 10.5A5.5 5.5 0 0 1 6 3.2a.5.5 0 0 0-.6-.65A6.5 6.5 0 1 0 13.95 11a.5.5 0 0 0-.45-.5z"/>
+          </svg>
+          Dark
+        </a>
+      </nav>
+    </div>
+  </div>
+</header>
 
-  <div class="page">
+<div class="page">
 
-    <!-- ── TOC ─────────────────────────── -->
-    <aside class="toc">
-      <div class="toc-label">Contents</div>
-      <a href="#colors" class="current">Colors</a>
-      <a href="#typography">Typography</a>
-      <a href="#spacing">Spacing &amp; radii</a>
-      <a href="#shadows">Shadows</a>
-      <a href="#buttons">Buttons</a>
-      <a href="#inputs">Inputs &amp; forms</a>
-      <a href="#badges">Badges &amp; chips</a>
-      <a href="#navbar">Navbar</a>
-      <a href="#cards">Cards &amp; stats</a>
-      <a href="#leaderboard">Leaderboard</a>
-      <a href="#mobile">Mobile entry card</a>
-      <a href="#bracket">Bracket matchup</a>
-      <a href="#modal">Picks modal</a>
-      <a href="#alerts">Alerts</a>
-      <a href="#logos">School logo box</a>
-    </aside>
+  <!-- ── TOC ─────────────────────────── -->
+  <aside class="toc">
+    <div class="toc-label">Contents</div>
+    <a href="#colors" class="current">Colors</a>
+    <a href="#typography">Typography</a>
+    <a href="#spacing">Spacing &amp; radii</a>
+    <a href="#shadows">Shadows</a>
+    <a href="#buttons">Buttons</a>
+    <a href="#inputs">Inputs &amp; forms</a>
+    <a href="#badges">Badges &amp; chips</a>
+    <a href="#navbar">Navbar</a>
+    <a href="#cards">Cards &amp; stats</a>
+    <a href="#leaderboard">Leaderboard</a>
+    <a href="#mobile">Mobile entry card</a>
+    <a href="#bracket">Bracket matchup</a>
+    <a href="#modal">Picks modal</a>
+    <a href="#alerts">Alerts</a>
+    <a href="#logos">School logo box</a>
+  </aside>
 
-    <!-- ── Content ─────────────────────── -->
-    <main class="content">
+  <!-- ── Content ─────────────────────── -->
+  <main class="content">
 
-      <!-- COLORS -->
-      <section class="block" id="colors">
-        <div class="block-head">
-          <h2>Colors</h2>
-          <span class="block-sub">11 tokens · CSS vars</span>
-        </div>
-        <p class="block-lede">Orange is the brand — it owns the navbar, primary actions, and active affordances. Blue is
-          the secondary action and link color. Greens and reds track pick outcomes (win/loss), not generic
-          success/error.</p>
+    <!-- COLORS -->
+    <section class="block" id="colors">
+      <div class="block-head">
+        <h2>Colors</h2>
+        <span class="block-sub">11 tokens · CSS vars</span>
+      </div>
+      <p class="block-lede">Orange is the brand — it owns the navbar, primary actions, and active affordances. Blue is the secondary action and link color. Greens and reds track pick outcomes (win/loss), not generic success/error.</p>
 
-        <h3 class="t-h3" style="margin-bottom:10px">Brand</h3>
-        <div class="grid grid-4" style="margin-bottom: 28px;">
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--primary-color);">#ea7b40<span>AA text: ✓ large</span>
-            </div>
-            <div class="swatch-meta">
-              <span class="swatch-name">Primary / Orange</span>
-              <span class="swatch-var">--primary-color</span>
-              <span class="swatch-hex">Navbar, CTAs, focus</span>
-            </div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--primary-dark);">#d96a30</div>
-            <div class="swatch-meta">
-              <span class="swatch-name">Primary dark</span>
-              <span class="swatch-var">--primary-dark</span>
-              <span class="swatch-hex">Hover state</span>
-            </div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--accent-color);">#3b82f6</div>
-            <div class="swatch-meta">
-              <span class="swatch-name">Accent / Blue</span>
-              <span class="swatch-var">--accent-color</span>
-              <span class="swatch-hex">Links, secondary</span>
-            </div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--blue-link);">#1a6bbf</div>
-            <div class="swatch-meta">
-              <span class="swatch-name">Entry link</span>
-              <span class="swatch-var">--blue-link</span>
-              <span class="swatch-hex">Entry name text</span>
-            </div>
+      <h3 class="t-h3" style="margin-bottom:10px">Brand</h3>
+      <div class="grid grid-4" style="margin-bottom: 28px;">
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--primary-color);">#ea7b40<span>AA text: ✓ large</span></div>
+          <div class="swatch-meta">
+            <span class="swatch-name">Primary / Orange</span>
+            <span class="swatch-var">--primary-color</span>
+            <span class="swatch-hex">Navbar, CTAs, focus</span>
           </div>
         </div>
-
-        <h3 class="t-h3" style="margin-bottom:10px">Status</h3>
-        <div class="grid grid-4" style="margin-bottom: 28px;">
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--success-color);">#10b981</div>
-            <div class="swatch-meta"><span class="swatch-name">Success</span><span
-                class="swatch-var">--success-color</span><span class="swatch-hex">Wins, alive</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--danger-color);">#ef4444</div>
-            <div class="swatch-meta"><span class="swatch-name">Danger</span><span
-                class="swatch-var">--danger-color</span><span class="swatch-hex">Losses, elim</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--warning-color);">#f59e0b</div>
-            <div class="swatch-meta"><span class="swatch-name">Warning</span><span
-                class="swatch-var">--warning-color</span><span class="swatch-hex">Attention</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--secondary-color);">#212529</div>
-            <div class="swatch-meta"><span class="swatch-name">Dark surface</span><span
-                class="swatch-var">--secondary-color</span><span class="swatch-hex">Dark contexts</span></div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--primary-dark);">#d96a30</div>
+          <div class="swatch-meta">
+            <span class="swatch-name">Primary dark</span>
+            <span class="swatch-var">--primary-dark</span>
+            <span class="swatch-hex">Hover state</span>
           </div>
         </div>
-
-        <h3 class="t-h3" style="margin-bottom:10px">Neutrals &amp; text</h3>
-        <div class="grid grid-4">
-          <div class="swatch">
-            <div class="swatch-chip on-light"
-              style="background: #ffffff; border-bottom: 1px solid var(--border-color);">#ffffff</div>
-            <div class="swatch-meta"><span class="swatch-name">Card / header</span><span
-                class="swatch-var">--bg-card</span><span class="swatch-hex">Surfaces</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip on-light" style="background: var(--bg-body);">#f3f4f6</div>
-            <div class="swatch-meta"><span class="swatch-name">Page body</span><span
-                class="swatch-var">--bg-body</span><span class="swatch-hex">Behind cards</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip on-light" style="background: var(--bg-soft);">#f9fafb</div>
-            <div class="swatch-meta"><span class="swatch-name">Soft</span><span class="swatch-var">--bg-soft</span><span
-                class="swatch-hex">Table thead</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip on-light" style="background: var(--border-color);">#e5e7eb</div>
-            <div class="swatch-meta"><span class="swatch-name">Border</span><span
-                class="swatch-var">--border-color</span><span class="swatch-hex">Dividers</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--text-main);">#111827</div>
-            <div class="swatch-meta"><span class="swatch-name">Text main</span><span
-                class="swatch-var">--text-main</span><span class="swatch-hex">Body copy</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--text-muted);">#6b7280</div>
-            <div class="swatch-meta"><span class="swatch-name">Text muted</span><span
-                class="swatch-var">--text-muted</span><span class="swatch-hex">Labels</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip" style="background: var(--text-xmuted);">#9ca3af</div>
-            <div class="swatch-meta"><span class="swatch-name">Text extra muted</span><span
-                class="swatch-var">--text-xmuted</span><span class="swatch-hex">Separators</span></div>
-          </div>
-          <div class="swatch">
-            <div class="swatch-chip on-light" style="background: var(--text-light);">#f9fafb</div>
-            <div class="swatch-meta"><span class="swatch-name">Text on dark</span><span
-                class="swatch-var">--text-light</span><span class="swatch-hex">On orange/dark</span></div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--accent-color);">#3b82f6</div>
+          <div class="swatch-meta">
+            <span class="swatch-name">Accent / Blue</span>
+            <span class="swatch-var">--accent-color</span>
+            <span class="swatch-hex">Links, secondary</span>
           </div>
         </div>
-      </section>
-
-      <!-- TYPOGRAPHY -->
-      <section class="block" id="typography">
-        <div class="block-head">
-          <h2>Typography</h2>
-          <span class="block-sub">Inter · system fallback</span>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--blue-link);">#1a6bbf</div>
+          <div class="swatch-meta">
+            <span class="swatch-name">Entry link</span>
+            <span class="swatch-var">--blue-link</span>
+            <span class="swatch-hex">Entry name text</span>
+          </div>
         </div>
-        <p class="block-lede">Inter across the board, loaded with system-font fallback. Table headers are all-caps
-          micro-labels with tight letter-spacing. Tabular numerals on any column where numbers line up vertically.</p>
+      </div>
 
+      <h3 class="t-h3" style="margin-bottom:10px">Status</h3>
+      <div class="grid grid-4" style="margin-bottom: 28px;">
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--success-color);">#10b981</div>
+          <div class="swatch-meta"><span class="swatch-name">Success</span><span class="swatch-var">--success-color</span><span class="swatch-hex">Wins, alive</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--danger-color);">#ef4444</div>
+          <div class="swatch-meta"><span class="swatch-name">Danger</span><span class="swatch-var">--danger-color</span><span class="swatch-hex">Losses, elim</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--warning-color);">#f59e0b</div>
+          <div class="swatch-meta"><span class="swatch-name">Warning</span><span class="swatch-var">--warning-color</span><span class="swatch-hex">Attention</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--secondary-color);">#212529</div>
+          <div class="swatch-meta"><span class="swatch-name">Dark surface</span><span class="swatch-var">--secondary-color</span><span class="swatch-hex">Dark contexts</span></div>
+        </div>
+      </div>
+
+      <h3 class="t-h3" style="margin-bottom:10px">Neutrals &amp; text</h3>
+      <div class="grid grid-4">
+        <div class="swatch">
+          <div class="swatch-chip on-light" style="background: #ffffff; border-bottom: 1px solid var(--border-color);">#ffffff</div>
+          <div class="swatch-meta"><span class="swatch-name">Card / header</span><span class="swatch-var">--bg-card</span><span class="swatch-hex">Surfaces</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip on-light" style="background: var(--bg-body);">#f3f4f6</div>
+          <div class="swatch-meta"><span class="swatch-name">Page body</span><span class="swatch-var">--bg-body</span><span class="swatch-hex">Behind cards</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip on-light" style="background: var(--bg-soft);">#f9fafb</div>
+          <div class="swatch-meta"><span class="swatch-name">Soft</span><span class="swatch-var">--bg-soft</span><span class="swatch-hex">Table thead</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip on-light" style="background: var(--border-color);">#e5e7eb</div>
+          <div class="swatch-meta"><span class="swatch-name">Border</span><span class="swatch-var">--border-color</span><span class="swatch-hex">Dividers</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--text-main);">#111827</div>
+          <div class="swatch-meta"><span class="swatch-name">Text main</span><span class="swatch-var">--text-main</span><span class="swatch-hex">Body copy</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--text-muted);">#6b7280</div>
+          <div class="swatch-meta"><span class="swatch-name">Text muted</span><span class="swatch-var">--text-muted</span><span class="swatch-hex">Labels</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var(--text-xmuted);">#9ca3af</div>
+          <div class="swatch-meta"><span class="swatch-name">Text extra muted</span><span class="swatch-var">--text-xmuted</span><span class="swatch-hex">Separators</span></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-chip on-light" style="background: var(--text-light);">#f9fafb</div>
+          <div class="swatch-meta"><span class="swatch-name">Text on dark</span><span class="swatch-var">--text-light</span><span class="swatch-hex">On orange/dark</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TYPOGRAPHY -->
+    <section class="block" id="typography">
+      <div class="block-head">
+        <h2>Typography</h2>
+        <span class="block-sub">Inter · system fallback</span>
+      </div>
+      <p class="block-lede">Inter across the board, loaded with system-font fallback. Table headers are all-caps micro-labels with tight letter-spacing. Tabular numerals on any column where numbers line up vertically.</p>
+
+      <div class="ds-card">
+        <div class="ds-card-body pad-lg">
+          <div class="type-row">
+            <span class="type-label">Display</span>
+            <span class="t-display">Final Four, final lock-in.</span>
+            <span class="type-spec">36 / 800 / -0.025em</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">H1</span>
+            <span class="t-h1">Results for group: Bob</span>
+            <span class="type-spec">28 / 700 / -0.02em</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">H2</span>
+            <span class="t-h2">See full grid of picks</span>
+            <span class="type-spec">22 / 700 / -0.01em</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">H3</span>
+            <span class="t-h3">Entry details</span>
+            <span class="type-spec">17 / 700</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Body</span>
+            <span class="t-body">Bracket 10 is a March Madness pool tracker. Entries pick teams, points accrue by round, and the leaderboard updates as games finish.</span>
+            <span class="type-spec">14 / 400 / 1.5</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Small / meta</span>
+            <span class="t-small">81 entries · updated 2 min ago</span>
+            <span class="type-spec">13 / 400 / muted</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Table header</span>
+            <span class="t-label">Max possible points</span>
+            <span class="type-spec">10.5 / 700 / 0.06em upper</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">Mono / numeric</span>
+            <span class="t-mono">120 pts · 153 max · +12</span>
+            <span class="type-spec">JetBrains Mono 13</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SPACING & RADII -->
+    <section class="block" id="spacing">
+      <div class="block-head">
+        <h2>Spacing &amp; radii</h2>
+        <span class="block-sub">rem-based scale</span>
+      </div>
+
+      <div class="grid grid-2">
         <div class="ds-card">
-          <div class="ds-card-body pad-lg">
-            <div class="type-row">
-              <span class="type-label">Display</span>
-              <span class="t-display">Final Four, final lock-in.</span>
-              <span class="type-spec">36 / 800 / -0.025em</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">H1</span>
-              <span class="t-h1">Results for group: Sample</span>
-              <span class="type-spec">28 / 700 / -0.02em</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">H2</span>
-              <span class="t-h2">See full grid of picks</span>
-              <span class="type-spec">22 / 700 / -0.01em</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">H3</span>
-              <span class="t-h3">Entry details</span>
-              <span class="type-spec">17 / 700</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">Body</span>
-              <span class="t-body">Bracket 10 is a march basketball pool tracker. Entries pick teams, points accrue by
-                round, and the leaderboard updates as games finish.</span>
-              <span class="type-spec">14 / 400 / 1.5</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">Small / meta</span>
-              <span class="t-small">81 entries · updated 2 min ago</span>
-              <span class="type-spec">13 / 400 / muted</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">Table header</span>
-              <span class="t-label">Max possible points</span>
-              <span class="type-spec">10.5 / 700 / 0.06em upper</span>
-            </div>
-            <div class="type-row">
-              <span class="type-label">Mono / numeric</span>
-              <span class="t-mono">120 pts · 153 max · +12</span>
-              <span class="type-spec">JetBrains Mono 13</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SPACING & RADII -->
-      <section class="block" id="spacing">
-        <div class="block-head">
-          <h2>Spacing &amp; radii</h2>
-          <span class="block-sub">rem-based scale</span>
-        </div>
-
-        <div class="grid grid-2">
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Spacing scale</span><span
-                class="ds-card-tag">--spacing-*</span></div>
-            <div class="ds-card-body">
-              <div class="scale-row"><span class="scale-name">--spacing-xs</span><span class="scale-bar"
-                  style="width:4px"></span><span class="scale-px">0.25rem · 4px</span></div>
-              <div class="scale-row"><span class="scale-name">--spacing-sm</span><span class="scale-bar"
-                  style="width:8px"></span><span class="scale-px">0.5rem · 8px</span></div>
-              <div class="scale-row"><span class="scale-name">--spacing-md</span><span class="scale-bar"
-                  style="width:16px"></span><span class="scale-px">1rem · 16px</span></div>
-              <div class="scale-row"><span class="scale-name">--spacing-lg</span><span class="scale-bar"
-                  style="width:24px"></span><span class="scale-px">1.5rem · 24px</span></div>
-              <div class="scale-row"><span class="scale-name">--spacing-xl</span><span class="scale-bar"
-                  style="width:32px"></span><span class="scale-px">2rem · 32px</span></div>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Border radii</span><span
-                class="ds-card-tag">--radius-*</span></div>
-            <div class="ds-card-body">
-              <div class="radii-grid">
-                <div class="radii-demo sm">sm · 6px</div>
-                <div class="radii-demo md">md · 8px</div>
-                <div class="radii-demo lg">lg · 16px</div>
-                <div class="radii-demo pill">pill · 999</div>
-                <div class="radii-demo circ">circle</div>
-              </div>
-              <table class="specs-table" style="margin-top: 18px;">
-                <tr>
-                  <td><code class="pill">--radius-sm</code></td>
-                  <td>0.375rem</td>
-                  <td>Inputs, badges, micro-chips</td>
-                </tr>
-                <tr>
-                  <td><code class="pill">--radius-md</code></td>
-                  <td>0.5rem</td>
-                  <td>Buttons, inputs, stat tiles</td>
-                </tr>
-                <tr>
-                  <td><code class="pill">--radius-lg</code></td>
-                  <td>1rem</td>
-                  <td>Cards, modals, table wrappers</td>
-                </tr>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SHADOWS -->
-      <section class="block" id="shadows">
-        <div class="block-head">
-          <h2>Shadows</h2>
-          <span class="block-sub">3 elevation steps</span>
-        </div>
-        <div class="shadow-grid">
-          <div class="shadow-demo sm">--shadow-sm · card rest</div>
-          <div class="shadow-demo md">--shadow-md · tables / navbar</div>
-          <div class="shadow-demo lg">--shadow-lg · modal / hover</div>
-        </div>
-      </section>
-
-      <!-- BUTTONS -->
-      <section class="block" id="buttons">
-        <div class="block-head">
-          <h2>Buttons</h2>
-          <span class="block-sub">.btn + variant</span>
-        </div>
-        <p class="block-lede">Primary orange for the main action on a view (<em>Submit bracket</em>, <em>Create
-            entry</em>). Blue secondary for navigation CTAs (<em>See full grid</em>). Outline for passive toggles like
-          <em>Previous Years</em>.</p>
-
-        <div class="grid grid-2">
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Variants</span><span class="ds-card-tag">default
-                size</span></div>
-            <div class="ds-card-body">
-              <div class="btn-row">
-                <button class="btn btn-primary">Submit bracket</button>
-                <button class="btn btn-secondary">See full grid</button>
-                <button class="btn btn-outline">Previous Years</button>
-                <button class="btn btn-ghost">Cancel</button>
-                <button class="btn btn-danger">Delete entry</button>
-                <button class="btn btn-primary" disabled>Locked</button>
-              </div>
-            </div>
-          </div>
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Sizes</span><span class="ds-card-tag">sm · md ·
-                lg</span></div>
-            <div class="ds-card-body">
-              <div class="btn-row">
-                <button class="btn btn-primary btn-sm">Small</button>
-                <button class="btn btn-primary">Default</button>
-                <button class="btn btn-primary btn-lg">Large</button>
-              </div>
-              <div class="btn-row" style="margin-top: 14px;">
-                <button class="btn btn-outline btn-sm">Edit picks</button>
-                <button class="btn btn-outline">Copy link</button>
-                <button class="btn btn-outline btn-lg">Join pool</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- INPUTS -->
-      <section class="block" id="inputs">
-        <div class="block-head">
-          <h2>Inputs &amp; forms</h2>
-          <span class="block-sub">focus: orange glow</span>
-        </div>
-        <div class="grid grid-2">
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Text fields</span></div>
-            <div class="ds-card-body" style="display:flex; flex-direction:column; gap:16px;">
-              <div class="field">
-                <label>Entry name</label>
-                <input class="input" type="text" placeholder="e.g. Best Picks" />
-                <span class="input-help">Visible to other members of the pool.</span>
-              </div>
-              <div class="field">
-                <label>Your team / nickname</label>
-                <input class="input" type="text" value="Team Gold" />
-              </div>
-              <div class="field">
-                <label>Year</label>
-                <select class="select">
-                  <option>2026</option>
-                  <option>2025</option>
-                  <option>2024</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Search (pill)</span><span class="ds-card-tag">results
-                page</span></div>
-            <div class="ds-card-body">
-              <div class="search-wrap">
-                <span class="search-icon">🔍</span>
-                <input type="search" placeholder="Search by name or team…" />
-              </div>
-              <p class="t-small" style="margin-top: 10px;">Filters the leaderboard live. Shows a "3 of 76 entries" count
-                as the user types.</p>
-
-              <div style="margin-top: 18px; display:flex; flex-direction:column; gap:10px;">
-                <div class="alert alert-info"><span>ℹ️</span><span><strong>Focus state</strong>Border darkens to orange
-                    with a 3px rgba(234,123,64,0.1) glow.</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- BADGES -->
-      <section class="block" id="badges">
-        <div class="block-head">
-          <h2>Badges &amp; chips</h2>
-          <span class="block-sub">leaderboard signals</span>
-        </div>
-
-        <div class="grid grid-3">
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Rank badge</span><span
-                class="ds-card-tag">.rank-badge</span></div>
-            <div class="ds-card-body">
-              <div class="status-row" style="gap:10px; align-items:center;">
-                <span class="rank-badge rank-1">1</span>
-                <span class="rank-badge rank-2">2</span>
-                <span class="rank-badge rank-3">3</span>
-                <span class="rank-badge">4</span>
-                <span class="rank-badge">14</span>
-              </div>
-              <p class="t-small" style="margin-top:14px;">Gold / silver / bronze for positions 1–3; neutral gray circle
-                for everyone else. 26×26, weight 800.</p>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Teams remaining</span><span
-                class="ds-card-tag">.teams-badge</span></div>
-            <div class="ds-card-body">
-              <div class="status-row" style="flex-direction:column; gap:8px; align-items:flex-start;">
-                <span class="teams-badge">2 teams (2 adv)</span>
-                <span class="teams-badge">1 team (1 adv)</span>
-                <span class="teams-badge zero">0 teams</span>
-              </div>
-              <p class="t-small" style="margin-top:14px;">Green pill with team count + advancing. Greyed zero state once
-                fully eliminated.</p>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">W / L chips</span><span
-                class="ds-card-tag">.wl-chip</span></div>
-            <div class="ds-card-body">
-              <div class="status-row" style="gap:4px;">
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip loss">L</span>
-                <span class="wl-chip pending">·</span>
-                <span class="wl-chip pending">·</span>
-              </div>
-              <p class="t-small" style="margin-top:14px;">One chip per round for a team. Green = advanced, red =
-                eliminated, dot = not yet played. Right-aligns in a fixed 152px slot so rows stay square.</p>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Generic badges</span><span
-                class="ds-card-tag">.badge-*</span></div>
-            <div class="ds-card-body">
-              <div class="status-row">
-                <span class="badge">Default</span>
-                <span class="badge badge-success">Advancing</span>
-                <span class="badge badge-info">Pool admin</span>
-                <span class="badge badge-warn">Pending</span>
-                <span class="badge badge-danger">Locked out</span>
-                <span class="badge badge-zero">Eliminated</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Alive dot</span><span
-                class="ds-card-tag">.alive-dot</span></div>
-            <div class="ds-card-body">
-              <div class="status-row" style="gap:12px; align-items:center;">
-                <span><span class="alive-dot"></span> <span class="t-small"
-                    style="margin-left:6px; color: var(--text-main);">Alive</span></span>
-                <span><span class="alive-dot eliminated"></span> <span class="t-small"
-                    style="margin-left:6px;">Eliminated</span></span>
-              </div>
-              <p class="t-small" style="margin-top:14px;">Inline indicator next to entry or team name in compressed
-                layouts.</p>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Points</span><span class="ds-card-tag">.pts-*</span>
-            </div>
-            <div class="ds-card-body">
-              <div class="status-row" style="gap:10px; align-items:baseline;">
-                <span><span class="pts-val" style="font-size:20px">120</span><span class="pts-label">pts</span></span>
-                <span><span class="pts-val" style="font-size:20px">95</span><span class="pts-label">pts</span></span>
-                <span><span class="pts-val" style="font-size:20px; color: var(--text-xmuted)">0</span><span
-                    class="pts-label">pts</span></span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- NAVBAR -->
-      <section class="block" id="navbar">
-        <div class="block-head">
-          <h2>Navbar</h2>
-          <span class="block-sub">.navbar — always orange</span>
-        </div>
-        <p class="block-lede">The orange navbar is the most recognizable piece of the product. It's always solid (no
-          transparency), carries --shadow-md, and uses white text at 500 weight for links and 800 for the brand.</p>
-
-        <div class="navbar-demo">
-          <span class="brand">Bracket 10</span>
-          <nav>
-            <a href="#">Home</a>
-            <a href="#">Rules</a>
-            <a href="#">Full bracket ↗</a>
-            <a href="#">Admin</a>
-            <a href="#">Feedback ↗</a>
-          </nav>
-        </div>
-      </section>
-
-      <!-- CARDS & STATS -->
-      <section class="block" id="cards">
-        <div class="block-head">
-          <h2>Cards &amp; stat tiles</h2>
-          <span class="block-sub">.card · .stat-tile</span>
-        </div>
-
-        <div class="grid grid-4" style="margin-bottom: 18px;">
-          <div class="stat-tile accent">
-            <div class="stat-lbl">Entries</div>
-            <div class="stat-val">81</div>
-            <div class="stat-sub">+4 since Monday</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-lbl">Rd 4 winners</div>
-            <div class="stat-val">14</div>
-            <div class="stat-sub">Out of 16</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-lbl">Leader points</div>
-            <div class="stat-val">120</div>
-            <div class="stat-sub">Alex Rivers</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-lbl">Tourney status</div>
-            <div class="stat-val" style="font-size:18px; color: var(--success-color);">Elite Eight</div>
-            <div class="stat-sub">4 games remaining</div>
-          </div>
-        </div>
-
-        <div class="grid grid-2">
-          <div class="ds-card">
-            <div class="ds-card-head">
-              <span class="ds-card-title">Card — content surface</span>
-              <span class="ds-card-tag">--radius-lg · --shadow-sm</span>
-            </div>
-            <div class="ds-card-body">
-              <p class="t-small" style="color: var(--text-main);">The default white surface. Use for every content
-                container that isn't a table. Border <code class="pill">--border-color</code>, shadow <code
-                  class="pill">--shadow-sm</code>, hover lifts to <code class="pill">--shadow-md</code>.</p>
-            </div>
-          </div>
-          <div class="ds-card" style="border-top: 4px solid var(--primary-color); box-shadow: var(--shadow-lg);">
-            <div class="ds-card-head"><span class="ds-card-title">Accented card (#col2 pattern)</span><span
-                class="ds-card-tag">border-top 4px</span></div>
-            <div class="ds-card-body">
-              <p class="t-small" style="color: var(--text-main);">Used for the primary column on the admin and
-                entry-edit views. 4px orange top border + lg shadow signals primacy.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- LEADERBOARD -->
-      <section class="block" id="leaderboard">
-        <div class="block-head">
-          <h2>Leaderboard</h2>
-          <span class="block-sub">desktop table</span>
-        </div>
-        <p class="block-lede">Rows are dense but scannable: ~9px vertical padding, tabular numerals everywhere, hover
-          tint in a pale orange (<code class="pill">#fef9f5</code>).</p>
-
-        <div class="ds-card pad-none" style="overflow:hidden;">
-          <table class="lb-table">
-            <thead>
-              <tr>
-                <th>Entry</th>
-                <th class="num">Points</th>
-                <th class="num">Max</th>
-                <th>Teams left</th>
-                <th class="num">R1 ×2</th>
-                <th class="num">R2 ×3</th>
-                <th class="num">R3 ×5</th>
-                <th class="num">R4 ×9</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <div class="entry-cell"><span class="rank-badge rank-1">1</span><a class="entry-name" href="#">Alex
-                      Rivers</a><span class="entry-sep">·</span><span class="entry-team">Best Picks</span></div>
-                </td>
-                <td class="num"><span class="pts-val">120</span><span class="pts-label">pts</span></td>
-                <td class="num">153</td>
-                <td><span class="teams-badge">2 teams (2 adv)</span></td>
-                <td class="num">16</td>
-                <td class="num">18</td>
-                <td class="num">25</td>
-                <td class="num">27</td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="entry-cell"><span class="rank-badge rank-2">2</span><a class="entry-name" href="#">Sam
-                      Carter</a><span class="entry-sep">·</span><span class="entry-team">Team Gold</span></div>
-                </td>
-                <td class="num"><span class="pts-val">103</span><span class="pts-label">pts</span></td>
-                <td class="num">136</td>
-                <td><span class="teams-badge">2 teams (2 adv)</span></td>
-                <td class="num">12</td>
-                <td class="num">15</td>
-                <td class="num">15</td>
-                <td class="num">27</td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="entry-cell"><span class="rank-badge rank-3">3</span><a class="entry-name" href="#">Jordan
-                      Lee</a><span class="entry-sep">·</span><span class="entry-team">Team Bravo</span></div>
-                </td>
-                <td class="num"><span class="pts-val">95</span><span class="pts-label">pts</span></td>
-                <td class="num">128</td>
-                <td><span class="teams-badge">1 team (1 adv)</span></td>
-                <td class="num">16</td>
-                <td class="num">15</td>
-                <td class="num">20</td>
-                <td class="num">27</td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="entry-cell"><span class="rank-badge">4</span><a class="entry-name" href="#">Taylor
-                      Quinn</a><span class="entry-sep">·</span><span class="entry-team">Team Underdog</span></div>
-                </td>
-                <td class="num"><span class="pts-val">92</span><span class="pts-label">pts</span></td>
-                <td class="num">125</td>
-                <td><span class="teams-badge">2 teams (2 adv)</span></td>
-                <td class="num">10</td>
-                <td class="num">15</td>
-                <td class="num">15</td>
-                <td class="num">18</td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="entry-cell"><span class="rank-badge">14</span><a class="entry-name" href="#">Casey
-                      Morgan</a><span class="entry-sep">·</span><span class="entry-team">Casey 2</span></div>
-                </td>
-                <td class="num"><span class="pts-val">69</span><span class="pts-label">pts</span></td>
-                <td class="num">69</td>
-                <td><span class="teams-badge zero">0 teams</span></td>
-                <td class="num">16</td>
-                <td class="num">15</td>
-                <td class="num">20</td>
-                <td class="num">18</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- MOBILE CARD -->
-      <section class="block" id="mobile">
-        <div class="block-head">
-          <h2>Mobile entry card</h2>
-          <span class="block-sub">&lt;768px · .mob-entry-card</span>
-        </div>
-        <p class="block-lede">Replaces the table below the tablet breakpoint. Three columns: rank on left, name + team +
-          inline stats in the middle, total points right-aligned with a chevron.</p>
-
-        <div class="grid grid-2">
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <div class="mob-card">
-              <div class="mob-card-row">
-                <span class="rank-badge rank-1">1</span>
-                <div class="mob-content-col">
-                  <div class="mob-name-block">
-                    <a class="mob-person-name" href="#">Alex Rivers</a>
-                    <span class="entry-sep">·</span>
-                    <span class="mob-team">Best Picks</span>
-                  </div>
-                  <div class="mob-stat-strip">
-                    <span>Max <strong>153</strong></span>
-                    <span class="teams-badge">2 teams (2 adv)</span>
-                  </div>
-                </div>
-                <div class="mob-pts-col">
-                  <div class="mob-pts-total">120</div>
-                  <span class="mob-pts-label">pts</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="mob-card">
-              <div class="mob-card-row">
-                <span class="rank-badge rank-2">2</span>
-                <div class="mob-content-col">
-                  <div class="mob-name-block">
-                    <a class="mob-person-name" href="#">Sam Carter</a>
-                    <span class="entry-sep">·</span>
-                    <span class="mob-team">Team Gold</span>
-                  </div>
-                  <div class="mob-stat-strip">
-                    <span>Max <strong>136</strong></span>
-                    <span class="teams-badge">2 teams (2 adv)</span>
-                  </div>
-                </div>
-                <div class="mob-pts-col">
-                  <div class="mob-pts-total">103</div>
-                  <span class="mob-pts-label">pts</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="mob-card">
-              <div class="mob-card-row">
-                <span class="rank-badge">14</span>
-                <div class="mob-content-col">
-                  <div class="mob-name-block">
-                    <a class="mob-person-name" href="#">Casey Morgan</a>
-                    <span class="entry-sep">·</span>
-                    <span class="mob-team">Casey 2</span>
-                  </div>
-                  <div class="mob-stat-strip">
-                    <span>Max <strong>69</strong></span>
-                    <span class="teams-badge zero">0 teams</span>
-                  </div>
-                </div>
-                <div class="mob-pts-col">
-                  <div class="mob-pts-total" style="color: var(--text-muted)">69</div>
-                  <span class="mob-pts-label">pts</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="ds-card">
-            <div class="ds-card-head"><span class="ds-card-title">Specs</span></div>
-            <div class="ds-card-body pad-sm">
-              <table class="specs-table">
-                <tr>
-                  <th>Token</th>
-                  <th>Value</th>
-                </tr>
-                <tr>
-                  <td>Container radius</td>
-                  <td>12px</td>
-                </tr>
-                <tr>
-                  <td>Border</td>
-                  <td>1px var(--border-color)</td>
-                </tr>
-                <tr>
-                  <td>Shadow (rest)</td>
-                  <td>0 1px 4px rgba(0,0,0,0.06)</td>
-                </tr>
-                <tr>
-                  <td>Shadow (active)</td>
-                  <td>0 2px 8px rgba(0,0,0,0.12)</td>
-                </tr>
-                <tr>
-                  <td>Row padding</td>
-                  <td>10px 14px</td>
-                </tr>
-                <tr>
-                  <td>Row gap</td>
-                  <td>8–10px</td>
-                </tr>
-                <tr>
-                  <td>Name color</td>
-                  <td>--blue-link / #1a6bbf</td>
-                </tr>
-                <tr>
-                  <td>Team color</td>
-                  <td>--text-muted</td>
-                </tr>
-                <tr>
-                  <td>Pts size</td>
-                  <td>18 / 800</td>
-                </tr>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- BRACKET -->
-      <section class="block" id="bracket">
-        <div class="block-head">
-          <h2>Bracket matchup</h2>
-          <span class="block-sub">.match · .match-team</span>
-        </div>
-        <p class="block-lede">Mini bracket element — three rounds shown. Picked winner is tinted green; incorrect pick
-          gets red tint and strikethrough with 0.7 opacity.</p>
-
-        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Spacing scale</span><span class="ds-card-tag">--spacing-*</span></div>
           <div class="ds-card-body">
-            <div class="bracket-mini">
-              <div class="bracket-round">
-                <div class="bracket-round-label">Round of 32</div>
-                <div class="match">
-                  <div class="match-team picked-win">
-                    <span class="seed">1</span>
-                    <span class="logo-box">HOU</span>
-                    <span class="match-name">Houston</span>
-                    <span class="match-score">81</span>
-                  </div>
-                  <div class="match-team picked-loss">
-                    <span class="seed">16</span>
-                    <span class="logo-box">NCC</span>
-                    <span class="match-name">N.C. Central</span>
-                    <span class="match-score">58</span>
-                  </div>
-                </div>
-                <div class="match">
-                  <div class="match-team picked-win">
-                    <span class="seed">8</span>
-                    <span class="logo-box">GON</span>
-                    <span class="match-name">Gonzaga</span>
-                    <span class="match-score">72</span>
-                  </div>
-                  <div class="match-team picked-loss">
-                    <span class="seed">9</span>
-                    <span class="logo-box">OKL</span>
-                    <span class="match-name">Oklahoma</span>
-                    <span class="match-score">67</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="bracket-round">
-                <div class="bracket-round-label">Sweet 16</div>
-                <div class="match" style="margin-top: 32px;">
-                  <div class="match-team picked-win">
-                    <span class="seed">1</span>
-                    <span class="logo-box">HOU</span>
-                    <span class="match-name">Houston</span>
-                    <span class="match-score">79</span>
-                  </div>
-                  <div class="match-team picked-loss">
-                    <span class="seed">8</span>
-                    <span class="logo-box">GON</span>
-                    <span class="match-name">Gonzaga</span>
-                    <span class="match-score">64</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="bracket-round">
-                <div class="bracket-round-label">Elite 8</div>
-                <div class="match" style="margin-top: 78px;">
-                  <div class="match-team" style="background: #fff7ed;">
-                    <span class="seed">1</span>
-                    <span class="logo-box"
-                      style="border-color: var(--primary-color); color: var(--primary-dark);">HOU</span>
-                    <span class="match-name">Houston</span>
-                    <span class="match-score" style="color: var(--primary-color); font-weight:700;">— vs —</span>
-                  </div>
-                  <div class="match-team" style="color: var(--text-xmuted);">
-                    <span class="seed">?</span>
-                    <span class="logo-box">—</span>
-                    <span class="match-name">TBD</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <div class="scale-row"><span class="scale-name">--spacing-xs</span><span class="scale-bar" style="width:4px"></span><span class="scale-px">0.25rem · 4px</span></div>
+            <div class="scale-row"><span class="scale-name">--spacing-sm</span><span class="scale-bar" style="width:8px"></span><span class="scale-px">0.5rem · 8px</span></div>
+            <div class="scale-row"><span class="scale-name">--spacing-md</span><span class="scale-bar" style="width:16px"></span><span class="scale-px">1rem · 16px</span></div>
+            <div class="scale-row"><span class="scale-name">--spacing-lg</span><span class="scale-bar" style="width:24px"></span><span class="scale-px">1.5rem · 24px</span></div>
+            <div class="scale-row"><span class="scale-name">--spacing-xl</span><span class="scale-bar" style="width:32px"></span><span class="scale-px">2rem · 32px</span></div>
           </div>
         </div>
-      </section>
-
-      <!-- MODAL -->
-      <section class="block" id="modal">
-        <div class="block-head">
-          <h2>Picks modal</h2>
-          <span class="block-sub">entry drill-down</span>
-        </div>
-        <p class="block-lede">Opens when an entry row is tapped. Orange header, white body. Each pick is a row with a
-          colored left border (the team's primary color), logo box, seed + name, W/L chips, and points.</p>
-
-        <div class="modal-demo">
-          <div class="modal-header">
-            <h3>Alex Rivers · Best Picks</h3>
-            <span class="modal-close">×</span>
-          </div>
-          <div class="modal-body">
-            <div class="pick-row" style="border-left-color: #c45e10;">
-              <div class="team-logo-box a">HOU</div>
-              <div class="pick-team">
-                <span class="pick-name">1 Houston</span>
-                <span class="pick-region">Midwest</span>
-              </div>
-              <div class="pick-wl-chips">
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip pending">·</span>
-              </div>
-              <div class="pick-pts">34</div>
-            </div>
-            <div class="pick-row" style="border-left-color: #1e40af;">
-              <div class="team-logo-box b">DUK</div>
-              <div class="pick-team">
-                <span class="pick-name">1 Duke</span>
-                <span class="pick-region">East</span>
-              </div>
-              <div class="pick-wl-chips">
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip pending">·</span>
-              </div>
-              <div class="pick-pts">34</div>
-            </div>
-            <div class="pick-row eliminated" style="border-left-color: #9ca3af;">
-              <div class="team-logo-box c">GON</div>
-              <div class="pick-team">
-                <span class="pick-name">8 Gonzaga</span>
-                <span class="pick-region">South</span>
-              </div>
-              <div class="pick-wl-chips">
-                <span class="wl-chip win">W</span>
-                <span class="wl-chip loss">L</span>
-              </div>
-              <div class="pick-pts" style="color: var(--text-xmuted);">5</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ALERTS -->
-      <section class="block" id="alerts">
-        <div class="block-head">
-          <h2>Alerts</h2>
-          <span class="block-sub">.alert</span>
-        </div>
-        <div class="grid grid-2">
-          <div class="alert alert-info"><span>ℹ️</span><span><strong>Bracket locks Thursday 12:15pm ET.</strong>Edits
-              after that time will not be saved.</span></div>
-          <div class="alert alert-success"><span>✓</span><span><strong>Entry submitted.</strong>Check your email for the
-              confirmation with your picks.</span></div>
-          <div class="alert alert-warn"><span>⚠</span><span><strong>Payment pending.</strong>You'll appear on the
-              leaderboard once Venmo clears.</span></div>
-          <div class="alert alert-danger"><span>✕</span><span><strong>You're eliminated.</strong>All picked teams are
-              out — stick around to watch the rest of the pool.</span></div>
-        </div>
-      </section>
-
-      <!-- LOGO BOX -->
-      <section class="block" id="logos">
-        <div class="block-head">
-          <h2>School logo box</h2>
-          <span class="block-sub">.team-logo-box</span>
-        </div>
-        <p class="block-lede">Used in the full grid header and the picks modal. Border color comes from <code
-            class="pill">schoolRecords.primaryColor</code>; fallback is <code class="pill">#ccc</code>. When <code
-            class="pill">logoUrl</code> is null, fall back to the first 2 letters of the team's <code
-            class="pill">nameNick || name</code>.</p>
 
         <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Border radii</span><span class="ds-card-tag">--radius-*</span></div>
           <div class="ds-card-body">
-            <div class="logo-grid">
-              <div class="team-logo-box a">HOU</div>
-              <div class="team-logo-box b">DUK</div>
-              <div class="team-logo-box c">MSU</div>
-              <div class="team-logo-box d">IND</div>
-              <div class="team-logo-box e">KAN</div>
-              <div class="team-logo-box">AUB</div>
-              <div class="team-logo-box" style="border-color:#ca8a04; color:#854d0e;">MIZ</div>
-              <div class="team-logo-box" style="border-color:#0f766e; color:#0f766e;">MAR</div>
+            <div class="radii-grid">
+              <div class="radii-demo sm">sm · 6px</div>
+              <div class="radii-demo md">md · 8px</div>
+              <div class="radii-demo lg">lg · 16px</div>
+              <div class="radii-demo pill">pill · 999</div>
+              <div class="radii-demo circ">circle</div>
             </div>
-
-            <table class="specs-table" style="margin-top: 22px;">
-              <tr>
-                <th>Usage</th>
-                <th>Size</th>
-              </tr>
-              <tr>
-                <td>Full grid column header</td>
-                <td>30 × 30</td>
-              </tr>
-              <tr>
-                <td>Picks modal row</td>
-                <td>32 × 32</td>
-              </tr>
-              <tr>
-                <td>Bracket matchup</td>
-                <td>22 × 22</td>
-              </tr>
-              <tr>
-                <td>Border</td>
-                <td>2px solid — team primary color</td>
-              </tr>
-              <tr>
-                <td>Radius</td>
-                <td>4px</td>
-              </tr>
-              <tr>
-                <td>Fallback glyph</td>
-                <td>2 uppercase chars, weight 800</td>
-              </tr>
+            <table class="specs-table" style="margin-top: 18px;">
+              <tr><td><code class="pill">--radius-sm</code></td><td>0.375rem</td><td>Inputs, badges, micro-chips</td></tr>
+              <tr><td><code class="pill">--radius-md</code></td><td>0.5rem</td><td>Buttons, inputs, stat tiles</td></tr>
+              <tr><td><code class="pill">--radius-lg</code></td><td>1rem</td><td>Cards, modals, table wrappers</td></tr>
             </table>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-    </main>
+    <!-- SHADOWS -->
+    <section class="block" id="shadows">
+      <div class="block-head">
+        <h2>Shadows</h2>
+        <span class="block-sub">3 elevation steps</span>
+      </div>
+      <div class="shadow-grid">
+        <div class="shadow-demo sm">--shadow-sm · card rest</div>
+        <div class="shadow-demo md">--shadow-md · tables / navbar</div>
+        <div class="shadow-demo lg">--shadow-lg · modal / hover</div>
+      </div>
+    </section>
+
+    <!-- BUTTONS -->
+    <section class="block" id="buttons">
+      <div class="block-head">
+        <h2>Buttons</h2>
+        <span class="block-sub">.btn + variant</span>
+      </div>
+      <p class="block-lede">Primary orange for the main action on a view (<em>Submit bracket</em>, <em>Create entry</em>). Blue secondary for navigation CTAs (<em>See full grid</em>). Outline for passive toggles like <em>Previous Years</em>.</p>
+
+      <div class="grid grid-2">
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Variants</span><span class="ds-card-tag">default size</span></div>
+          <div class="ds-card-body">
+            <div class="btn-row">
+              <button class="btn btn-primary">Submit bracket</button>
+              <button class="btn btn-secondary">See full grid</button>
+              <button class="btn btn-outline">Previous Years</button>
+              <button class="btn btn-ghost">Cancel</button>
+              <button class="btn btn-danger">Delete entry</button>
+              <button class="btn btn-primary" disabled>Locked</button>
+            </div>
+          </div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Sizes</span><span class="ds-card-tag">sm · md · lg</span></div>
+          <div class="ds-card-body">
+            <div class="btn-row">
+              <button class="btn btn-primary btn-sm">Small</button>
+              <button class="btn btn-primary">Default</button>
+              <button class="btn btn-primary btn-lg">Large</button>
+            </div>
+            <div class="btn-row" style="margin-top: 14px;">
+              <button class="btn btn-outline btn-sm">Edit picks</button>
+              <button class="btn btn-outline">Copy link</button>
+              <button class="btn btn-outline btn-lg">Join pool</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top: 18px;">
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Sign in with Google</span><span class="ds-card-tag">.btn-google</span></div>
+          <div class="ds-card-body">
+            <div class="btn-col">
+              <button class="btn btn-google btn-fullw"><svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Sign in with Google</button>
+              <button class="btn btn-google btn-fullw"><svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Sign up with Google</button>
+              <button class="btn btn-google btn-fullw" disabled><svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Sign in with Google</button>
+            </div>
+            <div class="btn-row" style="margin-top: 16px;">
+              <button class="btn btn-google btn-sm"><svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Small</button>
+              <button class="btn btn-google"><svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Default</button>
+              <button class="btn btn-google btn-lg"><svg class="g-logo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Large</button>
+            </div>
+          </div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Session actions</span><span class="ds-card-tag">sign in · out</span></div>
+          <div class="ds-card-body">
+            <div class="btn-row">
+              <button class="btn btn-primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Sign in</button>
+              <button class="btn btn-outline"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign out</button>
+            </div>
+            <div class="btn-row" style="margin-top: 14px;">
+              <button class="btn btn-ghost"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Log in</button>
+              <button class="btn btn-ghost"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log out</button>
+            </div>
+            <div class="btn-row" style="margin-top: 16px;">
+              <button class="btn btn-outline btn-icon" title="Sign in" aria-label="Sign in"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></button>
+              <button class="btn btn-outline btn-icon" title="Sign out" aria-label="Sign out"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+              <button class="btn btn-primary btn-icon" title="Sign in" aria-label="Sign in"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></button>
+              <span class="btn-hint">icon-only · 38px target</span>
+            </div>
+            <div class="btn-row" style="margin-top: 14px;">
+              <button class="btn btn-outline btn-icon btn-sm" title="Sign out" aria-label="Sign out"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+              <button class="btn btn-outline btn-icon" title="Sign out" aria-label="Sign out"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+              <button class="btn btn-outline btn-icon btn-lg" title="Sign out" aria-label="Sign out"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+              <span class="btn-hint">sm · md · lg</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INPUTS -->
+    <section class="block" id="inputs">
+      <div class="block-head">
+        <h2>Inputs &amp; forms</h2>
+        <span class="block-sub">focus: orange glow</span>
+      </div>
+      <div class="grid grid-2">
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Text fields</span></div>
+          <div class="ds-card-body" style="display:flex; flex-direction:column; gap:16px;">
+            <div class="field">
+              <label>Entry name</label>
+              <input class="input" type="text" placeholder="e.g. Best Picks" />
+              <span class="input-help">Visible to other members of the pool.</span>
+            </div>
+            <div class="field">
+              <label>Your team / nickname</label>
+              <input class="input" type="text" value="Gone Fishing 3" />
+            </div>
+            <div class="field">
+              <label>Year</label>
+              <select class="select">
+                <option>2026</option><option>2025</option><option>2024</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Search (pill)</span><span class="ds-card-tag">results page</span></div>
+          <div class="ds-card-body">
+            <div class="search-wrap">
+              <span class="search-icon">🔍</span>
+              <input type="search" placeholder="Search by name or team…" />
+            </div>
+            <p class="t-small" style="margin-top: 10px;">Filters the leaderboard live. Shows a "3 of 76 entries" count as the user types.</p>
+
+            <div style="margin-top: 18px; display:flex; flex-direction:column; gap:10px;">
+              <div class="alert alert-info"><span>ℹ️</span><span><strong>Focus state</strong>Border darkens to orange with a 3px rgba(234,123,64,0.1) glow.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BADGES -->
+    <section class="block" id="badges">
+      <div class="block-head">
+        <h2>Badges &amp; chips</h2>
+        <span class="block-sub">leaderboard signals</span>
+      </div>
+
+      <div class="grid grid-3">
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Rank badge</span><span class="ds-card-tag">.rank-badge</span></div>
+          <div class="ds-card-body">
+            <div class="status-row" style="gap:10px; align-items:center;">
+              <span class="rank-badge rank-1">1</span>
+              <span class="rank-badge rank-2">2</span>
+              <span class="rank-badge rank-3">3</span>
+              <span class="rank-badge">4</span>
+              <span class="rank-badge">14</span>
+            </div>
+            <p class="t-small" style="margin-top:14px;">Gold / silver / bronze for positions 1–3; neutral gray circle for everyone else. 26×26, weight 800.</p>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Teams remaining</span><span class="ds-card-tag">.teams-badge</span></div>
+          <div class="ds-card-body">
+            <div class="status-row" style="flex-direction:column; gap:8px; align-items:flex-start;">
+              <span class="teams-badge">2 teams (2 adv)</span>
+              <span class="teams-badge">1 team (1 adv)</span>
+              <span class="teams-badge zero">0 teams</span>
+            </div>
+            <p class="t-small" style="margin-top:14px;">Green pill with team count + advancing. Greyed zero state once fully eliminated.</p>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">W / L chips</span><span class="ds-card-tag">.wl-chip</span></div>
+          <div class="ds-card-body">
+            <div class="status-row" style="gap:4px;">
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip loss">L</span>
+              <span class="wl-chip pending">·</span>
+              <span class="wl-chip pending">·</span>
+            </div>
+            <p class="t-small" style="margin-top:14px;">One chip per round for a team. Green = advanced, red = eliminated, dot = not yet played. Right-aligns in a fixed 152px slot so rows stay square.</p>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Generic badges</span><span class="ds-card-tag">.badge-*</span></div>
+          <div class="ds-card-body">
+            <div class="status-row">
+              <span class="badge">Default</span>
+              <span class="badge badge-success">Advancing</span>
+              <span class="badge badge-info">Pool admin</span>
+              <span class="badge badge-warn">Pending</span>
+              <span class="badge badge-danger">Locked out</span>
+              <span class="badge badge-zero">Eliminated</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Alive dot</span><span class="ds-card-tag">.alive-dot</span></div>
+          <div class="ds-card-body">
+            <div class="status-row" style="gap:12px; align-items:center;">
+              <span><span class="alive-dot"></span> <span class="t-small" style="margin-left:6px; color: var(--text-main);">Alive</span></span>
+              <span><span class="alive-dot eliminated"></span> <span class="t-small" style="margin-left:6px;">Eliminated</span></span>
+            </div>
+            <p class="t-small" style="margin-top:14px;">Inline indicator next to entry or team name in compressed layouts.</p>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Points</span><span class="ds-card-tag">.pts-*</span></div>
+          <div class="ds-card-body">
+            <div class="status-row" style="gap:10px; align-items:baseline;">
+              <span><span class="pts-val" style="font-size:20px">120</span><span class="pts-label">pts</span></span>
+              <span><span class="pts-val" style="font-size:20px">95</span><span class="pts-label">pts</span></span>
+              <span><span class="pts-val" style="font-size:20px; color: var(--text-xmuted)">0</span><span class="pts-label">pts</span></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- NAVBAR -->
+    <section class="block" id="navbar">
+      <div class="block-head">
+        <h2>Navbar</h2>
+        <span class="block-sub">.navbar — always orange</span>
+      </div>
+      <p class="block-lede">The orange navbar is the most recognizable piece of the product. It's always solid (no transparency), carries --shadow-md, and uses white text at 500 weight for links and 800 for the brand.</p>
+
+      <div class="navbar-demo">
+        <span class="brand">Bracket 10</span>
+        <nav>
+          <a href="#">Home</a>
+          <a href="#">Rules</a>
+          <a href="#">Full bracket ↗</a>
+          <a href="#">Admin</a>
+          <a href="#">Feedback ↗</a>
+        </nav>
+      </div>
+    </section>
+
+    <!-- CARDS & STATS -->
+    <section class="block" id="cards">
+      <div class="block-head">
+        <h2>Cards &amp; stat tiles</h2>
+        <span class="block-sub">.card · .stat-tile</span>
+      </div>
+
+      <div class="grid grid-4" style="margin-bottom: 18px;">
+        <div class="stat-tile accent">
+          <div class="stat-lbl">Entries</div>
+          <div class="stat-val">81</div>
+          <div class="stat-sub">+4 since Monday</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-lbl">Rd 4 winners</div>
+          <div class="stat-val">14</div>
+          <div class="stat-sub">Out of 16</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-lbl">Leader points</div>
+          <div class="stat-val">120</div>
+          <div class="stat-sub">Alex Rivers</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-lbl">Tourney status</div>
+          <div class="stat-val" style="font-size:18px; color: var(--success-color);">Elite Eight</div>
+          <div class="stat-sub">4 games remaining</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="ds-card">
+          <div class="ds-card-head">
+            <span class="ds-card-title">Card — content surface</span>
+            <span class="ds-card-tag">--radius-lg · --shadow-sm</span>
+          </div>
+          <div class="ds-card-body">
+            <p class="t-small" style="color: var(--text-main);">The default white surface. Use for every content container that isn't a table. Border <code class="pill">--border-color</code>, shadow <code class="pill">--shadow-sm</code>, hover lifts to <code class="pill">--shadow-md</code>.</p>
+          </div>
+        </div>
+        <div class="ds-card" style="border-top: 4px solid var(--primary-color); box-shadow: var(--shadow-lg);">
+          <div class="ds-card-head"><span class="ds-card-title">Accented card (#col2 pattern)</span><span class="ds-card-tag">border-top 4px</span></div>
+          <div class="ds-card-body">
+            <p class="t-small" style="color: var(--text-main);">Used for the primary column on the admin and entry-edit views. 4px orange top border + lg shadow signals primacy.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADERBOARD -->
+    <section class="block" id="leaderboard">
+      <div class="block-head">
+        <h2>Leaderboard</h2>
+        <span class="block-sub">desktop table</span>
+      </div>
+      <p class="block-lede">Rows are dense but scannable: ~9px vertical padding, tabular numerals everywhere, hover tint in a pale orange (<code class="pill">#fef9f5</code>).</p>
+
+      <div class="ds-card pad-none" style="overflow:hidden;">
+        <table class="lb-table">
+          <thead>
+            <tr>
+              <th>Entry</th>
+              <th class="num">Points</th>
+              <th class="num">Max</th>
+              <th>Teams left</th>
+              <th class="num">R1 ×2</th>
+              <th class="num">R2 ×3</th>
+              <th class="num">R3 ×5</th>
+              <th class="num">R4 ×9</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="entry-cell"><span class="rank-badge rank-1">1</span><a class="entry-name" href="#">Alex Rivers</a><span class="entry-sep">·</span><span class="entry-team">Best Picks</span></div></td>
+              <td class="num"><span class="pts-val">120</span><span class="pts-label">pts</span></td>
+              <td class="num">153</td>
+              <td><span class="teams-badge">2 teams (2 adv)</span></td>
+              <td class="num">16</td><td class="num">18</td><td class="num">25</td><td class="num">27</td>
+            </tr>
+            <tr>
+              <td><div class="entry-cell"><span class="rank-badge rank-2">2</span><a class="entry-name" href="#">Richard McSweeney</a><span class="entry-sep">·</span><span class="entry-team">Gone Fishing 3</span></div></td>
+              <td class="num"><span class="pts-val">103</span><span class="pts-label">pts</span></td>
+              <td class="num">136</td>
+              <td><span class="teams-badge">2 teams (2 adv)</span></td>
+              <td class="num">12</td><td class="num">15</td><td class="num">15</td><td class="num">27</td>
+            </tr>
+            <tr>
+              <td><div class="entry-cell"><span class="rank-badge rank-3">3</span><a class="entry-name" href="#">Cheryl Hawkins</a><span class="entry-sep">·</span><span class="entry-team">Gdog 3</span></div></td>
+              <td class="num"><span class="pts-val">95</span><span class="pts-label">pts</span></td>
+              <td class="num">128</td>
+              <td><span class="teams-badge">1 team (1 adv)</span></td>
+              <td class="num">16</td><td class="num">15</td><td class="num">20</td><td class="num">27</td>
+            </tr>
+            <tr>
+              <td><div class="entry-cell"><span class="rank-badge">4</span><a class="entry-name" href="#">Jaime High</a><span class="entry-sep">·</span><span class="entry-team">Never in the money</span></div></td>
+              <td class="num"><span class="pts-val">92</span><span class="pts-label">pts</span></td>
+              <td class="num">125</td>
+              <td><span class="teams-badge">2 teams (2 adv)</span></td>
+              <td class="num">10</td><td class="num">15</td><td class="num">15</td><td class="num">18</td>
+            </tr>
+            <tr>
+              <td><div class="entry-cell"><span class="rank-badge">14</span><a class="entry-name" href="#">Rick Wozniak</a><span class="entry-sep">·</span><span class="entry-team">Rick 2</span></div></td>
+              <td class="num"><span class="pts-val">69</span><span class="pts-label">pts</span></td>
+              <td class="num">69</td>
+              <td><span class="teams-badge zero">0 teams</span></td>
+              <td class="num">16</td><td class="num">15</td><td class="num">20</td><td class="num">18</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MOBILE CARD -->
+    <section class="block" id="mobile">
+      <div class="block-head">
+        <h2>Mobile entry card</h2>
+        <span class="block-sub">&lt;768px · .mob-entry-card</span>
+      </div>
+      <p class="block-lede">Replaces the table below the tablet breakpoint. Three columns: rank on left, name + team + inline stats in the middle, total points right-aligned with a chevron.</p>
+
+      <div class="grid grid-2">
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div class="mob-card">
+            <div class="mob-card-row">
+              <span class="rank-badge rank-1">1</span>
+              <div class="mob-content-col">
+                <div class="mob-name-block">
+                  <a class="mob-person-name" href="#">Alex Rivers</a>
+                  <span class="entry-sep">·</span>
+                  <span class="mob-team">Best Picks</span>
+                </div>
+                <div class="mob-stat-strip">
+                  <span>Max <strong>153</strong></span>
+                  <span class="teams-badge">2 teams (2 adv)</span>
+                </div>
+              </div>
+              <div class="mob-pts-col">
+                <div class="mob-pts-total">120</div>
+                <span class="mob-pts-label">pts</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mob-card">
+            <div class="mob-card-row">
+              <span class="rank-badge rank-2">2</span>
+              <div class="mob-content-col">
+                <div class="mob-name-block">
+                  <a class="mob-person-name" href="#">Richard McSweeney</a>
+                  <span class="entry-sep">·</span>
+                  <span class="mob-team">Gone Fishing 3</span>
+                </div>
+                <div class="mob-stat-strip">
+                  <span>Max <strong>136</strong></span>
+                  <span class="teams-badge">2 teams (2 adv)</span>
+                </div>
+              </div>
+              <div class="mob-pts-col">
+                <div class="mob-pts-total">103</div>
+                <span class="mob-pts-label">pts</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mob-card">
+            <div class="mob-card-row">
+              <span class="rank-badge">14</span>
+              <div class="mob-content-col">
+                <div class="mob-name-block">
+                  <a class="mob-person-name" href="#">Rick Wozniak</a>
+                  <span class="entry-sep">·</span>
+                  <span class="mob-team">Rick 2</span>
+                </div>
+                <div class="mob-stat-strip">
+                  <span>Max <strong>69</strong></span>
+                  <span class="teams-badge zero">0 teams</span>
+                </div>
+              </div>
+              <div class="mob-pts-col">
+                <div class="mob-pts-total" style="color: var(--text-muted)">69</div>
+                <span class="mob-pts-label">pts</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-head"><span class="ds-card-title">Specs</span></div>
+          <div class="ds-card-body pad-sm">
+            <table class="specs-table">
+              <tr><th>Token</th><th>Value</th></tr>
+              <tr><td>Container radius</td><td>12px</td></tr>
+              <tr><td>Border</td><td>1px var(--border-color)</td></tr>
+              <tr><td>Shadow (rest)</td><td>0 1px 4px rgba(0,0,0,0.06)</td></tr>
+              <tr><td>Shadow (active)</td><td>0 2px 8px rgba(0,0,0,0.12)</td></tr>
+              <tr><td>Row padding</td><td>10px 14px</td></tr>
+              <tr><td>Row gap</td><td>8–10px</td></tr>
+              <tr><td>Name color</td><td>--blue-link / #1a6bbf</td></tr>
+              <tr><td>Team color</td><td>--text-muted</td></tr>
+              <tr><td>Pts size</td><td>18 / 800</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BRACKET -->
+    <section class="block" id="bracket">
+      <div class="block-head">
+        <h2>Bracket matchup</h2>
+        <span class="block-sub">.match · .match-team</span>
+      </div>
+      <p class="block-lede">Mini bracket element — three rounds shown. Picked winner is tinted green; incorrect pick gets red tint and strikethrough with 0.7 opacity.</p>
+
+      <div class="ds-card">
+        <div class="ds-card-body">
+          <div class="bracket-mini">
+            <div class="bracket-round">
+              <div class="bracket-round-label">Round of 32</div>
+              <div class="match">
+                <div class="match-team picked-win">
+                  <span class="seed">1</span>
+                  <span class="logo-box">HOU</span>
+                  <span class="match-name">Houston</span>
+                  <span class="match-score">81</span>
+                </div>
+                <div class="match-team picked-loss">
+                  <span class="seed">16</span>
+                  <span class="logo-box">NCC</span>
+                  <span class="match-name">N.C. Central</span>
+                  <span class="match-score">58</span>
+                </div>
+              </div>
+              <div class="match">
+                <div class="match-team picked-win">
+                  <span class="seed">8</span>
+                  <span class="logo-box">GON</span>
+                  <span class="match-name">Gonzaga</span>
+                  <span class="match-score">72</span>
+                </div>
+                <div class="match-team picked-loss">
+                  <span class="seed">9</span>
+                  <span class="logo-box">OKL</span>
+                  <span class="match-name">Oklahoma</span>
+                  <span class="match-score">67</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bracket-round">
+              <div class="bracket-round-label">Sweet 16</div>
+              <div class="match" style="margin-top: 32px;">
+                <div class="match-team picked-win">
+                  <span class="seed">1</span>
+                  <span class="logo-box">HOU</span>
+                  <span class="match-name">Houston</span>
+                  <span class="match-score">79</span>
+                </div>
+                <div class="match-team picked-loss">
+                  <span class="seed">8</span>
+                  <span class="logo-box">GON</span>
+                  <span class="match-name">Gonzaga</span>
+                  <span class="match-score">64</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bracket-round">
+              <div class="bracket-round-label">Elite 8</div>
+              <div class="match" style="margin-top: 78px;">
+                <div class="match-team" style="background: #fff7ed;">
+                  <span class="seed">1</span>
+                  <span class="logo-box" style="border-color: var(--primary-color); color: var(--primary-dark);">HOU</span>
+                  <span class="match-name">Houston</span>
+                  <span class="match-score" style="color: var(--primary-color); font-weight:700;">— vs —</span>
+                </div>
+                <div class="match-team" style="color: var(--text-xmuted);">
+                  <span class="seed">?</span>
+                  <span class="logo-box">—</span>
+                  <span class="match-name">TBD</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODAL -->
+    <section class="block" id="modal">
+      <div class="block-head">
+        <h2>Picks modal</h2>
+        <span class="block-sub">entry drill-down</span>
+      </div>
+      <p class="block-lede">Opens when an entry row is tapped. Orange header, white body. Each pick is a row with a colored left border (the team's primary color), logo box, seed + name, W/L chips, and points.</p>
+
+      <div class="modal-demo">
+        <div class="modal-header">
+          <h3>Alex Rivers · Best Picks</h3>
+          <span class="modal-close">×</span>
+        </div>
+        <div class="modal-body">
+          <div class="pick-row" style="border-left-color: #c45e10;">
+            <div class="team-logo-box a">HOU</div>
+            <div class="pick-team">
+              <span class="pick-name">1 Houston</span>
+              <span class="pick-region">Midwest</span>
+            </div>
+            <div class="pick-wl-chips">
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip pending">·</span>
+            </div>
+            <div class="pick-pts">34</div>
+          </div>
+          <div class="pick-row" style="border-left-color: #1e40af;">
+            <div class="team-logo-box b">DUK</div>
+            <div class="pick-team">
+              <span class="pick-name">1 Duke</span>
+              <span class="pick-region">East</span>
+            </div>
+            <div class="pick-wl-chips">
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip pending">·</span>
+            </div>
+            <div class="pick-pts">34</div>
+          </div>
+          <div class="pick-row eliminated" style="border-left-color: #9ca3af;">
+            <div class="team-logo-box c">GON</div>
+            <div class="pick-team">
+              <span class="pick-name">8 Gonzaga</span>
+              <span class="pick-region">South</span>
+            </div>
+            <div class="pick-wl-chips">
+              <span class="wl-chip win">W</span>
+              <span class="wl-chip loss">L</span>
+            </div>
+            <div class="pick-pts" style="color: var(--text-xmuted);">5</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ALERTS -->
+    <section class="block" id="alerts">
+      <div class="block-head">
+        <h2>Alerts</h2>
+        <span class="block-sub">.alert</span>
+      </div>
+      <div class="grid grid-2">
+        <div class="alert alert-info"><span>ℹ️</span><span><strong>Bracket locks Thursday 12:15pm ET.</strong>Edits after that time will not be saved.</span></div>
+        <div class="alert alert-success"><span>✓</span><span><strong>Entry submitted.</strong>Check your email for the confirmation with your picks.</span></div>
+        <div class="alert alert-warn"><span>⚠</span><span><strong>Payment pending.</strong>You'll appear on the leaderboard once Venmo clears.</span></div>
+        <div class="alert alert-danger"><span>✕</span><span><strong>You're eliminated.</strong>All picked teams are out — stick around to watch the rest of the pool.</span></div>
+      </div>
+    </section>
+
+    <!-- LOGO BOX -->
+    <section class="block" id="logos">
+      <div class="block-head">
+        <h2>School logo box</h2>
+        <span class="block-sub">.team-logo-box</span>
+      </div>
+      <p class="block-lede">Used in the full grid header and the picks modal. Border color comes from <code class="pill">schoolRecords.primaryColor</code>; fallback is <code class="pill">#ccc</code>. When <code class="pill">logoUrl</code> is null, fall back to the first 2 letters of the team's <code class="pill">nameNick || name</code>.</p>
+
+      <div class="ds-card">
+        <div class="ds-card-body">
+          <div class="logo-grid">
+            <div class="team-logo-box a">HOU</div>
+            <div class="team-logo-box b">DUK</div>
+            <div class="team-logo-box c">MSU</div>
+            <div class="team-logo-box d">IND</div>
+            <div class="team-logo-box e">KAN</div>
+            <div class="team-logo-box">AUB</div>
+            <div class="team-logo-box" style="border-color:#ca8a04; color:#854d0e;">MIZ</div>
+            <div class="team-logo-box" style="border-color:#0f766e; color:#0f766e;">MAR</div>
+          </div>
+
+          <table class="specs-table" style="margin-top: 22px;">
+            <tr><th>Usage</th><th>Size</th></tr>
+            <tr><td>Full grid column header</td><td>30 × 30</td></tr>
+            <tr><td>Picks modal row</td><td>32 × 32</td></tr>
+            <tr><td>Bracket matchup</td><td>22 × 22</td></tr>
+            <tr><td>Border</td><td>2px solid — team primary color</td></tr>
+            <tr><td>Radius</td><td>4px</td></tr>
+            <tr><td>Fallback glyph</td><td>2 uppercase chars, weight 800</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // TOC highlight
+  const links = document.querySelectorAll('.toc a');
+  const sections = [...document.querySelectorAll('section.block')];
+  const setActive = () => {
+    const y = window.scrollY + 120;
+    let cur = sections[0];
+    for (const s of sections) if (s.offsetTop <= y) cur = s;
+    links.forEach(a => a.classList.toggle('current', a.getAttribute('href') === '#' + cur.id));
+  };
+  window.addEventListener('scroll', setActive, { passive: true });
+  setActive();
+</script>
+
+<!-- ═══════ TWEAKS PANEL ═══════ -->
+<style>
+  .tweaks-panel {
+    position: fixed; right: 20px; bottom: 20px;
+    width: 320px; max-height: calc(100vh - 40px);
+    background: #ffffff;
+    border: 1px solid #cfd3dc;
+    border-radius: 14px;
+    box-shadow: 0 24px 48px -12px rgba(0,0,0,0.18), 0 8px 16px -4px rgba(0,0,0,0.08);
+    color: #111827;
+    font-family: 'Inter', sans-serif;
+    z-index: 9999;
+    display: none; flex-direction: column; overflow: hidden;
+  }
+  .tweaks-panel.open { display: flex; }
+  .tweaks-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e2e5eb;
+    background: #f5f6f9;
+    flex-shrink: 0;
+  }
+  .tweaks-head h4 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
+  .tweaks-close { background: none; border: 0; color: #6b7280; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }
+  .tweaks-close:hover { color: #111827; }
+  .tweaks-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+  .tweak-row { display: flex; flex-direction: column; gap: 6px; }
+  .tweak-row label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: #6b7280;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .tweak-row label code {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: #9ca3af; text-transform: none; letter-spacing: 0; font-weight: 500;
+  }
+  .tweak-color { display: flex; gap: 8px; align-items: center; }
+  .tweak-color input[type="color"] {
+    width: 38px; height: 32px; border: 1px solid #e2e5eb; border-radius: 6px;
+    background: transparent; padding: 2px; cursor: pointer;
+  }
+  .tweak-color input[type="text"] {
+    flex: 1; background: #f5f6f9; border: 1px solid #e2e5eb; color: #111827;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    padding: 7px 10px; border-radius: 6px; outline: none;
+  }
+  .tweak-color input[type="text"]:focus { border-color: #ea7b40; }
+  .tweak-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .tweak-preset {
+    background: #ffffff; border: 1px solid #e2e5eb; color: #111827;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+    padding: 8px 4px; border-radius: 6px; cursor: pointer;
+    transition: border-color 0.15s; text-align: center;
+  }
+  .tweak-preset:hover { border-color: #ea7b40; }
+  .tweak-preset.active { border-color: #ea7b40; background: rgba(234,123,64,0.08); }
+  .tweak-preset .dot {
+    display: block; width: 100%; height: 16px; border-radius: 3px; margin-bottom: 4px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .tweaks-reset {
+    background: transparent; border: 1px solid #e2e5eb; color: #6b7280;
+    padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .tweaks-reset:hover { border-color: #ea7b40; color: #ea7b40; }
+  .tweaks-fab {
+    position: fixed; right: 20px; bottom: 20px;
+    width: 46px; height: 46px; border-radius: 50%;
+    background: #ea7b40; color: #ffffff; border: 0;
+    box-shadow: 0 8px 20px -4px rgba(0,0,0,0.25);
+    font-size: 20px; cursor: pointer; z-index: 9998;
+    display: grid; place-items: center;
+  }
+  .tweaks-fab.hidden { display: none; }
+</style>
+
+<button class="tweaks-fab" id="tweaksFab" aria-label="Open tweaks">⚙</button>
+<aside class="tweaks-panel" id="tweaksPanel" aria-hidden="true">
+  <div class="tweaks-head">
+    <h4>Tweaks — surface palette</h4>
+    <button class="tweaks-close" id="tweaksClose" aria-label="Close">×</button>
   </div>
+  <div class="tweaks-body">
+    <div class="tweak-row">
+      <label>Preset<code>surface lightness</code></label>
+      <div class="tweak-presets" id="tweakPresets">
+        <button class="tweak-preset" data-preset="paper">
+          <span class="dot" style="background:#fafbfd"></span>Paper
+        </button>
+        <button class="tweak-preset" data-preset="warm">
+          <span class="dot" style="background:#f3f4f6"></span>Warm
+        </button>
+        <button class="tweak-preset active" data-preset="lifted">
+          <span class="dot" style="background:#edeff3"></span>Lifted
+        </button>
+        <button class="tweak-preset" data-preset="contrast">
+          <span class="dot" style="background:#e4e7ee"></span>Bold
+        </button>
+      </div>
+    </div>
 
-  <script>
-    // TOC highlight
-    const links = document.querySelectorAll('.toc a');
-    const sections = [...document.querySelectorAll('section.block')];
-    const setActive = () => {
-      const y = window.scrollY + 120;
-      let cur = sections[0];
-      for (const s of sections) if (s.offsetTop <= y) cur = s;
-      links.forEach(a => a.classList.toggle('current', a.getAttribute('href') === '#' + cur.id));
+    <div class="tweak-row">
+      <label>Page body<code>--bg-body</code></label>
+      <div class="tweak-color">
+        <input type="color" id="tw-body" value="#edeff3">
+        <input type="text" id="tw-body-hex" value="#edeff3">
+      </div>
+    </div>
+
+    <div class="tweak-row">
+      <label>Card surface<code>--bg-card</code></label>
+      <div class="tweak-color">
+        <input type="color" id="tw-card" value="#ffffff">
+        <input type="text" id="tw-card-hex" value="#ffffff">
+      </div>
+    </div>
+
+    <div class="tweak-row">
+      <label>Soft fill<code>--bg-soft</code></label>
+      <div class="tweak-color">
+        <input type="color" id="tw-soft" value="#f5f6f9">
+        <input type="text" id="tw-soft-hex" value="#f5f6f9">
+      </div>
+    </div>
+
+    <div class="tweak-row">
+      <label>Border<code>--border-color</code></label>
+      <div class="tweak-color">
+        <input type="color" id="tw-border" value="#e2e5eb">
+        <input type="text" id="tw-border-hex" value="#e2e5eb">
+      </div>
+    </div>
+
+    <div class="tweak-row">
+      <label>Primary / orange<code>--primary-color</code></label>
+      <div class="tweak-color">
+        <input type="color" id="tw-primary" value="#ea7b40">
+        <input type="text" id="tw-primary-hex" value="#ea7b40">
+      </div>
+    </div>
+
+    <button class="tweaks-reset" id="tweaksReset">Reset to defaults</button>
+  </div>
+</aside>
+
+<script>
+  (function(){
+    const DEFAULTS = {
+      body:    '#edeff3',
+      card:    '#ffffff',
+      soft:    '#f5f6f9',
+      softer:  '#eef0f4',
+      border:  '#e2e5eb',
+      borderStrong: '#cfd3dc',
+      primary: '#ea7b40'
     };
-    window.addEventListener('scroll', setActive, { passive: true });
-    setActive();
-  </script>
+    const PRESETS = {
+      paper:    { body:'#fafbfd', card:'#ffffff', soft:'#f5f6f9', softer:'#eef0f4', border:'#eceff4', borderStrong:'#dfe3ea', primary:'#ea7b40' },
+      warm:     { body:'#f3f4f6', card:'#ffffff', soft:'#f9fafb', softer:'#f6f9fc', border:'#e5e7eb', borderStrong:'#d1d5db', primary:'#ea7b40' },
+      lifted:   { ...DEFAULTS },
+      contrast: { body:'#e4e7ee', card:'#ffffff', soft:'#eef0f4', softer:'#e7eaf0', border:'#d7dce4', borderStrong:'#bec4ce', primary:'#ea7b40' }
+    };
 
-  <!-- ═══════ TWEAKS PANEL ═══════ -->
-  <style>
-    .tweaks-panel {
-      position: fixed;
-      right: 20px;
-      bottom: 20px;
-      width: 320px;
-      max-height: calc(100vh - 40px);
-      background: #ffffff;
-      border: 1px solid #cfd3dc;
-      border-radius: 14px;
-      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.18), 0 8px 16px -4px rgba(0, 0, 0, 0.08);
-      color: #111827;
-      font-family: 'Inter', sans-serif;
-      z-index: 9999;
-      display: none;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .tweaks-panel.open {
-      display: flex;
-    }
-
-    .tweaks-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 14px;
-      border-bottom: 1px solid #e2e5eb;
-      background: #f5f6f9;
-      flex-shrink: 0;
-    }
-
-    .tweaks-head h4 {
-      margin: 0;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-
-    .tweaks-close {
-      background: none;
-      border: 0;
-      color: #6b7280;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 0 4px;
-      line-height: 1;
-    }
-
-    .tweaks-close:hover {
-      color: #111827;
-    }
-
-    .tweaks-body {
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      overflow-y: auto;
-    }
-
-    .tweak-row {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .tweak-row label {
-      font-size: 10.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #6b7280;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .tweak-row label code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: #9ca3af;
-      text-transform: none;
-      letter-spacing: 0;
-      font-weight: 500;
-    }
-
-    .tweak-color {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .tweak-color input[type="color"] {
-      width: 38px;
-      height: 32px;
-      border: 1px solid #e2e5eb;
-      border-radius: 6px;
-      background: transparent;
-      padding: 2px;
-      cursor: pointer;
-    }
-
-    .tweak-color input[type="text"] {
-      flex: 1;
-      background: #f5f6f9;
-      border: 1px solid #e2e5eb;
-      color: #111827;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      padding: 7px 10px;
-      border-radius: 6px;
-      outline: none;
-    }
-
-    .tweak-color input[type="text"]:focus {
-      border-color: #ea7b40;
-    }
-
-    .tweak-presets {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-    }
-
-    .tweak-preset {
-      background: #ffffff;
-      border: 1px solid #e2e5eb;
-      color: #111827;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      font-weight: 600;
-      padding: 8px 4px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: border-color 0.15s;
-      text-align: center;
-    }
-
-    .tweak-preset:hover {
-      border-color: #ea7b40;
-    }
-
-    .tweak-preset.active {
-      border-color: #ea7b40;
-      background: rgba(234, 123, 64, 0.08);
-    }
-
-    .tweak-preset .dot {
-      display: block;
-      width: 100%;
-      height: 16px;
-      border-radius: 3px;
-      margin-bottom: 4px;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-    }
-
-    .tweaks-reset {
-      background: transparent;
-      border: 1px solid #e2e5eb;
-      color: #6b7280;
-      padding: 8px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-    }
-
-    .tweaks-reset:hover {
-      border-color: #ea7b40;
-      color: #ea7b40;
-    }
-
-    .tweaks-fab {
-      position: fixed;
-      right: 20px;
-      bottom: 20px;
-      width: 46px;
-      height: 46px;
-      border-radius: 50%;
-      background: #ea7b40;
-      color: #ffffff;
-      border: 0;
-      box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.25);
-      font-size: 20px;
-      cursor: pointer;
-      z-index: 9998;
-      display: grid;
-      place-items: center;
-    }
-
-    .tweaks-fab.hidden {
-      display: none;
-    }
-  </style>
-
-  <button class="tweaks-fab" id="tweaksFab" aria-label="Open tweaks">⚙</button>
-  <aside class="tweaks-panel" id="tweaksPanel" aria-hidden="true">
-    <div class="tweaks-head">
-      <h4>Tweaks — surface palette</h4>
-      <button class="tweaks-close" id="tweaksClose" aria-label="Close">×</button>
-    </div>
-    <div class="tweaks-body">
-      <div class="tweak-row">
-        <label>Preset<code>surface lightness</code></label>
-        <div class="tweak-presets" id="tweakPresets">
-          <button class="tweak-preset" data-preset="paper">
-            <span class="dot" style="background:#fafbfd"></span>Paper
-          </button>
-          <button class="tweak-preset" data-preset="warm">
-            <span class="dot" style="background:#f3f4f6"></span>Warm
-          </button>
-          <button class="tweak-preset active" data-preset="lifted">
-            <span class="dot" style="background:#edeff3"></span>Lifted
-          </button>
-          <button class="tweak-preset" data-preset="contrast">
-            <span class="dot" style="background:#e4e7ee"></span>Bold
-          </button>
-        </div>
-      </div>
-
-      <div class="tweak-row">
-        <label>Page body<code>--bg-body</code></label>
-        <div class="tweak-color">
-          <input type="color" id="tw-body" value="#edeff3">
-          <input type="text" id="tw-body-hex" value="#edeff3">
-        </div>
-      </div>
-
-      <div class="tweak-row">
-        <label>Card surface<code>--bg-card</code></label>
-        <div class="tweak-color">
-          <input type="color" id="tw-card" value="#ffffff">
-          <input type="text" id="tw-card-hex" value="#ffffff">
-        </div>
-      </div>
-
-      <div class="tweak-row">
-        <label>Soft fill<code>--bg-soft</code></label>
-        <div class="tweak-color">
-          <input type="color" id="tw-soft" value="#f5f6f9">
-          <input type="text" id="tw-soft-hex" value="#f5f6f9">
-        </div>
-      </div>
-
-      <div class="tweak-row">
-        <label>Border<code>--border-color</code></label>
-        <div class="tweak-color">
-          <input type="color" id="tw-border" value="#e2e5eb">
-          <input type="text" id="tw-border-hex" value="#e2e5eb">
-        </div>
-      </div>
-
-      <div class="tweak-row">
-        <label>Primary / orange<code>--primary-color</code></label>
-        <div class="tweak-color">
-          <input type="color" id="tw-primary" value="#ea7b40">
-          <input type="text" id="tw-primary-hex" value="#ea7b40">
-        </div>
-      </div>
-
-      <button class="tweaks-reset" id="tweaksReset">Reset to defaults</button>
-    </div>
-  </aside>
-
-  <script>
-    (function () {
-      const DEFAULTS = {
-        body: '#edeff3',
-        card: '#ffffff',
-        soft: '#f5f6f9',
-        softer: '#eef0f4',
-        border: '#e2e5eb',
-        borderStrong: '#cfd3dc',
-        primary: '#ea7b40'
-      };
-      const PRESETS = {
-        paper: { body: '#fafbfd', card: '#ffffff', soft: '#f5f6f9', softer: '#eef0f4', border: '#eceff4', borderStrong: '#dfe3ea', primary: '#ea7b40' },
-        warm: { body: '#f3f4f6', card: '#ffffff', soft: '#f9fafb', softer: '#f6f9fc', border: '#e5e7eb', borderStrong: '#d1d5db', primary: '#ea7b40' },
-        lifted: { ...DEFAULTS },
-        contrast: { body: '#e4e7ee', card: '#ffffff', soft: '#eef0f4', softer: '#e7eaf0', border: '#d7dce4', borderStrong: '#bec4ce', primary: '#ea7b40' }
-      };
-
-      const root = document.documentElement;
-      const hexToRgba = (hex, a) => {
-        const m = hex.replace('#', '');
-        const r = parseInt(m.substring(0, 2), 16), g = parseInt(m.substring(2, 4), 16), b = parseInt(m.substring(4, 6), 16);
-        return `rgba(${r},${g},${b},${a})`;
-      };
-      const applyPalette = (p) => {
-        root.style.setProperty('--bg-body', p.body);
-        root.style.setProperty('--bg-card', p.card);
-        root.style.setProperty('--bg-header', p.card);
-        root.style.setProperty('--bg-soft', p.soft);
-        root.style.setProperty('--bg-softer', p.softer);
-        root.style.setProperty('--bg-hover', hexToRgba(p.primary, 0.06));
-        root.style.setProperty('--border-color', p.border);
-        root.style.setProperty('--border-strong', p.borderStrong);
-        root.style.setProperty('--primary-color', p.primary);
-        setCtl('body', p.body); setCtl('card', p.card); setCtl('soft', p.soft); setCtl('border', p.border); setCtl('primary', p.primary);
-      };
-      const setCtl = (id, val) => {
-        const c = document.getElementById('tw-' + id);
-        const h = document.getElementById('tw-' + id + '-hex');
-        if (c) c.value = val; if (h) h.value = val;
-      };
-      const shade = (hex, delta) => {
-        const m = hex.replace('#', '');
-        const adj = (n) => Math.max(0, Math.min(255, n + delta)).toString(16).padStart(2, '0');
-        return '#' + adj(parseInt(m.substring(0, 2), 16)) + adj(parseInt(m.substring(2, 4), 16)) + adj(parseInt(m.substring(4, 6), 16));
-      };
-      const getPaletteFromControls = () => {
-        const body = document.getElementById('tw-body').value;
-        const card = document.getElementById('tw-card').value;
-        const soft = document.getElementById('tw-soft').value;
-        const border = document.getElementById('tw-border').value;
-        const primary = document.getElementById('tw-primary').value;
-        return { body, card, soft, softer: shade(soft, -6), border, borderStrong: shade(border, -16), primary };
-      };
-      ['body', 'card', 'soft', 'border', 'primary'].forEach(id => {
-        const c = document.getElementById('tw-' + id);
-        const h = document.getElementById('tw-' + id + '-hex');
-        c.addEventListener('input', () => { h.value = c.value; applyPalette(getPaletteFromControls()); clearPresetActive(); });
-        h.addEventListener('input', () => {
-          const v = h.value.trim();
-          if (/^#[0-9a-f]{6}$/i.test(v)) { c.value = v; applyPalette(getPaletteFromControls()); clearPresetActive(); }
-        });
+    const root = document.documentElement;
+    const hexToRgba = (hex, a) => {
+      const m = hex.replace('#','');
+      const r = parseInt(m.substring(0,2),16), g = parseInt(m.substring(2,4),16), b = parseInt(m.substring(4,6),16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const applyPalette = (p) => {
+      root.style.setProperty('--bg-body', p.body);
+      root.style.setProperty('--bg-card', p.card);
+      root.style.setProperty('--bg-header', p.card);
+      root.style.setProperty('--bg-soft', p.soft);
+      root.style.setProperty('--bg-softer', p.softer);
+      root.style.setProperty('--bg-hover', hexToRgba(p.primary, 0.06));
+      root.style.setProperty('--border-color', p.border);
+      root.style.setProperty('--border-strong', p.borderStrong);
+      root.style.setProperty('--primary-color', p.primary);
+      setCtl('body', p.body); setCtl('card', p.card); setCtl('soft', p.soft); setCtl('border', p.border); setCtl('primary', p.primary);
+    };
+    const setCtl = (id, val) => {
+      const c = document.getElementById('tw-' + id);
+      const h = document.getElementById('tw-' + id + '-hex');
+      if (c) c.value = val; if (h) h.value = val;
+    };
+    const shade = (hex, delta) => {
+      const m = hex.replace('#','');
+      const adj = (n) => Math.max(0, Math.min(255, n + delta)).toString(16).padStart(2,'0');
+      return '#' + adj(parseInt(m.substring(0,2),16)) + adj(parseInt(m.substring(2,4),16)) + adj(parseInt(m.substring(4,6),16));
+    };
+    const getPaletteFromControls = () => {
+      const body = document.getElementById('tw-body').value;
+      const card = document.getElementById('tw-card').value;
+      const soft = document.getElementById('tw-soft').value;
+      const border = document.getElementById('tw-border').value;
+      const primary = document.getElementById('tw-primary').value;
+      return { body, card, soft, softer: shade(soft, -6), border, borderStrong: shade(border, -16), primary };
+    };
+    ['body','card','soft','border','primary'].forEach(id => {
+      const c = document.getElementById('tw-' + id);
+      const h = document.getElementById('tw-' + id + '-hex');
+      c.addEventListener('input', () => { h.value = c.value; applyPalette(getPaletteFromControls()); clearPresetActive(); });
+      h.addEventListener('input', () => {
+        const v = h.value.trim();
+        if (/^#[0-9a-f]{6}$/i.test(v)) { c.value = v; applyPalette(getPaletteFromControls()); clearPresetActive(); }
       });
-      const clearPresetActive = () => document.querySelectorAll('.tweak-preset').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tweak-preset').forEach(btn => {
-        btn.addEventListener('click', () => { clearPresetActive(); btn.classList.add('active'); applyPalette(PRESETS[btn.dataset.preset]); });
-      });
-      document.getElementById('tweaksReset').addEventListener('click', () => {
-        clearPresetActive();
-        document.querySelector('.tweak-preset[data-preset="lifted"]').classList.add('active');
-        applyPalette(DEFAULTS);
-      });
-      const fab = document.getElementById('tweaksFab');
-      const panel = document.getElementById('tweaksPanel');
-      const close = document.getElementById('tweaksClose');
-      const openPanel = () => { panel.classList.add('open'); fab.classList.add('hidden'); panel.setAttribute('aria-hidden', 'false'); };
-      const closePanel = () => { panel.classList.remove('open'); fab.classList.remove('hidden'); panel.setAttribute('aria-hidden', 'true'); };
-      fab.addEventListener('click', openPanel);
-      close.addEventListener('click', closePanel);
-      window.addEventListener('message', (e) => {
-        if (!e.data || !e.data.type) return;
-        if (e.data.type === '__activate_edit_mode') openPanel();
-        if (e.data.type === '__deactivate_edit_mode') closePanel();
-      });
-      openPanel();
-      try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch (e) { }
-    })();
-  </script>
+    });
+    const clearPresetActive = () => document.querySelectorAll('.tweak-preset').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tweak-preset').forEach(btn => {
+      btn.addEventListener('click', () => { clearPresetActive(); btn.classList.add('active'); applyPalette(PRESETS[btn.dataset.preset]); });
+    });
+    document.getElementById('tweaksReset').addEventListener('click', () => {
+      clearPresetActive();
+      document.querySelector('.tweak-preset[data-preset="lifted"]').classList.add('active');
+      applyPalette(DEFAULTS);
+    });
+    const fab = document.getElementById('tweaksFab');
+    const panel = document.getElementById('tweaksPanel');
+    const close = document.getElementById('tweaksClose');
+    const openPanel  = () => { panel.classList.add('open');    fab.classList.add('hidden');    panel.setAttribute('aria-hidden','false'); };
+    const closePanel = () => { panel.classList.remove('open'); fab.classList.remove('hidden'); panel.setAttribute('aria-hidden','true'); };
+    fab.addEventListener('click', openPanel);
+    close.addEventListener('click', closePanel);
+    window.addEventListener('message', (e) => {
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === '__activate_edit_mode')   openPanel();
+      if (e.data.type === '__deactivate_edit_mode') closePanel();
+    });
+    openPanel();
+    try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch(e) {}
+  })();
+</script>
 
 </body>
-
 </html>

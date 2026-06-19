@@ -1,4 +1,7 @@
+import { createRequire } from "module";
 import Logger from "../utils/logger.js";
+
+const require = createRequire(import.meta.url);
 
 const ESPN_SCOREBOARD_URL =
   "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard";
@@ -9,6 +12,19 @@ const NY_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "2-digit",
   day: "2-digit",
 });
+
+/**
+ * Loads the ESPN display-name → internal sID mapping from config.
+ * Returns an object like { "Duke Blue Devils": 264, ... }
+ */
+export function loadTeamMap() {
+  try {
+    return require("../config/espnTeamMap.json");
+  } catch {
+    Logger.warn("ESPN poll: espnTeamMap.json not found or invalid — no games will be matched");
+    return {};
+  }
+}
 
 /**
  * Fetches completed NCAA tournament games from ESPN's unofficial scoreboard API.

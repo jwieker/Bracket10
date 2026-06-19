@@ -32,7 +32,7 @@ import { db } from "../src/config/firestore.js";
 
 const RUN_LIVE = process.env.LIVE_E2E === "true";
 
-// Same 2022 bracket data used in e2e-v2 (seeded into year 2019 to avoid conflicts)
+// Same 2022 bracket data used in e2e-v4 (seeded into year 2019 to avoid conflicts)
 const GAMES_SPEC_2022 = [
     "1-1-1-67",   "1-1-16-307",   // R1: 67 vs 307
     "1-2-8-33",   "1-2-9-6",

@@ -14,7 +14,14 @@ import express from "express";
 import session from "express-session";
 import { FirestoreStore } from "./src/middleware/firestoreSessionStore.js";
 import compression from "compression";
-import { securityHeaders } from "./src/middleware/securityHeaders.js";
+import {
+  securityHeaders,
+  CSP_REPORT_PATH,
+  isCspReportOnlyEnabled,
+  logCspReport,
+} from "./src/middleware/securityHeaders.js";
+import { rateLimit } from "./src/middleware/rateLimit.js";
+import { attachCsrfToken } from "./src/middleware/csrf.js";
 import gameRoutes from "./src/routes/gameRoutes.js";
 import viewRoutes from "./src/routes/viewRoutes.js";
 import pointsRoutes from "./src/routes/pointsRoutes.js";
@@ -31,6 +38,14 @@ import { db } from "./src/config/firestore.js";
 // Express app configuration
 const app = express();
 const port = process.env.PORT || 8080;
+// Cloud Run places exactly one trusted proxy (Google's front end) in front of
+// the container, and it appends the real client IP as the rightmost
+// X-Forwarded-For entry, so `trust proxy = 1` makes `req.ip` the true client
+// address — which the per-IP rate limiters depend on. This is correct ONLY for
+// Cloud Run. App Engine Standard's rightmost XFF hop is a Google-internal
+// address, so deploying there would collapse every client into one rate-limit
+// bucket. The vestigial `app.yaml` that enabled an accidental GAE deploy has
+// been removed (#160); keep this value matched to the Cloud Run deployment.
 app.set("trust proxy", 1);
 
 // Canonicalize host: redirect www.<APP_HOST> → <APP_HOST>.
@@ -74,6 +89,12 @@ app.use(session({
 app.use(express.json()); // for parsing application/json
 app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 
+// Per-session CSRF token for the admin console (res.locals.csrfToken).
+// Admin sessions only — never creates a session for anonymous traffic, so
+// saveUninitialized:false (and the $0 cost contract) stay intact. The
+// matching verifyCsrf guard sits on every state-changing admin POST.
+app.use(attachCsrfToken);
+
 app.set("view engine", "ejs"); // Tell Express to use EJS
 
 // Enable compression for all responses
@@ -95,6 +116,27 @@ app.use("/", pointsRoutes);
 app.use("/", tourneyRoutes);
 app.use("/", conferenceRoutes);
 app.use("/", adminRoutes);
+
+// CSP violation sink for the report-only policy (see securityHeaders.js).
+// Logs to stdout only — no Firestore, no third party. Rate-limited to cap log
+// volume, and silenced entirely by the CSP_REPORT_ONLY kill switch.
+app.post(
+  CSP_REPORT_PATH,
+  rateLimit({ windowMs: 60 * 1000, max: 30 }),
+  // Only the two content types browsers actually send for CSP violations —
+  // generic application/json is dropped to cut trivially-scriptable abuse
+  // (audit finding 3 defense-in-depth).
+  express.json({
+    type: ["application/csp-report", "application/reports+json"],
+    limit: "10kb",
+  }),
+  (req, res) => {
+    if (isCspReportOnlyEnabled()) {
+      logCspReport(req.body);
+    }
+    res.status(204).end();
+  }
+);
 
 // Block wp-admin access attempts
 app.use(
