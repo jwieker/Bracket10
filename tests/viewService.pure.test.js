@@ -41,7 +41,7 @@ vi.mock('../src/utils/cacheUtils.js', () => ({
 }));
 
 import { enrichEntriesWithPotentialRankings, calculateEntryPointsAndPaths } from '../src/services/pointsService.js';
-import { calculateMaxPossiblePoints } from '../src/services/viewService.js';
+import { calculateMaxPossiblePoints, normalizeAndValidateEntryPicks, validateEntryPicks } from '../src/services/viewService.js';
 
 // ─── Shared test fixtures ────────────────────────────────────────────────────
 
@@ -902,5 +902,104 @@ describe('calculateMaxPossiblePoints', () => {
     expect(logOutput.data.message).toBe('Database down');
 
     errorSpy.mockRestore();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateEntryPicks / normalizeAndValidateEntryPicks
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The participant-submission pick pipeline (formerly inline in the controllers,
+// now owned by the service layer): First Four normalization → exactly-10-unique
+// → team-membership validation. These cover the rules that moved out of
+// registrationController.entryVerify and selfServiceController.applyEntryUpdate.
+
+describe('normalizeAndValidateEntryPicks', () => {
+  let mockGameRepo;
+  let mockViewRepo;
+
+  // 12 ordinary (non-FF) teams so individual tests can pick any 10 valid sIDs.
+  const teamsFor = (sIDs) => sIDs.map((sID) => ({ sID, nameNick: `Team ${sID}`, seed: 1, regionName: 'East', isFFDoc: false }));
+
+  beforeEach(() => {
+    mockViewRepo = { getGroupTeams: vi.fn().mockResolvedValue([]) };
+    mockGameRepo = {
+      getFirstFourGames: vi.fn().mockResolvedValue([]), // identity FF by default
+      getAllTournamentDetails: vi.fn().mockResolvedValue({
+        teams: teamsFor([101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 999]),
+        allGames: [],
+        regions: [{ regionName: 'East' }],
+      }),
+    };
+    setRepositories(mockViewRepo, mockGameRepo, {}, {});
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the picks unchanged for 10 valid, unique, non-FF picks', async () => {
+    const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110];
+    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test')).resolves.toEqual(picks);
+  });
+
+  it('rejects fewer than 10 picks before any team lookup', async () => {
+    const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109];
+    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
+      .rejects.toThrow(/Exactly 10 team picks are required/i);
+  });
+
+  it('maps a stale First Four pick onto the live winner and accepts it', async () => {
+    // FF game resolved with winner 999; a pick of either FF team must land on 999.
+    mockGameRepo.getFirstFourGames.mockResolvedValue([
+      { team1ID: 101, team2ID: 102, winner: 999 },
+    ]);
+    const picks = [101, 103, 104, 105, 106, 107, 108, 109, 110, 111];
+    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
+      .resolves.toEqual([999, 103, 104, 105, 106, 107, 108, 109, 110, 111]);
+  });
+
+  it('rejects when both FF teams of one unresolved game collapse to the same pick (duplicate)', async () => {
+    // Unresolved FF game: both 101 and 102 normalize to team1ID (101).
+    mockGameRepo.getFirstFourGames.mockResolvedValue([
+      { team1ID: 101, team2ID: 102, winner: null },
+    ]);
+    const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110];
+    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
+      .rejects.toThrow(/Duplicate team picks/i);
+  });
+
+  it('rejects a pick that is not a team in the tournament/group', async () => {
+    // 777 is not in the registration team list.
+    const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109, 777];
+    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
+      .rejects.toThrow(/Pick 10 is not a valid team/i);
+  });
+});
+
+describe('validateEntryPicks', () => {
+  beforeEach(() => {
+    const mockViewRepo = { getGroupTeams: vi.fn().mockResolvedValue([]) };
+    const mockGameRepo = {
+      getAllTournamentDetails: vi.fn().mockResolvedValue({
+        teams: [101, 102, 103].map((sID) => ({ sID, nameNick: `Team ${sID}`, seed: 1, regionName: 'East', isFFDoc: false })),
+        allGames: [],
+        regions: [{ regionName: 'East' }],
+      }),
+    };
+    setRepositories(mockViewRepo, mockGameRepo, {}, {});
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resolves when every pick is a valid team in the group', async () => {
+    await expect(validateEntryPicks([101, 102, 103], 2024, 'Test')).resolves.toBeUndefined();
+  });
+
+  it('throws naming the 1-based position of the first invalid pick', async () => {
+    await expect(validateEntryPicks([101, 555, 103], 2024, 'Test'))
+      .rejects.toThrow(/Pick 2 is not a valid team/i);
   });
 });
