@@ -18,6 +18,7 @@ Entry point for AI assistants. Read this first, then load files relevant to your
 | Caching, invalidation, TTLs | `docs/architecture/caching.md` |
 | Security, CSP, rate limiting, auth | `docs/architecture/security.md` |
 | Firestore schema, data structure | `docs/architecture/database.md` |
+| Big-picture architecture, component map | `docs/architecture/overview.md` |
 | Routes, admin console, email, analytics | `docs/features/routes.md` |
 | End-to-end request flows (user/admin/poll), access tiers | `docs/architecture/request-flows.md` |
 | Points, Playground, game undo | `docs/features/complex-features.md` |

@@ -13,6 +13,7 @@ import {
 import { thisYear, TOURNAMENT_ROUNDS, isRegistrationOpen } from "../config/app.js";
 import { cacheGet, cacheSet } from "../utils/cacheUtils.js";
 import Logger from "../utils/logger.js";
+import { ValidationError } from "../utils/errors.js";
 import { randomInt } from "node:crypto";
 
 
@@ -32,6 +33,8 @@ export {
   addNewGroup,
   getRegionIDForYear,
   normalizeFirstFourPicks,
+  validateEntryPicks,
+  normalizeAndValidateEntryPicks,
   setRepositories,
   buildFullGridData,
   buildGameViewData,
@@ -254,6 +257,50 @@ async function normalizeFirstFourPicks(picksIds, year = thisYear) {
     const id = Number(pick);
     return ffTarget.has(id) ? ffTarget.get(id) : pick;
   });
+}
+
+/**
+ * Validates that every pick is a real team in the given tournament/group.
+ * Throws ValidationError on the first invalid pick (or an unknown group).
+ */
+async function validateEntryPicks(picksIds, year, groupName) {
+  const registrationData = await getGroupRegistrationData(groupName, year);
+  if (!registrationData || !registrationData.teamData) {
+    throw new ValidationError("Invalid tournament or group.");
+  }
+  const validSIDs = new Set(registrationData.teamData.map(t => t.sID));
+  for (let i = 0; i < picksIds.length; i++) {
+    const pickId = picksIds[i];
+    if (!validSIDs.has(pickId)) {
+      throw new ValidationError(`Pick ${i + 1} is not a valid team in this tournament.`);
+    }
+  }
+}
+
+/**
+ * Full participant-submission pick pipeline, shared by the new-entry
+ * (registration) and self-service edit flows: maps First Four picks to live
+ * game state, enforces exactly 10 unique picks, and validates every pick is a
+ * real team in the group. Returns the normalized pick IDs. Throws
+ * ValidationError on any rule violation (callers surface it to the user).
+ *
+ * First Four normalization runs BEFORE the uniqueness check on purpose: a
+ * submission carrying both FF teams of one game collapses to the same sID and
+ * is correctly rejected as a duplicate.
+ */
+async function normalizeAndValidateEntryPicks(picksIds, year, groupName) {
+  const normalizedPicksIds = await normalizeFirstFourPicks(picksIds, year);
+
+  if (normalizedPicksIds.length !== 10) {
+    throw new ValidationError('Exactly 10 team picks are required.');
+  }
+  if (new Set(normalizedPicksIds).size !== 10) {
+    throw new ValidationError('Duplicate team picks are not allowed.');
+  }
+
+  await validateEntryPicks(normalizedPicksIds, year, groupName);
+
+  return normalizedPicksIds;
 }
 
 // Entry IDs gate access to an entry in /my-entry. A timestamp-based id

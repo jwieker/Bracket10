@@ -1,92 +1,15 @@
-# AI Assistant Instructions
+# Claude Code Instructions
 
-Read `docs/GUIDE.md` first. It explains the project and directs you to the right docs per task.
+Read [`AGENTS.md`](./AGENTS.md) first — it is the canonical guidance (project overview, repo
+map, conventions, and general coding behavior) shared across all AI tools. Then read
+`docs/GUIDE.md` for task-specific docs.
 
----
+One additional reminder beyond `AGENTS.md`: never expose internal implementation details
+(stack traces, Firestore paths, user IDs) in API error responses or rendered views — log them
+server-side only. Verbose error details must only be exposed when `DEBUG_ERRORS` is explicitly
+enabled, and never in production.
 
-## General Coding Behavior
-
-Behavioral guidelines to reduce common LLM coding mistakes. These bias toward caution over speed; for trivial tasks, use judgment. Where these conflict with the project-specific `CRITICAL INSTRUCTION`s below, the project-specific rules win.
-
-### 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them — don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-Surface alternatives when the choice is architecturally significant or hard to reverse. Otherwise, act decisively per the cost rule below — don't re-litigate trivial decisions.
-
-### 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-### 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it — don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: every changed line should trace directly to the user's request.
-
-### 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-This project uses Vitest — run the suite with `npm test` (config in `vitest.config.js`, tests in `tests/`) to verify before and after changes.
-
-**CRITICAL INSTRUCTION — Remote environment testing**: When running in the Claude Code on the web environment, Firestore credentials are pre-loaded. After any change that touches the ESPN poll pipeline (`pollService.js`, `espnService.js`), the cache layer (`cacheUtils.js`), or conference/school repositories, run the V3 live suite to validate against real Firestore:
-```bash
-npm run test:live-e2e-v3
-```
-For changes to the bracket lifecycle, points engine, or First Four logic, run V4:
-```bash
-npm run test:live-e2e-v4
-```
-See `docs/private/development/testing.md` § "Running live tests in the remote Claude Code environment" for full details and data safety rules.
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-
-**CRITICAL INSTRUCTION**: If you discover new patterns or make architectural changes, update the relevant `docs/` file. Skip updates for minor changes.
-
-**CRITICAL INSTRUCTION**: Act decisively. When you have a likely cause and a clear fix, make the change. Don't re-examine the same evidence or generate alternatives. Token usage is expensive.
-
-**CRITICAL INSTRUCTION**: Never expose internal implementation details (stack traces, Firestore paths, user IDs) in API error responses or rendered views. Log them server-side only. Verbose error details must only be exposed when `DEBUG_ERRORS` is explicitly enabled, and never in production.
-
-**CRITICAL INSTRUCTION — Cost contract**: Keep the project as close to **$0/month** as possible. Any change adding recurring spend needs a kill switch or explicit funding. Read `CONTRIBUTING.md` § "Cost contract" before adding infrastructure, third-party API calls, or changing scaling parameters.
+The sections below are **Claude-Code-specific automation** for GitHub PR events.
 
 ---
 

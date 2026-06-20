@@ -48,19 +48,19 @@ and vice versa. A participant session grants zero admin access.
 ### Create an entry (registration)
 ```
 GET /                      indexController.index — state machine (comingsoon/registration/tournament)
-POST /newEntry             viewController.groupVerifyfornewEntry → verifyGroupExists → render registration.ejs
-POST /entryVerify          viewController.entryVerify
+POST /newEntry             registrationController.groupVerifyfornewEntry → verifyGroupExists → render registration.ejs
+POST /entryVerify          registrationController.entryVerify
                              → validates name/team/email + exactly 10 unique picks ("id, name" shape)
                              → stages session pendingConfirmations[token] BEFORE the DB write (C7 ordering)
                              → viewService.createNewEntry → entryRepository
                              → redirect /entryConfirm?token=…
-GET /entryConfirm          viewController.entryConfirm — consumes single-use session token (10-min TTL),
+GET /entryConfirm          registrationController.entryConfirm — consumes single-use session token (10-min TTL),
                              renders confirm.ejs (never passes picks/PII in query params)
 ```
 ```mermaid
 sequenceDiagram
     actor User
-    participant VC as viewController
+    participant VC as registrationController
     participant VS as viewService
     participant ER as EntryRepository
 
@@ -81,7 +81,7 @@ Inconsistencies #6.
 
 ### View results / grids
 ```
-POST /gameView             viewController.gameView → buildGameViewData (cached) → results.ejs
+POST /gameView             resultsController.gameView → buildGameViewData (cached) → results.ejs
                              + per-user highlight: session userEmail/adminEmail → getEntryIdsForUserInGroup
 POST /getFullGrid          buildFullGridData → fullGrid.ejs
 GET  /getFullGridCSV       same data, CSV download
@@ -116,7 +116,7 @@ POST /my-brackets/update       same gates, ownership re-checked against the STOR
                                  then the same shared applyEntryUpdate as path A
 ```
 Both paths funnel into the shared `renderEntryEditor` / `applyEntryUpdate`
-helpers in `viewController.js`, so the editor and write logic cannot drift
+helpers in `selfServiceController.js`, so the editor and write logic cannot drift
 between the two authorization models.
 
 ## 2. Admin flows (all behind `requireSiteAdmin`)
