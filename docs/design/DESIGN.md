@@ -373,7 +373,7 @@ The `.pick-wl-chips` container is **fixed width (152px)** with `flex-wrap: nowra
 
 ---
 
-## 15. CSV Export (`getFullGridCSV` in `viewController.js`)
+## 15. CSV Export (`getFullGridCSV` in `resultsController.js`)
 
 The endpoint replaced `exceljs` (22 MB) with a plain CSV response using RFC 4180 quoting. No external dependencies — cells containing commas, double-quotes, or newlines are wrapped in double-quotes with internal quotes escaped as `""`.
 

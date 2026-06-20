@@ -4,13 +4,24 @@ import {
   getFullGrid,
   getFullGridCSV,
   gameView,
+  calculateMaxPoints,
+} from "../controllers/resultsController.js";
+import {
   groupVerifyfornewEntry,
   entryVerify,
-  calculateMaxPoints,
+  entryConfirm,
+} from "../controllers/registrationController.js";
+import {
   viewEntry,
   entryUpdate,
   findEntry,
   addGroup,
+  deleteEntry,
+  getUnpaidEntries,
+  getUnsentEmails,
+  markEmailsSentController,
+} from "../controllers/adminEntryController.js";
+import {
   viewTeam,
   updateTeam,
   findTeam,
@@ -18,8 +29,8 @@ import {
   addTeam,
   addTeamApi,
   deleteTeam,
-  deleteEntry,
-  entryConfirm,
+} from "../controllers/teamController.js";
+import {
   myEntryLookup,
   myEntryVerify,
   myEntryView,
@@ -27,10 +38,7 @@ import {
   myBrackets,
   userEntryView,
   userEntryUpdate,
-  getUnpaidEntries,
-  getUnsentEmails,
-  markEmailsSentController,
-} from "../controllers/viewController.js";
+} from "../controllers/selfServiceController.js";
 import { getPlayground } from "../controllers/playgroundController.js";
 import { requireSiteAdmin, requireUser } from "../middleware/adminMiddleware.js";
 import { verifyCsrf } from "../middleware/csrf.js";

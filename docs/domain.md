@@ -1,6 +1,6 @@
 ---
 tags: [domain, terminology]
-updated: 2026-04-12
+updated: 2026-06-19
 ---
 
 # Domain Terminology
@@ -18,7 +18,7 @@ Core concepts and vocabulary for the bracket application. Use these definitions 
 
 ## Points System
 
-Points are cumulative. A team reaching the Elite Eight earns 2+3+5+9 = 19 total points. The `points` field on `schoolRecord` stores this value. Round weights:
+Points are cumulative and awarded for **winning** a game (advancing to the next round), not for reaching a round. A team that *reaches* the Elite Eight (one of the final 8) has won three games for 2+3+5 = 10 points; *winning* its Elite Eight game (advancing to the Final Four) adds 9 for 2+3+5+9 = 19 total. The `points` field on `schoolRecord` stores this running total. Round weights:
 
 | Round | Teams Remaining | Points | round (int) |
 |-------|----------------|--------|-------------|
