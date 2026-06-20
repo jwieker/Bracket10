@@ -66,6 +66,8 @@ export {
     addNewGroup,
     getRegionIDForYear,
     normalizeFirstFourPicks,
+    validateEntryPicks,
+    normalizeAndValidateEntryPicks,
     buildFullGridData,
     buildGameViewData,
 } from './viewService.js';
