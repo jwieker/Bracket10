@@ -1,5 +1,5 @@
 # Multi-stage build for production optimization
-FROM node:24.16.0-alpine AS builder
+FROM node:26.4.0-alpine AS builder
 
 WORKDIR /usr/src/app
 
