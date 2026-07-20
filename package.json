@@ -36,7 +36,7 @@
   "author": "Jeff Wieker",
   "license": "ISC",
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "vitest": "^4.1.8"
   },
   "dependencies": {
@@ -45,8 +45,8 @@
     "ejs": "^6.0.1",
     "express": "^5.1.0",
     "express-session": "^1.19.0",
-    "google-auth-library": "^10.7.0",
-    "p-limit": "^7.3.0"
+    "google-auth-library": "^10.9.0",
+    "p-limit": "^7.3.1"
   },
   "overrides": {
     "minimatch": "^10.2.1",
