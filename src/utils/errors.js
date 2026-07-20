@@ -5,55 +5,55 @@ import Logger from './logger.js';
 // are exposed only when DEBUG_ERRORS is explicitly enabled. Both errorMiddleware
 // and controllerWrapper import this so their policies can't drift (#168).
 export const debugErrorsEnabled = () =>
-    process.env.DEBUG_ERRORS === '1' || process.env.DEBUG_ERRORS === 'true';
+  process.env.DEBUG_ERRORS === '1' || process.env.DEBUG_ERRORS === 'true';
 
 // Custom error classes for better error handling
 export class ValidationError extends Error {
-    constructor(message, field = null) {
-        super(message);
-        this.name = 'ValidationError';
-        this.field = field;
-    }
+  constructor(message, field = null) {
+    super(message);
+    this.name = 'ValidationError';
+    this.field = field;
+  }
 }
 
 export class DatabaseError extends Error {
-    constructor(message, operation = null) {
-        super(message);
-        this.name = 'DatabaseError';
-        this.operation = operation;
-    }
+  constructor(message, operation = null) {
+    super(message);
+    this.name = 'DatabaseError';
+    this.operation = operation;
+  }
 }
 
 export class ServiceError extends Error {
-    constructor(message, service = null) {
-        super(message);
-        this.name = 'ServiceError';
-        this.service = service;
-    }
+  constructor(message, service = null) {
+    super(message);
+    this.name = 'ServiceError';
+    this.service = service;
+  }
 }
 
 // Standardized error handling wrapper
 export const withErrorHandling = (operation, context = '') => {
-    return async (...args) => {
-        try {
-            return await operation(...args);
-        } catch (error) {
-            Logger.error(`${context} failed: ${error.message}`, error);
+  return async (...args) => {
+    try {
+      return await operation(...args);
+    } catch (error) {
+      Logger.error(`${context} failed: ${error.message}`, error);
 
-            // Re-throw typed errors as-is. `instanceof` is more robust than the
-            // prior `error.name === '...'` check: subclasses are preserved, and
-            // a third-party error that happens to set `name = 'ValidationError'`
-            // can no longer slip through unwrapped.
-            if (
-                error instanceof ValidationError ||
-                error instanceof DatabaseError ||
-                error instanceof ServiceError
-            ) {
-                throw error;
-            }
+      // Re-throw typed errors as-is. `instanceof` is more robust than the
+      // prior `error.name === '...'` check: subclasses are preserved, and
+      // a third-party error that happens to set `name = 'ValidationError'`
+      // can no longer slip through unwrapped.
+      if (
+        error instanceof ValidationError ||
+        error instanceof DatabaseError ||
+        error instanceof ServiceError
+      ) {
+        throw error;
+      }
 
-            // Wrap unknown errors
-            throw new ServiceError(error.message, context);
-        }
-    };
+      // Wrap unknown errors
+      throw new ServiceError(error.message, context);
+    }
+  };
 };

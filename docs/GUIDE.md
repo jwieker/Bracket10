@@ -81,7 +81,7 @@ Each AI coding assistant reads its own config file for project-specific instruct
 
 | Tool | Config file | Status |
 |------|-------------|--------|
-| Claude / Claude Code | `claude.md` | committed |
+| Claude / Claude Code | `CLAUDE.md` | committed |
 | Gemini / Gemini CLI | `gemini.md` | committed |
 | Jules | `.julesrules` | committed |
 | Cursor | `.cursorrules` | gitignored |

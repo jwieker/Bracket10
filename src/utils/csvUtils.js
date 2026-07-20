@@ -6,7 +6,14 @@ const FORMULA_LEAD = /^[=+\-@\t\r]/;
 const neutralizeFormula = (s) => (FORMULA_LEAD.test(s) ? `'${s}` : s);
 
 export const toCSVRow = (cells) =>
-  cells.map((c) => {
-    const s = neutralizeFormula(String(c ?? ""));
-    return s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r") ? `"${s.replace(/"/g, '""')}"` : s;
-  }).join(",");
+  cells
+    .map((c) => {
+      const s = neutralizeFormula(String(c ?? ''));
+      return s.includes(',') ||
+        s.includes('"') ||
+        s.includes('\n') ||
+        s.includes('\r')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    })
+    .join(',');

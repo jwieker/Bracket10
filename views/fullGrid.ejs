@@ -4,8 +4,10 @@
 <head>
     <%- include('partials/header') %>
         <!-- sorting -->
-        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
-        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"
+            integrity="sha384-vhcBfNt762rNlbnxZsIJQSPWX7b+8NzToPmcW6J5cJzXSnOjZKS2LQ/O2uqLlHcX" crossorigin="anonymous"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"
+            integrity="sha384-yt4K6HL9dLK27YW0wB3TsVyPTrtPn6Nk/l6dsN6bA7UPj+dnl1qMC+Ia2udCYEz1" crossorigin="anonymous"></script>
         <link rel="stylesheet" href="/table-styles.css">
         <style>
             .team-logo-box {

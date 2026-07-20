@@ -1,18 +1,14 @@
-import {
-  getFuturePoints,
-} from "../src/services/pointsService.js";
-
+import { getFuturePoints } from '../src/services/pointsService.js';
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-
-test("getFuturePoints for an array that does not need any games removed", async () => {
+test('getFuturePoints for an array that does not need any games removed', async () => {
   const futureGames = [
-    ["W", "W", 13, 15, 61, 63],
-    ["W", "W", 59, 60, 62],
-    ["W", "W", 28, 30],
+    ['W', 'W', 13, 15, 61, 63],
+    ['W', 'W', 59, 60, 62],
+    ['W', 'W', 28, 30],
   ];
   const currentPoints = 41;
   const expectedPoints = 150;
@@ -36,7 +32,7 @@ test("getFuturePoints for an array that does not need any games removed", async 
   expect(points).toBe(expectedPoints);
 });
 
-test("getFuturePoints for team that has a full tournament", async () => {
+test('getFuturePoints for team that has a full tournament', async () => {
   const futureGames = [
     [46, 54, 58, 60, 62, 63],
     [23, 27, 29, 30, 61, 63],
@@ -104,7 +100,6 @@ test("getFuturePoints for team that has a full tournament", async () => {
   const points = await getFuturePoints(futureGames, currentPoints);
   expect(points).toBe(expectedPoints);
 });
-
 
 //for later test
 // server.test.js

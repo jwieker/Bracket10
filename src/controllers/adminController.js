@@ -3,14 +3,17 @@ import {
   getBudgetStatus,
   triggerProductionDeploy,
   getCloudConsoleLinks,
-} from "../services/index.js";
-import { thisYear } from "../config/app.js";
-import { controllerWrapper, parseYearOrDefault } from "../utils/controllerUtils.js";
-import { gameRepository } from "../repositories/index.js";
+} from '../services/index.js';
+import { thisYear } from '../config/app.js';
+import {
+  controllerWrapper,
+  parseYearOrDefault,
+} from '../utils/controllerUtils.js';
+import { gameRepository } from '../repositories/index.js';
 
 const adminDashboard = controllerWrapper(async (_req, res) => {
-  res.redirect("/admin/tournament");
-}, "adminDashboard");
+  res.redirect('/admin/tournament');
+}, 'adminDashboard');
 
 const adminTournamentPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
@@ -29,22 +32,34 @@ const adminTournamentPage = controllerWrapper(async (req, res) => {
           }
         }
         return game;
-      })
+      }),
     );
-    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
-    res.render("adminTournament", { activeGames: enhancedActiveGames, year, isNewTournament: false, isDev });
+    // Unresolved First Four (round 0) games pinned to the top; once complete
+    // they sort like any other finished game. The sort is stable so the
+    // repository ordering (unresolved first, then gameID) is kept otherwise.
+    const ffPending = (g) => (g.round === 0 && !g.winner ? 0 : 1);
+    enhancedActiveGames.sort((a, b) => ffPending(a) - ffPending(b));
+    const isDev =
+      process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    res.render('adminTournament', {
+      activeGames: enhancedActiveGames,
+      year,
+      isNewTournament: false,
+      isDev,
+    });
   } else {
     const result = await getTournamentData(year);
-    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    const isDev =
+      process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
     if (result.isNewTournament) {
-      return res.render("adminTournament", {
+      return res.render('adminTournament', {
         activeGames: [],
         year: result.year,
         isNewTournament: true,
         isDev,
       });
     } else {
-      return res.render("adminTournament", {
+      return res.render('adminTournament', {
         activeGames: [],
         year: year,
         isNewTournament: false,
@@ -52,39 +67,39 @@ const adminTournamentPage = controllerWrapper(async (req, res) => {
       });
     }
   }
-}, "adminTournamentPage");
+}, 'adminTournamentPage');
 
 const adminEntriesPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
-  res.render("adminEntries", { year });
-}, "adminEntriesPage");
+  res.render('adminEntries', { year });
+}, 'adminEntriesPage');
 
 const adminTeamsPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
-  res.render("adminTeams", { year });
-}, "adminTeamsPage");
+  res.render('adminTeams', { year });
+}, 'adminTeamsPage');
 
 const adminSystemPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
-  res.render("adminSystem", { year });
-}, "adminSystemPage");
+  res.render('adminSystem', { year });
+}, 'adminSystemPage');
 
 const changeYear = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.body.year, thisYear);
   res.redirect(`/admin/tournament?year=${year}`);
-}, "changeYear");
+}, 'changeYear');
 
 const adminCloudPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
   const budget = await getBudgetStatus();
   const links = await getCloudConsoleLinks();
-  res.render("adminCloud", { year, budget, links });
-}, "adminCloudPage");
+  res.render('adminCloud', { year, budget, links });
+}, 'adminCloudPage');
 
 const adminCloudBudgetRefresh = controllerWrapper(async (_req, res) => {
   const budget = await getBudgetStatus({ force: true });
   res.json(budget);
-}, "adminCloudBudgetRefresh");
+}, 'adminCloudBudgetRefresh');
 
 const adminCloudDeploy = controllerWrapper(async (_req, res) => {
   const result = await triggerProductionDeploy();
@@ -92,7 +107,7 @@ const adminCloudDeploy = controllerWrapper(async (_req, res) => {
     return res.status(500).json(result);
   }
   res.json(result);
-}, "adminCloudDeploy");
+}, 'adminCloudDeploy');
 
 export {
   adminDashboard,

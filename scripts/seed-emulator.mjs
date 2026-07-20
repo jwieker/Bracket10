@@ -24,11 +24,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ── Emulator defaults ────────────────────────────────────────────────────────
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8085';
-  console.log(`ℹ FIRESTORE_EMULATOR_HOST not set. Defaulting to: ${process.env.FIRESTORE_EMULATOR_HOST}`);
+  console.log(
+    `ℹ FIRESTORE_EMULATOR_HOST not set. Defaulting to: ${process.env.FIRESTORE_EMULATOR_HOST}`,
+  );
 }
 if (!process.env.GCP_PROJECT_ID) {
   process.env.GCP_PROJECT_ID = 'local-dev';
-  console.log(`ℹ GCP_PROJECT_ID not set. Defaulting to: ${process.env.GCP_PROJECT_ID}`);
+  console.log(
+    `ℹ GCP_PROJECT_ID not set. Defaulting to: ${process.env.GCP_PROJECT_ID}`,
+  );
 }
 
 const db = new Firestore({ projectId: process.env.GCP_PROJECT_ID });
@@ -65,26 +69,38 @@ async function commitBatch(operations, label) {
     await batch.commit();
     totalBatches++;
   }
-  console.log(`  ✅ Loaded ${operations.length} document(s) in ${totalBatches} batch(es) for "${label}"`);
+  console.log(
+    `  ✅ Loaded ${operations.length} document(s) in ${totalBatches} batch(es) for "${label}"`,
+  );
 }
 
 function readNdjson(filePath) {
-  return fs.readFileSync(filePath, 'utf8')
+  return fs
+    .readFileSync(filePath, 'utf8')
     .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
     .map((line, i) => {
       try {
         return JSON.parse(line);
       } catch (err) {
-        throw new Error(`Failed to parse ${path.basename(filePath)} line ${i + 1}: ${err.message}`);
+        throw new Error(
+          `Failed to parse ${path.basename(filePath)} line ${i + 1}: ${err.message}`,
+          { cause: err },
+        );
       }
     });
 }
 
 // ── Top-level (root collection) seed ─────────────────────────────────────────
 
-const ROOT_COLLECTIONS = ['school', 'conferences', 'regionID', 'groups', 'entry'];
+const ROOT_COLLECTIONS = [
+  'school',
+  'conferences',
+  'regionID',
+  'groups',
+  'entry',
+];
 
 async function seedRootCollection(collection) {
   const filePath = path.join(SEED_DIR, `${collection}.json`);
@@ -140,7 +156,11 @@ async function seedYearSuffixedFile({ file, prefix, year }) {
 
   // Ensure the parent tournaments/{year} doc exists so years are queryable.
   ops.push((batch) => {
-    batch.set(db.collection('tournaments').doc(String(year)), { year: Number(year) }, { merge: true });
+    batch.set(
+      db.collection('tournaments').doc(String(year)),
+      { year: Number(year) },
+      { merge: true },
+    );
   });
 
   for (const row of rows) {
@@ -151,7 +171,11 @@ async function seedYearSuffixedFile({ file, prefix, year }) {
     }
     ops.push((batch) => {
       batch.set(
-        db.collection('tournaments').doc(String(year)).collection(collection).doc(String(_id)),
+        db
+          .collection('tournaments')
+          .doc(String(year))
+          .collection(collection)
+          .doc(String(_id)),
         payload,
       );
     });
@@ -174,7 +198,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('❌ Seeding error:', err);
   process.exit(1);
 });

@@ -91,6 +91,19 @@
                 </div>
             </div>
 
+            <!-- Recently Deleted Entries -->
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">Recently Deleted Entries</div>
+                    <div class="card-body d-flex align-items-center">
+                        <input type="hidden" id="deletedEntriesYear" value="<%= year %>">
+                        <button class="btn btn-outline-danger w-100" type="button" id="deletedEntriesBtn">
+                            Show Recently Deleted
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -119,6 +132,22 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body" id="unpaidEntriesModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recently Deleted Entries Modal -->
+    <div class="modal fade" id="deletedEntriesModal" tabindex="-1" aria-labelledby="deletedEntriesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deletedEntriesModalLabel">Recently Deleted Entries</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="deletedEntriesModalBody"></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
@@ -320,6 +349,126 @@
                         console.error('Error fetching unpaid entries:', error);
                         alert('An error occurred while fetching unpaid entries.');
                     }
+                });
+            }
+
+            // ── Recently Deleted Entries ─────────────────────────────────────
+            async function postEntryAction(action, entryId, entryYear) {
+                const response = await fetch(`/${action}Entry`, {
+                    method: 'POST',
+                    headers: {
+                        'x-csrf-token': '<%= csrfToken %>',
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ entryId, year: Number(entryYear) }),
+                });
+                if (!response.ok) throw new Error(`Failed to ${action} entry.`);
+                return response.json();
+            }
+
+            function renderDeletedEntries(entries, year) {
+                const modalBody = document.getElementById('deletedEntriesModalBody');
+                modalBody.replaceChildren();
+
+                if (entries.length === 0) {
+                    const p = document.createElement('p');
+                    p.className = 'mb-0';
+                    p.textContent = 'No recently deleted entries.';
+                    modalBody.appendChild(p);
+                    return;
+                }
+
+                const listGroup = document.createElement('div');
+                listGroup.className = 'list-group';
+                entries.forEach(entry => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'list-group-item py-2';
+
+                    const flexDiv = document.createElement('div');
+                    flexDiv.className = 'd-flex justify-content-between align-items-start flex-wrap gap-2';
+
+                    const infoDiv = document.createElement('div');
+                    const strongPerson = document.createElement('strong');
+                    strongPerson.textContent = entry.person;
+                    const spanTeam = document.createElement('span');
+                    spanTeam.className = 'text-muted ms-2';
+                    spanTeam.textContent = entry.teamName;
+                    infoDiv.appendChild(strongPerson);
+                    infoDiv.appendChild(spanTeam);
+                    infoDiv.appendChild(document.createElement('br'));
+                    const smallMeta = document.createElement('small');
+                    smallMeta.className = 'text-muted';
+                    smallMeta.textContent = `ID: ${entry.id} — Groups: ${(entry.groups || []).join(', ') || '—'} — Deleted: ${new Date(entry.deletedAt).toLocaleString()}`;
+                    infoDiv.appendChild(smallMeta);
+
+                    const btnGroup = document.createElement('div');
+                    btnGroup.className = 'd-flex gap-2';
+
+                    const restoreBtn = document.createElement('button');
+                    restoreBtn.type = 'button';
+                    restoreBtn.className = 'btn btn-sm btn-success';
+                    restoreBtn.textContent = 'Restore';
+                    restoreBtn.addEventListener('click', async () => {
+                        restoreBtn.disabled = true;
+                        try {
+                            await postEntryAction('restore', entry.id, entry.year ?? year);
+                            await loadDeletedEntries();
+                        } catch (err) {
+                            alert('Error restoring entry: ' + err.message);
+                            restoreBtn.disabled = false;
+                        }
+                    });
+
+                    const purgeBtn = document.createElement('button');
+                    purgeBtn.type = 'button';
+                    purgeBtn.className = 'btn btn-sm btn-danger';
+                    purgeBtn.textContent = 'Permanently Delete';
+                    purgeBtn.addEventListener('click', async () => {
+                        if (!window.confirm(`PERMANENTLY delete entry for ${entry.person}? This cannot be undone.`)) return;
+                        purgeBtn.disabled = true;
+                        try {
+                            await postEntryAction('purge', entry.id, entry.year ?? year);
+                            await loadDeletedEntries();
+                        } catch (err) {
+                            alert('Error permanently deleting entry: ' + err.message);
+                            purgeBtn.disabled = false;
+                        }
+                    });
+
+                    btnGroup.appendChild(restoreBtn);
+                    btnGroup.appendChild(purgeBtn);
+                    flexDiv.appendChild(infoDiv);
+                    flexDiv.appendChild(btnGroup);
+                    itemDiv.appendChild(flexDiv);
+                    listGroup.appendChild(itemDiv);
+                });
+                modalBody.appendChild(listGroup);
+            }
+
+            async function loadDeletedEntries() {
+                const year = document.getElementById('deletedEntriesYear').value;
+                const modalBody = document.getElementById('deletedEntriesModalBody');
+                try {
+                    const response = await fetch(`/admin/deleted-entries?year=${year}`, { headers: { 'Accept': 'application/json' } });
+                    if (!response.ok) throw new Error('Failed to fetch deleted entries.');
+                    const entries = await response.json();
+                    renderDeletedEntries(entries, year);
+                } catch (error) {
+                    console.error('Error fetching deleted entries:', error);
+                    modalBody.replaceChildren();
+                    const p = document.createElement('p');
+                    p.className = 'text-danger mb-0';
+                    p.textContent = 'An error occurred while fetching deleted entries.';
+                    modalBody.appendChild(p);
+                }
+            }
+
+            const deletedEntriesBtn = document.getElementById('deletedEntriesBtn');
+            if (deletedEntriesBtn) {
+                deletedEntriesBtn.addEventListener('click', async () => {
+                    new bootstrap.Modal(document.getElementById('deletedEntriesModal')).show();
+                    await loadDeletedEntries();
                 });
             }
 

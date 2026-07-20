@@ -3,20 +3,32 @@ import { FirestoreStore } from '../src/middleware/firestoreSessionStore.js';
 // Builds a fake Firestore dataset whose `.collection(kind).doc(sid)` returns a
 // doc handle with mockable get/set/delete. Returned `inspect` lets each test
 // assert which collection + sid path was used.
-function mockDataset({ docData, docExists = true, getError, setError, deleteError } = {}) {
+function mockDataset({
+  docData,
+  docExists = true,
+  getError,
+  setError,
+  deleteError,
+} = {}) {
   const docFns = {
     get: vi.fn().mockImplementation(() =>
-      getError ? Promise.reject(getError) : Promise.resolve({
-        exists: docExists,
-        data: () => docData,
-      })
+      getError
+        ? Promise.reject(getError)
+        : Promise.resolve({
+            exists: docExists,
+            data: () => docData,
+          }),
     ),
-    set: vi.fn().mockImplementation((payload) =>
-      setError ? Promise.reject(setError) : Promise.resolve(payload)
-    ),
-    delete: vi.fn().mockImplementation(() =>
-      deleteError ? Promise.reject(deleteError) : Promise.resolve()
-    ),
+    set: vi
+      .fn()
+      .mockImplementation((payload) =>
+        setError ? Promise.reject(setError) : Promise.resolve(payload),
+      ),
+    delete: vi
+      .fn()
+      .mockImplementation(() =>
+        deleteError ? Promise.reject(deleteError) : Promise.resolve(),
+      ),
   };
   const doc = vi.fn().mockReturnValue(docFns);
   const collection = vi.fn().mockReturnValue({ doc });
@@ -149,7 +161,9 @@ describe('FirestoreStore.set', () => {
     const store = new FirestoreStore({ dataset });
     const cookieExpires = new Date(Date.now() + 8 * 3600 * 1000);
 
-    const err = await pset(store, 'sid-ttl', { cookie: { expires: cookieExpires } });
+    const err = await pset(store, 'sid-ttl', {
+      cookie: { expires: cookieExpires },
+    });
     expect(err).toBeNull();
     const payload = docFns.set.mock.calls[0][0];
     expect(payload.expireAt).toBeDefined();

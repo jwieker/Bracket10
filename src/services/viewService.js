@@ -3,19 +3,19 @@ import {
   gameRepository as _gameRepository,
   entryRepository as _entryRepository,
   tourneyRepository as _tourneyRepository,
-} from "../repositories/index.js";
+} from '../repositories/index.js';
 
 import {
   calculateEntryPointsAndPaths,
   enrichEntriesWithPotentialRankings,
-} from "./pointsService.js";
+} from './pointsService.js';
 
-import { thisYear, TOURNAMENT_ROUNDS, isRegistrationOpen } from "../config/app.js";
-import { cacheGet, cacheSet } from "../utils/cacheUtils.js";
-import Logger from "../utils/logger.js";
-import { ValidationError } from "../utils/errors.js";
-import { randomInt } from "node:crypto";
-
+import { thisYear, isRegistrationOpen } from '../config/app.js';
+import { getRoundPointsArray } from '../config/const.js';
+import { cacheGet, cacheSet } from '../utils/cacheUtils.js';
+import Logger from '../utils/logger.js';
+import { ValidationError } from '../utils/errors.js';
+import { randomInt } from 'node:crypto';
 
 export {
   getGroupTeamDetails,
@@ -35,6 +35,7 @@ export {
   normalizeFirstFourPicks,
   validateEntryPicks,
   normalizeAndValidateEntryPicks,
+  resolveConfirmedPickNames,
   setRepositories,
   buildFullGridData,
   buildGameViewData,
@@ -45,11 +46,17 @@ let gameRepository = _gameRepository;
 let entryRepository = _entryRepository;
 let tourneyRepository = _tourneyRepository;
 
-async function getGroupTeamDetails(groupName, year = thisYear, prefetchedTeams = null) {
+async function getGroupTeamDetails(
+  groupName,
+  year = thisYear,
+  prefetchedTeams = null,
+) {
   const [groupTeams, resultsSoFar] = await Promise.all([
     viewRepository.getGroupTeams(groupName, year),
     // Skip DB fetch if the caller already has the tournament details
-    prefetchedTeams ? Promise.resolve(prefetchedTeams) : gameRepository.getAllTournamentDetails(year).then(d => d.teams),
+    prefetchedTeams
+      ? Promise.resolve(prefetchedTeams)
+      : gameRepository.getAllTournamentDetails(year).then((d) => d.teams),
   ]);
 
   if (!groupTeams) {
@@ -67,10 +74,11 @@ async function getGroupTeamDetails(groupName, year = thisYear, prefetchedTeams =
 
 //Adds the progress of each team in a Group to the groupTeams array
 //does not take in a year it just needs output of getAllGroupDetails
-async function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
-  const pointsPerRound = Object.entries(TOURNAMENT_ROUNDS)
-    .filter(([round]) => Number(round) > 0)
-    .map(([, r]) => r.roundPoints);
+function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
+  // Per-round win values indexed by round-1 (index 0 = Round 1). Shared with
+  // playgroundService via getRoundPointsArray so the two scoring paths can't
+  // drift apart the way the original playground offset bug (#325) did.
+  const pointsPerRound = getRoundPointsArray();
 
   // Determine the global tournament round state using ALL teams (not just one person's picks).
   // This way, everyone shows as "advanced" until the first game of the next round has started.
@@ -104,7 +112,7 @@ async function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
       }
       let pickPoints = 0;
       for (let t = 0; t < gs.length; t++) {
-        if (gs[t] === "W") {
+        if (gs[t] === 'W') {
           picksProgress[t][0]++;
           pickPoints += pointsPerRound[t];
           picksProgress[t][3] += pointsPerRound[t];
@@ -113,7 +121,7 @@ async function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
           if (t + 1 === gs.length && t !== 5) {
             picksProgress[t + 1][2]++;
           }
-        } else if (gs[t] === "L") {
+        } else if (gs[t] === 'L') {
           picksProgress[t][1]++;
           teamsRemaining--;
         }
@@ -131,7 +139,11 @@ async function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
     if (globalRoundInProgress) {
       for (const pick of pickNames) {
         const gs = pick?.gameStatus;
-        if (gs != null && gs.length === globalMaxActiveLen && gs[gs.length - 1] === 'W') {
+        if (
+          gs != null &&
+          gs.length === globalMaxActiveLen &&
+          gs[gs.length - 1] === 'W'
+        ) {
           teamsAdvanced++;
         }
       }
@@ -150,13 +162,14 @@ async function verifyGroupExists(groupName) {
 
 async function getGroupRegistrationData(groupName, year = thisYear) {
   // Single consolidated fetch — replaces separate getTournamentTeams + getActiveAndFutureGames calls
-  const [{ teams: allTeams, allGames, regions }, groupTeams] = await Promise.all([
-    gameRepository.getAllTournamentDetails(year),
-    viewRepository.getGroupTeams(groupName, year),
-  ]);
+  const [{ teams: allTeams, allGames, regions }, groupTeams] =
+    await Promise.all([
+      gameRepository.getAllTournamentDetails(year),
+      viewRepository.getGroupTeams(groupName, year),
+    ]);
 
   // Build combined FF display: remove individual FF teams, add combined or resolved options
-  const ffGames = allGames.filter(g => g.round === 0);
+  const ffGames = allGames.filter((g) => g.round === 0);
   const ffTeamSIDs = new Set();
   const ffWinnerSIDs = new Set();
   const combinedFFOptions = [];
@@ -179,7 +192,7 @@ async function getGroupRegistrationData(groupName, year = thisYear) {
         combinedFFOptions.push({
           sID: team1.sID,
           nameNick: `${team1.nameNick} / ${team2.nameNick}`,
-          mascot: "First Four",
+          mascot: 'First Four',
           seed: team1.seed,
           regionName: team1.regionName,
           isFirstFour: true,
@@ -208,10 +221,7 @@ async function getGroupRegistrationData(groupName, year = thisYear) {
   }
 
   // Add combined options for unresolved FF games, then re-sort to keep seed order intact.
-  const teamData = [
-    ...seenSIDs.values(),
-    ...combinedFFOptions,
-  ].sort((a, b) => {
+  const teamData = [...seenSIDs.values(), ...combinedFFOptions].sort((a, b) => {
     if (a.seed !== b.seed) return a.seed - b.seed;
     return (a.regionName || '').localeCompare(b.regionName || '');
   });
@@ -266,13 +276,15 @@ async function normalizeFirstFourPicks(picksIds, year = thisYear) {
 async function validateEntryPicks(picksIds, year, groupName) {
   const registrationData = await getGroupRegistrationData(groupName, year);
   if (!registrationData || !registrationData.teamData) {
-    throw new ValidationError("Invalid tournament or group.");
+    throw new ValidationError('Invalid tournament or group.');
   }
-  const validSIDs = new Set(registrationData.teamData.map(t => t.sID));
+  const validSIDs = new Set(registrationData.teamData.map((t) => t.sID));
   for (let i = 0; i < picksIds.length; i++) {
     const pickId = picksIds[i];
     if (!validSIDs.has(pickId)) {
-      throw new ValidationError(`Pick ${i + 1} is not a valid team in this tournament.`);
+      throw new ValidationError(
+        `Pick ${i + 1} is not a valid team in this tournament.`,
+      );
     }
   }
 }
@@ -303,6 +315,49 @@ async function normalizeAndValidateEntryPicks(picksIds, year, groupName) {
   return normalizedPicksIds;
 }
 
+/**
+ * Display names for the confirmation page, corrected for normalization.
+ *
+ * normalizeFirstFourPicks can persist a different sID than the one submitted
+ * (stale form rendered before an FF game resolved, or a pick validated against
+ * the 300s-cached team list). The confirmation page previously echoed the
+ * submitted names verbatim, showing the user a pick that doesn't match what
+ * was saved (#375). For every pick whose ID changed, re-derive the display
+ * name from the group's canonical team list — same
+ * "nameNick mascot (regionName)" shape the form's option values use — so the
+ * page reflects the actually-stored picks.
+ *
+ * When nothing changed (the overwhelmingly common case) the submitted names
+ * are returned as-is with no extra fetch.
+ */
+async function resolveConfirmedPickNames(
+  submittedPicksIds,
+  normalizedPicksIds,
+  submittedPicksNames,
+  year,
+  groupName,
+) {
+  const changed = normalizedPicksIds.some(
+    (id, i) => Number(id) !== Number(submittedPicksIds[i]),
+  );
+  if (!changed) return submittedPicksNames;
+
+  const { teamData } = await getGroupRegistrationData(groupName, year);
+  const teamBySID = new Map((teamData || []).map((t) => [Number(t.sID), t]));
+
+  return normalizedPicksIds.map((id, i) => {
+    if (Number(id) === Number(submittedPicksIds[i]))
+      return submittedPicksNames[i];
+    const team = teamBySID.get(Number(id));
+    // Fall back to the submitted name rather than a blank if the normalized
+    // sID is somehow absent from the team list — a wrong-but-recognizable
+    // name beats an empty confirmation row.
+    return team
+      ? `${team.nameNick} ${team.mascot} (${team.regionName})`
+      : submittedPicksNames[i];
+  });
+}
+
 // Entry IDs gate access to an entry in /my-entry. A timestamp-based id
 // (Date.now() + small random) is guessable: its entropy is only the
 // registration window, so an attacker who knows roughly when someone signed
@@ -322,10 +377,20 @@ async function generateUniqueEntryId(year) {
     const existing = await gameRepository.getEntryById(candidate, year);
     if (!existing) return candidate;
   }
-  throw new Error("Could not generate a unique entry ID after multiple attempts.");
+  throw new Error(
+    'Could not generate a unique entry ID after multiple attempts.',
+  );
 }
 
-async function createNewEntry(email, teamName, personName, groupName, picks, year = thisYear, maxPoints = 0) {
+async function createNewEntry(
+  email,
+  teamName,
+  personName,
+  groupName,
+  picks,
+  year = thisYear,
+  maxPoints = 0,
+) {
   const newId = await generateUniqueEntryId(year);
   const nowEST = new Date().toISOString();
 
@@ -333,7 +398,9 @@ async function createNewEntry(email, teamName, personName, groupName, picks, yea
   // used for "My Brackets" lookups (getEntriesByEmail) and case-insensitive
   // ownership checks. Email addresses are case-insensitive in practice, so this
   // is safe for delivery too.
-  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedEmail = String(email || '')
+    .trim()
+    .toLowerCase();
 
   await entryRepository.createEntry(
     newId,
@@ -344,21 +411,25 @@ async function createNewEntry(email, teamName, personName, groupName, picks, yea
     personName,
     nowEST,
     year,
-    maxPoints
+    maxPoints,
   );
 }
 
-async function addPickCount(allTeams, groupData) {
+function addPickCount(allTeams, groupData) {
   const pickCounts = new Map();
   for (const entry of groupData) {
     for (const sID of entry.picks) {
       pickCounts.set(sID, (pickCounts.get(sID) ?? 0) + 1);
     }
   }
-  for (const team of allTeams) {
-    team.pickCount = pickCounts.get(team.sID) ?? 0;
-  }
-  return allTeams;
+  // `allTeams` comes from the 300s `tournamentDetails_` cache and is shared by
+  // reference across concurrent requests. `pickCount` is group-specific, so
+  // return shallow copies rather than stamping the count onto the shared
+  // objects — otherwise a later reader sees whichever group computed last.
+  return allTeams.map((team) => ({
+    ...team,
+    pickCount: pickCounts.get(team.sID) ?? 0,
+  }));
 }
 
 /**
@@ -367,24 +438,31 @@ async function addPickCount(allTeams, groupData) {
 async function calculateMaxPossiblePoints(teamSIDs, inputYear = thisYear) {
   try {
     // Single consolidated fetch replaces separate getActiveAndFutureGames + getTournamentTeams calls
-    const { allGames, teams: allTeams } = await gameRepository.getAllTournamentDetails(inputYear);
+    const { allGames, teams: allTeams } =
+      await gameRepository.getAllTournamentDetails(inputYear);
 
     const picks = teamSIDs.map((sid) => Number(sid)).filter((id) => !isNaN(id));
 
     if (picks.length !== teamSIDs.length) {
-      Logger.warn("Some invalid SIDs were provided and filtered out.");
+      Logger.warn('Some invalid SIDs were provided and filtered out.');
     }
     if (picks.length === 0) {
-      Logger.warn("No valid SIDs provided.");
+      Logger.warn('No valid SIDs provided.');
       return 0;
     }
 
-    const { maxPoints } = calculateEntryPointsAndPaths(picks, allTeams, allGames);
+    const { maxPoints } = calculateEntryPointsAndPaths(
+      picks,
+      allTeams,
+      allGames,
+    );
 
     return maxPoints;
   } catch (error) {
-    Logger.error("Error in calculateMaxPossiblePoints service:", error);
-    throw new Error("Failed to calculate maximum possible points.");
+    Logger.error('Error in calculateMaxPossiblePoints service:', error);
+    throw new Error('Failed to calculate maximum possible points.', {
+      cause: error,
+    });
   }
 }
 
@@ -405,7 +483,9 @@ async function getEntriesForUser(email) {
   return entries.map((e) => {
     const groups = Array.isArray(e.groups)
       ? e.groups
-      : (e.group ? [e.group] : []);
+      : e.group
+        ? [e.group]
+        : [];
     return {
       id: e.id,
       year: e.year,
@@ -436,7 +516,11 @@ async function getEntryIdsForUserInGroup(email, groupName, year) {
   return entries
     .filter((e) => {
       if (e.year !== yr) return false;
-      const groups = Array.isArray(e.groups) ? e.groups : (e.group ? [e.group] : []);
+      const groups = Array.isArray(e.groups)
+        ? e.groups
+        : e.group
+          ? [e.group]
+          : [];
       return groups.includes(groupName);
     })
     .map((e) => String(e.id));
@@ -472,7 +556,12 @@ async function addNewGroup(groupName) {
   await viewRepository.addGroup(newId, groupName);
 }
 
-function setRepositories(newViewRepository, newGameRepository, newEntryRepository, newTourneyRepository) {
+function setRepositories(
+  newViewRepository,
+  newGameRepository,
+  newEntryRepository,
+  newTourneyRepository,
+) {
   viewRepository = newViewRepository;
   gameRepository = newGameRepository;
   entryRepository = newEntryRepository;
@@ -481,9 +570,28 @@ function setRepositories(newViewRepository, newGameRepository, newEntryRepositor
 
 /**
  * Builds all the necessary data for the full grid view.
+ *
+ * Service-level cache (5-min TTL, mirroring buildGameViewData below): the
+ * O(entries × teams) grid computation is reachable from POST /getFullGrid,
+ * GET /getFullGridCSV, and GET /playground, and rate limiting alone only
+ * bounds request volume — each allowed request still paid the full recompute
+ * (#399). Invalidated by the same repository write paths that bust
+ * gameViewData_ (entry create/update/delete/restore/purge, pick swaps,
+ * points batches, and game-result writes).
  */
-async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) {
-  const [{ allGames: activeGamesForYear, teams: allTeamsRawFull }, groupTeamsRaw] = await Promise.all([
+async function buildFullGridData(
+  groupName,
+  gameYear,
+  prefetchedDetails = null,
+) {
+  const cacheKey = `fullGridData_${gameYear}_${groupName}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const [
+    { allGames: activeGamesForYear, teams: allTeamsRawFull },
+    groupTeamsRaw,
+  ] = await Promise.all([
     prefetchedDetails
       ? Promise.resolve(prefetchedDetails)
       : gameRepository.getAllTournamentDetails(gameYear),
@@ -520,7 +628,7 @@ async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) 
     }
   }
   const allTeamsRaw = [
-    ...allTeamsRawFull.filter(t => !ffLoserSIDs.has(t.sID) && !t.isFFDoc),
+    ...allTeamsRawFull.filter((t) => !ffLoserSIDs.has(t.sID) && !t.isFFDoc),
     ...combinedFFOptions,
   ].sort((a, b) => {
     if (a.seed !== b.seed) return a.seed - b.seed;
@@ -530,9 +638,11 @@ async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) 
   const teamMapFull = new Map(allTeamsRaw.map((t) => [t.sID, t]));
 
   // Map the FF partner sID to the same combined object so picks for either team resolve correctly.
-  combinedFFOptions.forEach(opt => teamMapFull.set(opt.ffPartnerSID, opt));
+  combinedFFOptions.forEach((opt) => teamMapFull.set(opt.ffPartnerSID, opt));
   const allGroupDetails = (groupTeamsRaw || []).map((team) => {
-    const pickNames = team.picks.map((pickId) => teamMapFull.get(pickId)).filter(Boolean);
+    const pickNames = team.picks
+      .map((pickId) => teamMapFull.get(pickId))
+      .filter(Boolean);
     return {
       ...team,
       pickNames,
@@ -544,18 +654,19 @@ async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) 
     };
   });
 
-  let groupData = await addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
-  const allTeamsWithPickCounts = await addPickCount(allTeamsRaw, groupData);
+  let groupData = addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
+  const allTeamsWithPickCounts = addPickCount(allTeamsRaw, groupData);
 
-  groupData = await enrichEntriesWithPotentialRankings(
+  groupData = enrichEntriesWithPotentialRankings(
     groupData,
     allTeamsRaw,
-    activeGamesForYear
+    activeGamesForYear,
   );
 
   groupData.sort((a, b) => {
     if (a.totalPoints !== b.totalPoints) return b.totalPoints - a.totalPoints;
-    if (a.teamsRemaining !== b.teamsRemaining) return b.teamsRemaining - a.teamsRemaining;
+    if (a.teamsRemaining !== b.teamsRemaining)
+      return b.teamsRemaining - a.teamsRemaining;
     return b.possPoints - a.possPoints;
   });
 
@@ -577,7 +688,10 @@ async function buildFullGridData(groupName, gameYear, prefetchedDetails = null) 
     previousTotalPoints = group.totalPoints;
   });
 
-  return { groupData, allTeamsWithPickCounts };
+  const result = { groupData, allTeamsWithPickCounts };
+  // Same TTL as buildGameViewData / tournamentDetails (the shortest-lived input).
+  cacheSet(cacheKey, result, 300);
+  return result;
 }
 
 /**
@@ -596,22 +710,28 @@ async function buildGameViewData(verifiedGroupName, requestedYear) {
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
-  const [{ activeGames: activeGamesForYear, regions, teams: allTeamsRaw }, groupTeamsRaw, allYears] =
-    await Promise.all([
-      gameRepository.getAllTournamentDetails(requestedYear),
-      viewRepository.getGroupTeams(verifiedGroupName, requestedYear),
-      getAllYearsforGroup(verifiedGroupName),
-    ]);
+  const [
+    { activeGames: activeGamesForYear, regions, teams: allTeamsRaw },
+    groupTeamsRaw,
+    allYears,
+  ] = await Promise.all([
+    gameRepository.getAllTournamentDetails(requestedYear),
+    viewRepository.getGroupTeams(verifiedGroupName, requestedYear),
+    getAllYearsforGroup(verifiedGroupName),
+  ]);
 
   const teamMapGame = new Map(allTeamsRaw.map((t) => [t.sID, t]));
   const allGroupDetails = (groupTeamsRaw || []).map((team) => ({
     ...team,
-    pickNames: team.picks.map((pickId) => teamMapGame.get(pickId)).filter(Boolean),
+    pickNames: team.picks
+      .map((pickId) => teamMapGame.get(pickId))
+      .filter(Boolean),
   }));
 
   const enrichedActiveGames = activeGamesForYear.map((game) => {
     if (game.winner) {
-      const winnerName = game.winner === game.team1ID ? game.team1Name : game.team2Name;
+      const winnerName =
+        game.winner === game.team1ID ? game.team1Name : game.team2Name;
       return { ...game, winnerName };
     }
     return game;
@@ -619,14 +739,15 @@ async function buildGameViewData(verifiedGroupName, requestedYear) {
 
   // conferenceName is now on each team directly from schoolRecords
   const conferenceStats = {};
-  allTeamsRaw.forEach(t => {
+  allTeamsRaw.forEach((t) => {
     if (t.conferenceName) {
-      if (!conferenceStats[t.conferenceName]) conferenceStats[t.conferenceName] = 0;
+      if (!conferenceStats[t.conferenceName])
+        conferenceStats[t.conferenceName] = 0;
       conferenceStats[t.conferenceName]++;
     }
   });
 
-  const groupData = await addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
+  const groupData = addTeamProgressforGroup(allGroupDetails, allTeamsRaw);
   const regionNames = regions.map((r) => r.regionName);
 
   const result = {

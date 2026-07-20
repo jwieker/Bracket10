@@ -50,10 +50,41 @@ Otherwise:
 3. Reply directly to the comment thread so the conversation stays in context.
 4. Keep replies concise. Don't restate what the reviewer said — just respond to it.
 
+> **Rule — never push silently:** every push to an open PR MUST be accompanied by a PR
+> comment saying what changed and why. When the push addresses review feedback, that means
+> a reply on each finding's thread (or a single comment mapping every finding to its fix or
+> reasoned decline); for any other push — follow-on work, formatting fixes, scope additions —
+> a short comment summarizing the commits is enough. This applies regardless of how the
+> session was started — a silent push leaves reviewers (human or the pr-debate loop) unable
+> to re-verify without diffing, and the automated loops key off replies to converge. The
+> only exception is the push that opens the PR itself, where the PR body is the comment.
+
 **Never apply a suggestion that**:
+
 - Changes architectural boundaries (routes/controllers/services/repositories)
 - Adds new dependencies or recurring cost
 - Touches security-sensitive code (auth, CSP, rate limiting) without a clear correctness argument
 - Is a style preference with no objective basis
 
 For those, reply with your reasoning instead.
+
+---
+
+## Stay Subscribed Until the PR Settles
+
+A session triggered by a single GitHub event (a webhook or Routine firing) runs once and ends —
+**nothing re-invokes a finished session for a later event on its own.** If your work on a PR
+expects a follow-up (you posted a review awaiting a fix, pushed a fix awaiting re-review, or
+opened a PR awaiting CI), call `subscribe_pr_activity` for that PR before ending your turn so
+the follow-up event wakes this session with its context intact. Where `send_later` is
+available, also arm a ~1-hour self check-in as a backstop — webhooks don't deliver everything
+(CI success and new pushes can be missed) — and re-arm it silently when nothing changed.
+Unsubscribe (and delete the pending check-in) when the PR is merged or closed, or your part in
+it is done. Don't assume another session or a Routine trigger will pick up the follow-up: on
+PR #465 a fix push went unreviewed because the reviewing session had ended unsubscribed.
+
+**Carve-out — hand-offs by design:** don't subscribe when another loop explicitly owns the
+follow-up. `loop-fixer` opens a draft PR and stops there on purpose (`pr-debate` reviews it,
+`pr-responder` implements the feedback) — a fixer session subscribing would receive events
+outside its scope. The rule is: whoever is _expected to act next from this session_ subscribes;
+a session whose job ended at the hand-off does not.

@@ -17,8 +17,10 @@ Cloud Scheduler (every 15 min, tournament windows)
         → espnService.fetchCompletedTournamentGames()  ← ESPN API
         → match ESPN team displayNames → internal sID via espnTeamMap.json
         → call updateTeamRecords() per new winner, then one
-          updatePointsForAffectedEntries(year, affectedSIDs) — targeted recalc,
-          not the full-year updateTotalPointsJustYear() the manual admin path uses
+          updatePointsForAffectedEntries(year, affectedSIDs) — targeted recalc.
+          The manual admin path (/updateWinner, /undoGame) uses the same
+          targeted recalc per game (#369); POST /updateTotalPoints remains the
+          explicit full-year repair action.
 ```
 
 Admin console dry-run (no DB writes):

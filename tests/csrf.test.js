@@ -55,8 +55,8 @@ describe('attachCsrfToken', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  test('never touches non-admin or absent sessions (no session write for anonymous traffic — $0 cost contract)', () => {
-    for (const session of [undefined, {}, { userEmail: 'p@example.com' }]) {
+  test('never touches absent sessions (no session write for anonymous traffic — $0 cost contract)', () => {
+    for (const session of [undefined, {}]) {
       const req = { session };
       const res = makeRes();
       const next = vi.fn();
@@ -109,7 +109,8 @@ describe('verifyCsrf', () => {
 
   test('rejects a wrong token', () => {
     const { req, token } = adminReq();
-    req.headers['x-csrf-token'] = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    req.headers['x-csrf-token'] =
+      token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
     const res = makeRes();
     const next = vi.fn();
     verifyCsrf(req, res, next);
@@ -128,7 +129,11 @@ describe('verifyCsrf', () => {
   });
 
   test('rejects when the session has no token yet (e.g. forged cross-site request before any admin page render)', () => {
-    const req = { session: { siteAdmin: true }, headers: { 'x-csrf-token': 'anything' }, body: {} };
+    const req = {
+      session: { siteAdmin: true },
+      headers: { 'x-csrf-token': 'anything' },
+      body: {},
+    };
     const res = makeRes();
     const next = vi.fn();
     verifyCsrf(req, res, next);
@@ -144,5 +149,61 @@ describe('verifyCsrf', () => {
     verifyCsrf(req, res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
+  });
+});
+describe('attachCsrfToken user sessions', () => {
+  test('exposes res.locals.csrfToken for user sessions', () => {
+    const req = { session: { userEmail: 'p@example.com' } };
+    const res = makeRes();
+    const next = vi.fn();
+    attachCsrfToken(req, res, next);
+    expect(res.locals.csrfToken).toBe(req.session.csrfToken);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('attachCsrfToken verifiedEntries sessions (#301)', () => {
+  test('exposes res.locals.csrfToken once /my-entry/verify has granted access', () => {
+    const req = { session: { verifiedEntries: { 'entry1:2026': true } } };
+    const res = makeRes();
+    const next = vi.fn();
+    attachCsrfToken(req, res, next);
+    expect(res.locals.csrfToken).toBe(req.session.csrfToken);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('/my-entry/update POST without a matching token is rejected (cross-site forgery)', () => {
+    const session = { verifiedEntries: { 'entry1:2026': true } };
+    const mintRes = makeRes();
+    attachCsrfToken({ session }, mintRes, vi.fn());
+
+    const req = {
+      session,
+      headers: {},
+      body: { entryId: 'entry1', year: '2026' },
+    };
+    const res = makeRes();
+    const next = vi.fn();
+    verifyCsrf(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+  });
+
+  test('/my-entry/update POST with the rendered token succeeds', () => {
+    const session = { verifiedEntries: { 'entry1:2026': true } };
+    const mintRes = makeRes();
+    attachCsrfToken({ session }, mintRes, vi.fn());
+    const token = mintRes.locals.csrfToken;
+
+    const req = {
+      session,
+      headers: {},
+      body: { entryId: 'entry1', year: '2026', _csrf: token },
+    };
+    const res = makeRes();
+    const next = vi.fn();
+    verifyCsrf(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBeNull();
   });
 });

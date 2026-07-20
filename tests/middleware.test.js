@@ -1,7 +1,14 @@
-import { requireSiteAdmin, requireUser } from '../src/middleware/adminMiddleware.js';
+import {
+  requireSiteAdmin,
+  requireUser,
+} from '../src/middleware/adminMiddleware.js';
 import { errorMiddleware } from '../src/middleware/errorMiddleware.js';
 import { rateLimit } from '../src/middleware/rateLimit.js';
-import { ValidationError, DatabaseError, ServiceError } from '../src/utils/errors.js';
+import {
+  ValidationError,
+  DatabaseError,
+  ServiceError,
+} from '../src/utils/errors.js';
 
 vi.mock('../src/utils/logger.js', () => ({
   __esModule: true,
@@ -22,8 +29,16 @@ import Logger from '../src/utils/logger.js';
 
 describe('requireSiteAdmin', () => {
   function makeReqRes(sessionOverrides = {}, method = 'GET', accept) {
-    const req = { session: sessionOverrides, method, headers: accept ? { accept } : {} };
-    const res = { redirect: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const req = {
+      session: sessionOverrides,
+      method,
+      headers: accept ? { accept } : {},
+    };
+    const res = {
+      redirect: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
     const next = vi.fn();
     return { req, res, next };
   }
@@ -61,7 +76,9 @@ describe('requireSiteAdmin', () => {
     const { req, res, next } = makeReqRes({}, 'POST');
     requireSiteAdmin(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized. Please log in.' });
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Unauthorized. Please log in.',
+    });
     expect(res.redirect).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
@@ -70,7 +87,9 @@ describe('requireSiteAdmin', () => {
     const { req, res, next } = makeReqRes({}, 'GET', 'application/json');
     requireSiteAdmin(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized. Please log in.' });
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Unauthorized. Please log in.',
+    });
     expect(res.redirect).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
@@ -79,13 +98,19 @@ describe('requireSiteAdmin', () => {
 describe('requireUser', () => {
   function makeReqRes({ session = {}, method = 'GET', accept } = {}) {
     const req = { session, method, headers: accept ? { accept } : {} };
-    const res = { redirect: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const res = {
+      redirect: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
     const next = vi.fn();
     return { req, res, next };
   }
 
   test('calls next() when userEmail is present', () => {
-    const { req, res, next } = makeReqRes({ session: { userEmail: 'u@g.com' } });
+    const { req, res, next } = makeReqRes({
+      session: { userEmail: 'u@g.com' },
+    });
     requireUser(req, res, next);
     expect(next).toHaveBeenCalled();
     expect(res.redirect).not.toHaveBeenCalled();
@@ -99,7 +124,10 @@ describe('requireUser', () => {
   });
 
   test('redirects to / for an unauthenticated HTML form POST (no JSON blob)', () => {
-    const { req, res, next } = makeReqRes({ method: 'POST', accept: 'text/html' });
+    const { req, res, next } = makeReqRes({
+      method: 'POST',
+      accept: 'text/html',
+    });
     requireUser(req, res, next);
     expect(res.redirect).toHaveBeenCalledWith('/');
     expect(res.json).not.toHaveBeenCalled();
@@ -107,7 +135,10 @@ describe('requireUser', () => {
   });
 
   test('returns 401 JSON only for explicit JSON clients', () => {
-    const { req, res, next } = makeReqRes({ method: 'POST', accept: 'application/json' });
+    const { req, res, next } = makeReqRes({
+      method: 'POST',
+      accept: 'application/json',
+    });
     requireUser(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({ error: 'Please sign in.' });
@@ -145,7 +176,11 @@ describe('rateLimit', () => {
   }
 
   test('allows requests under the configured max', () => {
-    const limiter = rateLimit({ windowMs: 1000, max: 2, standardHeaders: true });
+    const limiter = rateLimit({
+      windowMs: 1000,
+      max: 2,
+      standardHeaders: true,
+    });
     const next = vi.fn();
 
     limiter(makeReq(), makeRes(), next);
@@ -176,16 +211,50 @@ describe('rateLimit', () => {
 
     expect(next).toHaveBeenCalledTimes(2);
   });
+
+  test('sweeps expired clients once the map crosses the 1000-key threshold', () => {
+    // The size-triggered sweep only fires when a NEW key is inserted while the
+    // map already holds >= SWEEP_THRESHOLD (1000) entries. Seed 1000 clients in
+    // an already-expired window, then a fresh request must reap them so the map
+    // doesn't grow unbounded under a key-rotating flood.
+    const windowMs = 50;
+    const limiter = rateLimit({ windowMs, max: 1 });
+    const next = vi.fn();
+
+    const start = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(start);
+    for (let i = 0; i < 1000; i++) {
+      limiter(
+        makeReq(`10.0.${Math.floor(i / 256)}.${i % 256}`),
+        makeRes(),
+        next,
+      );
+    }
+
+    // Advance past the window so all 1000 seeded entries are now expired, then
+    // insert one new key — this is the call that triggers the sweep branch.
+    Date.now.mockReturnValue(start + windowMs + 1);
+    const res = makeRes();
+    limiter(makeReq('203.0.113.9'), res, next);
+
+    // The new request is allowed (its own fresh window) and the expired keys
+    // were reaped rather than accumulating.
+    expect(next).toHaveBeenCalledTimes(1001);
+    expect(res.status).not.toHaveBeenCalledWith(429);
+
+    Date.now.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------
 // errorMiddleware
 // ---------------------------------------------------------------------------
 
-function makeMockRes(acceptJson = true) {
+function makeMockRes(_acceptJson = true) {
   const res = {
     status: vi.fn().mockReturnThis(),
     json: vi.fn().mockReturnThis(),
+    type: vi.fn().mockReturnThis(),
     send: vi.fn().mockReturnThis(),
   };
   return res;
@@ -212,11 +281,13 @@ describe('errorMiddleware', () => {
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Validation Error',
-      message: 'bad input',
-      field: 'email',
-    }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Validation Error',
+        message: 'bad input',
+        field: 'email',
+      }),
+    );
   });
 
   test('returns 400 plain text for ValidationError (HTML client)', () => {
@@ -225,7 +296,20 @@ describe('errorMiddleware', () => {
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.type).toHaveBeenCalledWith('text/plain');
     expect(res.send).toHaveBeenCalledWith('bad input');
+  });
+
+  test('reflects raw ValidationError input as text/plain, not text/html (HTML client)', () => {
+    const err = new ValidationError(
+      'Invalid year: <script>alert(1)</script>. Must be between 1980 and 2027.',
+      'year',
+    );
+    const req = mockReq(false);
+    const res = makeMockRes();
+    errorMiddleware(err, req, res, vi.fn());
+    expect(res.type).toHaveBeenCalledWith('text/plain');
+    expect(res.send).toHaveBeenCalledWith(err.message);
   });
 
   test('returns 500 JSON for DatabaseError with verbose fields when DEBUG_ERRORS is set', () => {
@@ -236,11 +320,13 @@ describe('errorMiddleware', () => {
       const res = makeMockRes();
       errorMiddleware(err, req, res, vi.fn());
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        error: 'Database Error',
-        message: 'db fail',
-        operation: 'read',
-      }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Database Error',
+          message: 'db fail',
+          operation: 'read',
+        }),
+      );
     } finally {
       delete process.env.DEBUG_ERRORS;
     }
@@ -263,7 +349,10 @@ describe('errorMiddleware', () => {
       message: 'A database error occurred.',
     });
     expect(res.json.mock.calls[0][0]).not.toHaveProperty('operation');
-    expect(Logger.error).toHaveBeenCalledWith(expect.stringContaining('Database error'), err);
+    expect(Logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Database error'),
+      err,
+    );
   });
 
   test('returns 500 plain text for DatabaseError (HTML client)', () => {
@@ -272,6 +361,7 @@ describe('errorMiddleware', () => {
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.type).toHaveBeenCalledWith('text/plain');
     expect(res.send).toHaveBeenCalledWith('A database error occurred.');
   });
 
@@ -283,11 +373,13 @@ describe('errorMiddleware', () => {
       const res = makeMockRes();
       errorMiddleware(err, req, res, vi.fn());
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        error: 'Service Error',
-        message: 'svc fail',
-        service: 'myService',
-      }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Service Error',
+          message: 'svc fail',
+          service: 'myService',
+        }),
+      );
     } finally {
       delete process.env.DEBUG_ERRORS;
     }
@@ -306,7 +398,10 @@ describe('errorMiddleware', () => {
       message: 'A service error occurred.',
     });
     expect(res.json.mock.calls[0][0]).not.toHaveProperty('service');
-    expect(Logger.error).toHaveBeenCalledWith(expect.stringContaining('Service error'), err);
+    expect(Logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Service error'),
+      err,
+    );
   });
 
   test('returns 500 JSON for unknown error', () => {
@@ -315,9 +410,11 @@ describe('errorMiddleware', () => {
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Internal Server Error',
-    }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Internal Server Error',
+      }),
+    );
   });
 
   test('returns 500 plain text for unknown error (HTML client)', () => {
@@ -326,6 +423,7 @@ describe('errorMiddleware', () => {
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.type).toHaveBeenCalledWith('text/plain');
     expect(res.send).toHaveBeenCalledWith('An unexpected error occurred');
   });
 
@@ -335,6 +433,7 @@ describe('errorMiddleware', () => {
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.type).toHaveBeenCalledWith('text/plain');
     expect(res.send).toHaveBeenCalledWith('A service error occurred.');
   });
 
@@ -343,7 +442,9 @@ describe('errorMiddleware', () => {
     // Cause json to throw on first call (simulating a broken response pipeline)
     const res = {
       status: vi.fn().mockReturnThis(),
-      json: vi.fn().mockImplementationOnce(() => { throw new Error('json crash'); }),
+      json: vi.fn().mockImplementationOnce(() => {
+        throw new Error('json crash');
+      }),
       send: vi.fn(),
     };
     const req = mockReq(true);
@@ -357,8 +458,26 @@ describe('errorMiddleware', () => {
     const req = { method: 'POST', originalUrl: '/test' };
     const res = makeMockRes();
     errorMiddleware(err, req, res, vi.fn());
-    expect(Logger.error).toHaveBeenCalledWith('Error in errorMiddleware:', expect.any(TypeError));
+    expect(Logger.error).toHaveBeenCalledWith(
+      'Error in errorMiddleware:',
+      expect.any(TypeError),
+    );
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Internal Server Error');
+  });
+
+  test('delegates to next(err) without touching the response when headers are already sent', () => {
+    const err = new Error('mid-stream failure');
+    const req = mockReq(true);
+    const res = makeMockRes();
+    res.headersSent = true;
+    const next = vi.fn();
+
+    errorMiddleware(err, req, res, next);
+
+    expect(next).toHaveBeenCalledWith(err);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
+    expect(res.send).not.toHaveBeenCalled();
   });
 });

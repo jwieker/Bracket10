@@ -1,21 +1,23 @@
-import { getUnsentEmailEntries, markEmailsSent } from '../src/services/emailService.js';
+import {
+  getUnsentEmailEntries,
+  markEmailsSent,
+} from '../src/services/emailService.js';
 
 // `vi.hoisted` lets us share mock state with the hoisted `vi.mock` factory
 // without tripping the "cannot access before initialization" TDZ error.
-const { entryRepoMock, collectionMock } = vi.hoisted(() => ({
+const { entryRepoMock, gameRepoMock } = vi.hoisted(() => ({
   entryRepoMock: {
     getUnsentEmailEntries: vi.fn(),
     markEmailsSent: vi.fn(),
   },
-  collectionMock: vi.fn(),
+  gameRepoMock: {
+    getTournamentTeams: vi.fn(),
+  },
 }));
 
 vi.mock('../src/repositories/index.js', () => ({
   entryRepository: entryRepoMock,
-}));
-
-vi.mock('../src/config/firestore.js', () => ({
-  db: { collection: (...args) => collectionMock(...args) },
+  gameRepository: gameRepoMock,
 }));
 
 vi.mock('../src/config/app.js', () => ({
@@ -25,31 +27,20 @@ vi.mock('../src/config/app.js', () => ({
   },
 }));
 
-// Builds a chainable mock that lets us assert path navigation and inject docs.
-function mockSchoolRecordsSnap(docs) {
-  const snap = { docs: docs.map((d) => ({ data: () => d })) };
-  const getFn = vi.fn().mockResolvedValue(snap);
-  const subCol = { get: getFn };
-  const yearDoc = { collection: vi.fn().mockReturnValue(subCol) };
-  const tournDoc = vi.fn().mockReturnValue(yearDoc);
-  const tournCol = { doc: tournDoc };
-  collectionMock.mockReturnValue(tournCol);
-  return { tournDoc, yearDoc, getFn };
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
+  gameRepoMock.getTournamentTeams.mockResolvedValue([]);
 });
 
 describe('getUnsentEmailEntries', () => {
-  test('joins entries with team names from schoolRecords using nameNick by preference', async () => {
+  test('joins entries with team names from the tournament teams using nameNick by preference', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([
       { id: 1, picks: [101, 202] },
       { id: 2, picks: [101] },
     ]);
-    mockSchoolRecordsSnap([
-      { sID: 101, nameNick: 'Devils', schoolName: 'Duke' },
-      { sID: 202, schoolName: 'Kansas' }, // no nameNick → fall through to schoolName
+    gameRepoMock.getTournamentTeams.mockResolvedValue([
+      { sID: 101, nameNick: 'Devils', name: 'Duke' },
+      { sID: 202, name: 'Kansas' }, // no nameNick → fall through to name
     ]);
 
     const result = await getUnsentEmailEntries(2024);
@@ -62,50 +53,51 @@ describe('getUnsentEmailEntries', () => {
 
   test('queries the configured EMAIL_GROUP from the entry repository', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([]);
-    mockSchoolRecordsSnap([]);
 
     await getUnsentEmailEntries(2024);
 
-    expect(entryRepoMock.getUnsentEmailEntries).toHaveBeenCalledWith('EmailList', 2024);
+    expect(entryRepoMock.getUnsentEmailEntries).toHaveBeenCalledWith(
+      'EmailList',
+      2024,
+    );
   });
 
-  test('navigates the tournaments/{year}/schoolRecords path correctly', async () => {
+  test('fetches tournament teams via the repository layer for the given year', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([]);
-    const { tournDoc, yearDoc } = mockSchoolRecordsSnap([]);
 
     await getUnsentEmailEntries(2024);
 
-    expect(collectionMock).toHaveBeenCalledWith('tournaments');
-    expect(tournDoc).toHaveBeenCalledWith('2024');
-    expect(yearDoc.collection).toHaveBeenCalledWith('schoolRecords');
+    expect(gameRepoMock.getTournamentTeams).toHaveBeenCalledWith(2024);
   });
 
   test('defaults year to thisYear (2024) when omitted', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([]);
-    const { tournDoc } = mockSchoolRecordsSnap([]);
 
     await getUnsentEmailEntries();
 
-    expect(entryRepoMock.getUnsentEmailEntries).toHaveBeenCalledWith('EmailList', 2024);
-    expect(tournDoc).toHaveBeenCalledWith('2024');
+    expect(entryRepoMock.getUnsentEmailEntries).toHaveBeenCalledWith(
+      'EmailList',
+      2024,
+    );
+    expect(gameRepoMock.getTournamentTeams).toHaveBeenCalledWith(2024);
   });
 
-  test('falls back to "Team {sID}" when a pick has no matching schoolRecord at all', async () => {
+  test('falls back to "Team {sID}" when a pick has no matching team at all', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([
       { id: 1, picks: [999] },
     ]);
-    mockSchoolRecordsSnap([]); // no school records loaded
+    // no tournament teams loaded (default empty mock from beforeEach)
 
     const result = await getUnsentEmailEntries(2024);
 
     expect(result[0].pickNames).toEqual(['Team 999']);
   });
 
-  test('falls back to "Team {sID}" when the schoolRecord has neither nameNick nor schoolName', async () => {
+  test('falls back to "Team {sID}" when the team has neither nameNick nor name', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([
       { id: 1, picks: [101] },
     ]);
-    mockSchoolRecordsSnap([{ sID: 101 }]);
+    gameRepoMock.getTournamentTeams.mockResolvedValue([{ sID: 101 }]);
 
     const result = await getUnsentEmailEntries(2024);
 
@@ -114,7 +106,6 @@ describe('getUnsentEmailEntries', () => {
 
   test('handles an entry with no picks field by treating it as empty array', async () => {
     entryRepoMock.getUnsentEmailEntries.mockResolvedValue([{ id: 1 }]);
-    mockSchoolRecordsSnap([]);
 
     const result = await getUnsentEmailEntries(2024);
 

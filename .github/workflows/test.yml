@@ -10,9 +10,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           # Pinned to match Dockerfile (FROM node:24.16.0-alpine).
           node-version: '24.16.0'
@@ -21,5 +21,14 @@ jobs:
       # `npm ci` runs with --ignore-scripts implicitly by repo policy
       # (see docs/development/npm-updates.md). Keep it explicit here too.
       - run: npm ci --ignore-scripts
+
+      # Lint first (fail fast): ~10–20s, catches typo'd refs / unused vars / bad
+      # imports before the slower test job runs. Blocks on errors; no-console
+      # warnings do not fail the build.
+      - run: npm run lint
+
+      # Formatting is enforced by Prettier (.prettierrc.json). `format:check`
+      # fails if any file differs from `npm run format` output.
+      - run: npm run format:check
 
       - run: npm test

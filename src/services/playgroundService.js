@@ -1,8 +1,6 @@
-import {
-  gameRepository as _gameRepository,
-} from '../repositories/index.js';
+import { gameRepository as _gameRepository } from '../repositories/index.js';
 import { buildFullGridData } from './viewService.js';
-import { TOURNAMENT_ROUNDS } from '../config/const.js';
+import { TOURNAMENT_ROUNDS, getRoundPointsArray } from '../config/const.js';
 
 let gameRepository = _gameRepository;
 
@@ -33,14 +31,14 @@ export async function buildPlaygroundData(groupName, year) {
 
   // sID → team lookup for enriching pending games with names/seeds (exclude ff_ docs)
   const teamMap = new Map(
-    teams.filter(t => !t.isFFDoc).map(t => [t.sID, t])
+    teams.filter((t) => !t.isFFDoc).map((t) => [t.sID, t]),
   );
 
   // Pending games: both teams set, no winner, round > 0 (exclude FF play-in games)
   const pendingGames = allGames
-    .filter(g => g.round > 0 && g.team1ID && g.team2ID && !g.winner)
+    .filter((g) => g.round > 0 && g.team1ID && g.team2ID && !g.winner)
     .sort((a, b) => a.round - b.round || a.gameID - b.gameID)
-    .map(g => {
+    .map((g) => {
       const t1 = teamMap.get(g.team1ID) || {};
       const t2 = teamMap.get(g.team2ID) || {};
       return {
@@ -59,18 +57,20 @@ export async function buildPlaygroundData(groupName, year) {
     });
 
   // All games for client-side bracket simulation — exclude FF play-in games (round 0)
-  const allGamesForClient = allGames.filter(g => g.round > 0).map(g => ({
-    gameID: g.gameID,
-    round: g.round,
-    nextGameID: g.nextGameID || null,
-    nextGameSpot: g.nextGameSpot || null,
-    team1ID: g.team1ID || null,
-    team2ID: g.team2ID || null,
-    winner: g.winner || null,
-  }));
+  const allGamesForClient = allGames
+    .filter((g) => g.round > 0)
+    .map((g) => ({
+      gameID: g.gameID,
+      round: g.round,
+      nextGameID: g.nextGameID || null,
+      nextGameSpot: g.nextGameSpot || null,
+      team1ID: g.team1ID || null,
+      team2ID: g.team2ID || null,
+      winner: g.winner || null,
+    }));
 
-  // Parallel arrays indexed by round-1 (roundPoints[0] = Round 1 points, etc.)
-  const roundPoints = Object.values(TOURNAMENT_ROUNDS).map(r => r.roundPoints);
+  // Indexed by round-1 (roundPoints[0] = Round 1 points, etc.)
+  const roundPoints = getRoundPointsArray();
   // roundNames for display in the round filter tabs
   const roundNames = Object.entries(TOURNAMENT_ROUNDS).map(([round, r]) => ({
     round: Number(round),
@@ -78,7 +78,7 @@ export async function buildPlaygroundData(groupName, year) {
   }));
 
   // Slim entries for client-side use — only the fields needed for simulation + display
-  const entries = groupData.map(e => ({
+  const entries = groupData.map((e) => ({
     id: e.id,
     person: e.person,
     teamName: e.teamName,
@@ -89,13 +89,15 @@ export async function buildPlaygroundData(groupName, year) {
   }));
 
   // School records for client-side simulation — exclude FF losers and ff_ docs
-  const schoolRecords = teams.filter(t => !ffLoserSIDs.has(t.sID) && !t.isFFDoc).map(t => ({
-    sID: t.sID,
-    nameNick: t.nameNick,
-    name: t.name,
-    seed: t.seed,
-    gameStatus: t.gameStatus ? [...t.gameStatus] : [],
-  }));
+  const schoolRecords = teams
+    .filter((t) => !ffLoserSIDs.has(t.sID) && !t.isFFDoc)
+    .map((t) => ({
+      sID: t.sID,
+      nameNick: t.nameNick,
+      name: t.name,
+      seed: t.seed,
+      gameStatus: t.gameStatus ? [...t.gameStatus] : [],
+    }));
 
   return {
     entries,

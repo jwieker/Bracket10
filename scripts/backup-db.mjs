@@ -15,47 +15,49 @@ const datePrefix = `${month}${now.getDate()}-${now.getFullYear()}`;
 mkdirSync(OUTPUT_DIR, { recursive: true });
 
 function writeCollection(name, docs) {
-    const filePath = join(OUTPUT_DIR, `${datePrefix}_${name}.json`);
-    const lines = docs.map(d => JSON.stringify(d)).join('\n');
-    writeFileSync(filePath, lines + '\n');
-    console.log(`  ✅ ${name}: ${docs.length} docs → ${datePrefix}_${name}.json`);
+  const filePath = join(OUTPUT_DIR, `${datePrefix}_${name}.json`);
+  const lines = docs.map((d) => JSON.stringify(d)).join('\n');
+  writeFileSync(filePath, lines + '\n');
+  console.log(`  ✅ ${name}: ${docs.length} docs → ${datePrefix}_${name}.json`);
 }
 
 async function backupCollection(collectionPath, outputName) {
-    const snap = await db.collection(collectionPath).get();
-    const docs = snap.docs.map(d => {
-        const data = { _id: d.id, ...d.data() };
-        if ('email' in data) data.email = '';
-        return data;
-    });
-    writeCollection(outputName, docs);
-    return docs.length;
+  const snap = await db.collection(collectionPath).get();
+  const docs = snap.docs.map((d) => {
+    const data = { _id: d.id, ...d.data() };
+    if ('email' in data) data.email = '';
+    return data;
+  });
+  writeCollection(outputName, docs);
+  return docs.length;
 }
 
 async function main() {
-    console.log(`\nBacking up Firestore to databasebackup/ with prefix: ${datePrefix}\n`);
+  console.log(
+    `\nBacking up Firestore to databasebackup/ with prefix: ${datePrefix}\n`,
+  );
 
-    // ── Root collections ──────────────────────────────────────────────────────
-    console.log('Root collections:');
-    await backupCollection('school', 'school');
-    await backupCollection('conferences', 'conferences');
-    await backupCollection('groups', 'groups');
-    await backupCollection('regionID', 'regionID');
+  // ── Root collections ──────────────────────────────────────────────────────
+  console.log('Root collections:');
+  await backupCollection('school', 'school');
+  await backupCollection('conferences', 'conferences');
+  await backupCollection('groups', 'groups');
+  await backupCollection('regionID', 'regionID');
 
-    // ── Hierarchical tournament subcollections ────────────────────────────────
-    const yearsSnap = await db.collection('tournaments').get();
-    const years = yearsSnap.docs.map(d => d.id).sort();
-    console.log(`\nTournament years found: ${years.join(', ')}`);
+  // ── Hierarchical tournament subcollections ────────────────────────────────
+  const yearsSnap = await db.collection('tournaments').get();
+  const years = yearsSnap.docs.map((d) => d.id).sort();
+  console.log(`\nTournament years found: ${years.join(', ')}`);
 
-    for (const year of years) {
-        console.log(`\n  [${year}]`);
-        const subcollections = ['regions', 'games', 'schoolRecords', 'entries'];
-        for (const sub of subcollections) {
-            await backupCollection(`tournaments/${year}/${sub}`, `${year}_${sub}`);
-        }
+  for (const year of years) {
+    console.log(`\n  [${year}]`);
+    const subcollections = ['regions', 'games', 'schoolRecords', 'entries'];
+    for (const sub of subcollections) {
+      await backupCollection(`tournaments/${year}/${sub}`, `${year}_${sub}`);
     }
+  }
 
-    console.log('\nBackup complete.\n');
+  console.log('\nBackup complete.\n');
 }
 
 main().catch(console.error);

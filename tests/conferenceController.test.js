@@ -6,7 +6,6 @@ import {
   addConference,
 } from '../src/controllers/conferenceController.js';
 
-
 vi.mock('../src/repositories/index.js', () => ({
   conferenceRepository: {
     getAllConferences: vi.fn(),
@@ -29,7 +28,13 @@ function mockRes() {
 }
 
 function mockReq(overrides = {}) {
-  return { body: {}, query: {}, method: 'GET', url: '/conferences', ...overrides };
+  return {
+    body: {},
+    query: {},
+    method: 'GET',
+    url: '/conferences',
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -43,7 +48,9 @@ describe('listConferences', () => {
 
     const res = mockRes();
     await listConferences(mockReq(), res);
-    expect(res.render).toHaveBeenCalledWith('manageConferences', { conferences });
+    expect(res.render).toHaveBeenCalledWith('manageConferences', {
+      conferences,
+    });
   });
 });
 
@@ -66,7 +73,10 @@ describe('viewConference', () => {
     conferenceRepository.getConferenceBySlug.mockResolvedValue(conf);
     const res = mockRes();
     await viewConference(mockReq({ query: { slug: 'acc' } }), res);
-    expect(res.render).toHaveBeenCalledWith('editConference', { conference: conf, isNew: false });
+    expect(res.render).toHaveBeenCalledWith('editConference', {
+      conference: conf,
+      isNew: false,
+    });
   });
 });
 
@@ -86,7 +96,10 @@ describe('updateConference', () => {
   test('redirects to viewConference on success', async () => {
     conferenceRepository.updateConference.mockResolvedValue();
     const res = mockRes();
-    await updateConference(mockReq({ body: { slug: 'acc', name: 'ACC' } }), res);
+    await updateConference(
+      mockReq({ body: { slug: 'acc', name: 'ACC' } }),
+      res,
+    );
     expect(res.redirect).toHaveBeenCalledWith('/viewConference?slug=acc');
   });
 });
@@ -95,7 +108,10 @@ describe('addConferencePage', () => {
   test('renders editConference with blank form', async () => {
     const res = mockRes();
     await addConferencePage(mockReq(), res);
-    expect(res.render).toHaveBeenCalledWith('editConference', expect.objectContaining({ isNew: true }));
+    expect(res.render).toHaveBeenCalledWith(
+      'editConference',
+      expect.objectContaining({ isNew: true }),
+    );
   });
 });
 
@@ -113,7 +129,10 @@ describe('addConference', () => {
   });
 
   test('returns 409 when slug already exists', async () => {
-    conferenceRepository.getConferenceBySlug.mockResolvedValue({ slug: 'acc', name: 'ACC' });
+    conferenceRepository.getConferenceBySlug.mockResolvedValue({
+      slug: 'acc',
+      name: 'ACC',
+    });
     const res = mockRes();
     await addConference(mockReq({ body: { slug: 'acc', name: 'ACC' } }), res);
     expect(res.status).toHaveBeenCalledWith(409);

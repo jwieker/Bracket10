@@ -80,17 +80,17 @@ registered document was deleted and verified gone.
 
 ### Data created (and removed)
 
-| Location | What is written | Cleaned up |
-|---|---|---|
-| `tournaments/9999` (root doc) | year marker | ✅ registry delete + verify |
-| `tournaments/9999/games` | 63 bracket games + 1 FF game | ✅ registry delete + verify |
-| `tournaments/9999/schoolRecords` | 64 + 2 FF school records | ✅ registry delete + verify |
-| `tournaments/9999/regions` | 6 region docs | ✅ registry delete + verify |
-| `tournaments/9999/entries` | 4 entries (Alpha, Beta, Weak, FF) | ✅ in-test deletes + registry |
-| `tournaments/9988`, `tournaments/9989` | FilterOr fixtures (1 entry each) | ✅ targeted deletes |
-| `conferences/e2e-v4-test-conf` | CRUD fixture | ✅ registry delete + verify |
-| `school/999995` | CRUD fixture | ✅ registry delete + verify |
-| `groups/E2E-V4-CRUD-Group` | CRUD fixture | ✅ registry delete + verify |
+| Location                               | What is written                   | Cleaned up                    |
+| -------------------------------------- | --------------------------------- | ----------------------------- |
+| `tournaments/9999` (root doc)          | year marker                       | ✅ registry delete + verify   |
+| `tournaments/9999/games`               | 63 bracket games + 1 FF game      | ✅ registry delete + verify   |
+| `tournaments/9999/schoolRecords`       | 64 + 2 FF school records          | ✅ registry delete + verify   |
+| `tournaments/9999/regions`             | 6 region docs                     | ✅ registry delete + verify   |
+| `tournaments/9999/entries`             | 4 entries (Alpha, Beta, Weak, FF) | ✅ in-test deletes + registry |
+| `tournaments/9988`, `tournaments/9989` | FilterOr fixtures (1 entry each)  | ✅ targeted deletes           |
+| `conferences/e2e-v4-test-conf`         | CRUD fixture                      | ✅ registry delete + verify   |
+| `school/999995`                        | CRUD fixture                      | ✅ registry delete + verify   |
+| `groups/E2E-V4-CRUD-Group`             | CRUD fixture                      | ✅ registry delete + verify   |
 
 ### Troubleshooting
 

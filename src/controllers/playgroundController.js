@@ -1,5 +1,8 @@
 import { buildPlaygroundData } from '../services/playgroundService.js';
-import { controllerWrapper, parseYearOrDefault } from '../utils/controllerUtils.js';
+import {
+  controllerWrapper,
+  parseYearOrDefault,
+} from '../utils/controllerUtils.js';
 import { ValidationError } from '../utils/errors.js';
 import { thisYear } from '../config/app.js';
 

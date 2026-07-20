@@ -2,7 +2,7 @@
 export const retryOperation = async (
   operation,
   maxRetries = 5,
-  delayMs = 1000
+  delayMs = 1000,
 ) => {
   let currentDelay = delayMs;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {

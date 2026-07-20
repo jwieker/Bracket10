@@ -36,7 +36,7 @@ vitest.config.js
 .vscode/
 
 # AI assistant config and rules (local only)
-claude.md
+CLAUDE.md
 jules.md
 fixpolling.md
 ESPN-POLLING-SETUP.md

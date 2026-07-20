@@ -23,7 +23,12 @@
 
     function midpoint(el) {
       var r = el.getBoundingClientRect();
-      return { x: r.left - wRect.left, y: r.top + r.height / 2 - wRect.top, w: r.width, h: r.height };
+      return {
+        x: r.left - wRect.left,
+        y: r.top + r.height / 2 - wRect.top,
+        w: r.width,
+        h: r.height,
+      };
     }
 
     function addCurve(fromEl, toEl, fromEdge, toEdge) {
@@ -38,7 +43,25 @@
       var cx = (x1 + x2) / 2;
 
       var path = document.createElementNS(NS, 'path');
-      path.setAttribute('d', 'M' + x1 + ',' + y1 + ' C' + cx + ',' + y1 + ' ' + cx + ',' + y2 + ' ' + x2 + ',' + y2);
+      path.setAttribute(
+        'd',
+        'M' +
+          x1 +
+          ',' +
+          y1 +
+          ' C' +
+          cx +
+          ',' +
+          y1 +
+          ' ' +
+          cx +
+          ',' +
+          y2 +
+          ' ' +
+          x2 +
+          ',' +
+          y2,
+      );
       svg.appendChild(path);
     }
 
@@ -50,9 +73,9 @@
       var half = wrapper.querySelector('.' + side);
       if (!half) return;
 
-      var isLeft  = side === 'left-half';
+      var isLeft = side === 'left-half';
       var outEdge = isLeft ? 'right' : 'left';
-      var inEdge  = isLeft ? 'left'  : 'right';
+      var inEdge = isLeft ? 'left' : 'right';
 
       var r1m = matchups(half.querySelector('.round.r1')); // 16
       var r2m = matchups(half.querySelector('.round.r2')); //  8
@@ -61,13 +84,13 @@
 
       // R1 (pairs of 2) → R2
       for (var i = 0; i < 8; i++) {
-        addCurve(r1m[i * 2],     r2m[i], outEdge, inEdge);
+        addCurve(r1m[i * 2], r2m[i], outEdge, inEdge);
         addCurve(r1m[i * 2 + 1], r2m[i], outEdge, inEdge);
       }
 
       // R2 (pairs of 2) → R3
       for (var j = 0; j < 4; j++) {
-        addCurve(r2m[j * 2],     r3m[j], outEdge, inEdge);
+        addCurve(r2m[j * 2], r3m[j], outEdge, inEdge);
         addCurve(r2m[j * 2 + 1], r3m[j], outEdge, inEdge);
       }
 
@@ -80,13 +103,17 @@
   }
 
   function redrawAll() {
-    document.querySelectorAll('.bracket-wrapper').forEach(function (w) { drawConnectors(w); });
+    document.querySelectorAll('.bracket-wrapper').forEach(function (w) {
+      drawConnectors(w);
+    });
   }
 
   function init() {
     document.querySelectorAll('.bracket-wrapper').forEach(function (wrapper) {
       drawConnectors(wrapper);
-      var ro = new ResizeObserver(function () { drawConnectors(wrapper); });
+      var ro = new ResizeObserver(function () {
+        drawConnectors(wrapper);
+      });
       ro.observe(wrapper);
     });
 
@@ -96,7 +123,9 @@
     document.addEventListener('shown.bs.modal', function (e) {
       setTimeout(function () {
         var wrappers = e.target.querySelectorAll('.bracket-wrapper');
-        wrappers.forEach(function (w) { drawConnectors(w); });
+        wrappers.forEach(function (w) {
+          drawConnectors(w);
+        });
       }, 0);
     });
 
@@ -114,4 +143,4 @@
   } else {
     init();
   }
-}());
+})();

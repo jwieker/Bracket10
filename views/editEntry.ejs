@@ -35,9 +35,7 @@
 
 
 <body>
-    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
-        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
-        crossorigin="anonymous"></script>
+    <!-- Popper.js is included in Bootstrap bundle, no need to load separately -->
     <div class="container-lg pt-3" id="regcont">
         <div class="row" id="row1">
             <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
@@ -49,6 +47,13 @@
                 <div class="alert alert-info py-2 mb-3 text-center">
                     Editing your <strong><%= year %></strong> entry
                 </div>
+                <% if (entryData.deletedAt) { %>
+                <div class="alert alert-warning py-2 mb-3 text-center">
+                    This entry was soft-deleted on <%= new Date(entryData.deletedAt).toLocaleString() %>.
+                    It's hidden from rankings, pick counts, and group views. Restore it to bring it back,
+                    or permanently delete it below.
+                </div>
+                <% } %>
                 <form action="/entryUpdate" method="post">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <div class="container pb-3">
@@ -163,14 +168,31 @@
                                     </div>
                 </form>
                 <% if (entryData && entryData.id) { %>
-                    <form action="/deleteEntry" method="post" style="display:inline;"
-                        data-confirm="PERMANENTLY delete entry for <%= entryData.person %>? This cannot be undone.">
-                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                        <input type="hidden" name="entryId" value="<%= entryData.id %>">
-                        <input type="hidden" name="year" value="<%= year %>">
-                        <button type="submit" class="btn btn-danger ms-2">Delete Entry</button>
-                    </form>
-                    <% } %>
+                <% if (entryData.deletedAt) { %>
+                <form action="/restoreEntry" method="post" style="display:inline;"
+                    data-confirm="Restore entry for <%= entryData.person %>?">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="entryId" value="<%= entryData.id %>">
+                    <input type="hidden" name="year" value="<%= year %>">
+                    <button type="submit" class="btn btn-success ms-2">Restore Entry</button>
+                </form>
+                <form action="/purgeEntry" method="post" style="display:inline;"
+                    data-confirm="PERMANENTLY delete entry for <%= entryData.person %>? This cannot be undone.">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="entryId" value="<%= entryData.id %>">
+                    <input type="hidden" name="year" value="<%= year %>">
+                    <button type="submit" class="btn btn-danger ms-2">Permanently Delete</button>
+                </form>
+                <% } else { %>
+                <form action="/deleteEntry" method="post" style="display:inline;"
+                    data-confirm="Delete entry for <%= entryData.person %>? It can be restored later from Recently Deleted.">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="entryId" value="<%= entryData.id %>">
+                    <input type="hidden" name="year" value="<%= year %>">
+                    <button type="submit" class="btn btn-danger ms-2">Delete Entry</button>
+                </form>
+                <% } %>
+                <% } %>
                         <!-- Bracket Visualization Area -->
                         <h4 class=" text-center pb-1">
                             Your Picks Max Possible Points: <span id="maxPoints">--</span>
@@ -193,10 +215,10 @@
 
 
 
-    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="entryPicksFromServerJson"><%- JSON.stringify(entryData.picks || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- safeJson(gameData || {}) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- safeJson(regions || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="entryPicksFromServerJson"><%- safeJson(entryData.picks || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- safeJson(teamData || []) %></script>
     <script nonce="<%= cspNonce %>">
         const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
         const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);

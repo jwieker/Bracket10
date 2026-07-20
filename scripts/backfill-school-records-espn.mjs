@@ -51,22 +51,24 @@ async function main() {
   ]);
 
   const schoolsMap = new Map();
-  schoolsSnap.docs.forEach(doc => {
+  schoolsSnap.docs.forEach((doc) => {
     const d = doc.data();
     schoolsMap.set(String(d.sid), d);
   });
 
   const confNameMap = new Map();
-  conferencesSnap.docs.forEach(doc => {
+  conferencesSnap.docs.forEach((doc) => {
     const d = doc.data();
     confNameMap.set(doc.id, d.shortName || d.name || null);
   });
 
-  console.log(`  ${schoolsMap.size} schools, ${confNameMap.size} conferences loaded.\n`);
+  console.log(
+    `  ${schoolsMap.size} schools, ${confNameMap.size} conferences loaded.\n`,
+  );
 
   // 2. Enumerate all tournament years
   const tournamentsSnap = await db.collection('tournaments').get();
-  const years = tournamentsSnap.docs.map(d => d.id).sort();
+  const years = tournamentsSnap.docs.map((d) => d.id).sort();
   console.log(`Tournament years found: ${years.join(', ')}\n`);
 
   let totalUpdated = 0;
@@ -76,8 +78,10 @@ async function main() {
   for (const year of years) {
     console.log(`── Year ${year} ──`);
     const recordsSnap = await db
-      .collection('tournaments').doc(year)
-      .collection('schoolRecords').get();
+      .collection('tournaments')
+      .doc(year)
+      .collection('schoolRecords')
+      .get();
 
     if (recordsSnap.empty) {
       console.log('  No schoolRecords — skipping.\n');
@@ -90,21 +94,23 @@ async function main() {
       const d = doc.data();
       const school = schoolsMap.get(String(d.sID));
       if (!school) {
-        console.log(`  WARN: no school found for sID=${d.sID} (doc ${doc.id}) — skipping`);
+        console.log(
+          `  WARN: no school found for sID=${d.sID} (doc ${doc.id}) — skipping`,
+        );
         totalSkipped++;
         continue;
       }
 
       const espn = school.espn || {};
-      const newEspnID       = espn.espnID       ?? null;
-      const newLogoUrl      = espn.logoURL       ?? null; // ESPN stores as logoURL
-      const newPrimaryColor = espn.primaryColor  ?? null;
-      const newConfName     = confNameMap.get(school.confID) ?? null;
+      const newEspnID = espn.espnID ?? null;
+      const newLogoUrl = espn.logoURL ?? null; // ESPN stores as logoURL
+      const newPrimaryColor = espn.primaryColor ?? null;
+      const newConfName = confNameMap.get(school.confID) ?? null;
 
       // Check if any field needs updating
       const alreadyCurrent =
-        d.espnID       === newEspnID &&
-        d.logoUrl      === newLogoUrl &&
+        d.espnID === newEspnID &&
+        d.logoUrl === newLogoUrl &&
         d.primaryColor === newPrimaryColor &&
         d.conferenceName === newConfName;
 
@@ -118,9 +124,9 @@ async function main() {
       toUpdate.push({
         ref: doc.ref,
         fields: {
-          espnID:         newEspnID,
-          logoUrl:        newLogoUrl,
-          primaryColor:   newPrimaryColor,
+          espnID: newEspnID,
+          logoUrl: newLogoUrl,
+          primaryColor: newPrimaryColor,
           conferenceName: newConfName,
         },
         docId: doc.id,
@@ -129,7 +135,9 @@ async function main() {
       });
     }
 
-    console.log(`  ${recordsSnap.size} records: ${toUpdate.length} need update, ${recordsSnap.size - toUpdate.length} already current.`);
+    console.log(
+      `  ${recordsSnap.size} records: ${toUpdate.length} need update, ${recordsSnap.size - toUpdate.length} already current.`,
+    );
 
     if (toUpdate.length === 0) {
       console.log();
@@ -138,8 +146,12 @@ async function main() {
 
     if (isDryRun) {
       toUpdate.forEach(({ docId, sID, schoolName, fields }) => {
-        console.log(`  [DRY RUN] Would update ${docId} (sID=${sID}, ${schoolName})`);
-        console.log(`    espnID=${fields.espnID}, logoUrl=${fields.logoUrl}, primaryColor=${fields.primaryColor}, conferenceName=${fields.conferenceName}`);
+        console.log(
+          `  [DRY RUN] Would update ${docId} (sID=${sID}, ${schoolName})`,
+        );
+        console.log(
+          `    espnID=${fields.espnID}, logoUrl=${fields.logoUrl}, primaryColor=${fields.primaryColor}, conferenceName=${fields.conferenceName}`,
+        );
       });
     } else {
       // Write in batches
@@ -148,7 +160,9 @@ async function main() {
         const batch = db.batch();
         chunk.forEach(({ ref, fields }) => batch.update(ref, fields));
         await batch.commit();
-        console.log(`  Written batch ${Math.floor(i / BATCH_SIZE) + 1} (${chunk.length} docs)`);
+        console.log(
+          `  Written batch ${Math.floor(i / BATCH_SIZE) + 1} (${chunk.length} docs)`,
+        );
       }
     }
 
@@ -161,7 +175,9 @@ async function main() {
   console.log(`  Records already current:   ${totalSkipped}`);
   console.log(`  Records with no ESPN data: ${totalMissingEspn}`);
   if (totalMissingEspn > 0) {
-    console.log('  NOTE: Run scripts/enrichEspnData.js to populate ESPN data for those schools,');
+    console.log(
+      '  NOTE: Run scripts/enrichEspnData.js to populate ESPN data for those schools,',
+    );
     console.log('        then re-run this script.');
   }
   if (isDryRun && totalUpdated > 0) {
@@ -169,7 +185,7 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });

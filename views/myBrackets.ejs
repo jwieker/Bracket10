@@ -16,6 +16,7 @@
                         <div class="text-muted">Signed in as <%= userEmail %></div>
                     </div>
                     <form action="/user/logout" method="post" class="mb-0">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                         <button type="submit" class="btn btn-outline-secondary btn-sm">Sign out</button>
                     </form>
                 </div>
@@ -52,7 +53,7 @@
                                             <div class="text-muted small"><%= entry.person %></div>
                                             <div class="mt-1">
                                                 <% (entry.groups || []).forEach((g) => { %>
-                                                    <% if (editWindowOpen) { %>
+                                                    <% if (entry.editable) { %>
                                                         <span class="badge bg-secondary me-1"><%= g %></span>
                                                     <% } else { %>
                                                         <form action="/gameView" method="post" class="d-inline">

@@ -33,8 +33,8 @@ const ESPN_TEAMS_URL =
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
 
-const isDryRun   = process.argv.includes('--dry-run');
-const useBackup  = process.argv.includes('--use-backup');
+const isDryRun = process.argv.includes('--dry-run');
+const useBackup = process.argv.includes('--use-backup');
 
 // ── Fetch all D-I teams from ESPN ─────────────────────────────────────────────
 
@@ -60,19 +60,24 @@ async function fetchSchools() {
   if (useBackup) {
     // Find the most recent school backup file
     const backupDir = path.join(__dirname, '../databasebackup');
-    const backupFile = fs.readdirSync(backupDir)
-      .filter(f => f.endsWith('_school.json'))
+    const backupFile = fs
+      .readdirSync(backupDir)
+      .filter((f) => f.endsWith('_school.json'))
       .sort()
       .at(-1);
-    if (!backupFile) throw new Error('No school backup file found in databasebackup/');
+    if (!backupFile)
+      throw new Error('No school backup file found in databasebackup/');
     console.log(`Loading schools from backup: ${backupFile}`);
-    const schools = fs.readFileSync(path.join(backupDir, backupFile), 'utf8')
-      .trim().split('\n').map(line => {
+    const schools = fs
+      .readFileSync(path.join(backupDir, backupFile), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => {
         const d = JSON.parse(line);
         return {
-          sID:      d.sid,
+          sID: d.sid,
           nameNick: (d.nameNick ?? '').toLowerCase().trim(),
-          mascot:   (d.mascot   ?? '').toLowerCase().trim(),
+          mascot: (d.mascot ?? '').toLowerCase().trim(),
         };
       });
     console.log(`  Loaded ${schools.length} schools.\n`);
@@ -83,12 +88,12 @@ async function fetchSchools() {
   const { db } = await import('../src/config/firestore.js');
   console.log('Loading school collection from Firestore...');
   const snap = await db.collection('school').get();
-  const schools = snap.docs.map(doc => {
+  const schools = snap.docs.map((doc) => {
     const d = doc.data();
     return {
-      sID:      d.sid,
+      sID: d.sid,
       nameNick: (d.nameNick ?? '').toLowerCase().trim(),
-      mascot:   (d.mascot   ?? '').toLowerCase().trim(),
+      mascot: (d.mascot ?? '').toLowerCase().trim(),
     };
   });
   console.log(`  Loaded ${schools.length} schools.\n`);
@@ -104,7 +109,7 @@ async function fetchSchools() {
 function tryMatch(espnDisplayName, schools) {
   const lower = espnDisplayName.toLowerCase().trim();
   const match = schools.find(
-    s => s.nameNick && s.mascot && lower === `${s.nameNick} ${s.mascot}`
+    (s) => s.nameNick && s.mascot && lower === `${s.nameNick} ${s.mascot}`,
   );
   return match?.sID ?? null;
 }
@@ -118,7 +123,9 @@ async function main() {
   let existing = {};
   if (fs.existsSync(MAP_PATH)) {
     existing = JSON.parse(fs.readFileSync(MAP_PATH, 'utf8'));
-    console.log(`Loaded existing espnTeamMap.json: ${Object.keys(existing).length} entries.\n`);
+    console.log(
+      `Loaded existing espnTeamMap.json: ${Object.keys(existing).length} entries.\n`,
+    );
   }
 
   // Fetch ESPN teams and DB schools in parallel
@@ -128,12 +135,14 @@ async function main() {
   ]);
 
   // Only process teams not already in the map
-  const newTeams = espnTeams.filter(name => !(name in existing));
+  const newTeams = espnTeams.filter((name) => !(name in existing));
   console.log(`New ESPN teams not in existing map: ${newTeams.length}`);
-  console.log(`(${espnTeams.length - newTeams.length} already present — skipping)\n`);
+  console.log(
+    `(${espnTeams.length - newTeams.length} already present — skipping)\n`,
+  );
 
   // Match
-  const matched   = {};
+  const matched = {};
   const unmatched = [];
 
   for (const name of newTeams) {
@@ -148,11 +157,17 @@ async function main() {
   }
 
   // Summary
-  console.log('\n── Results ───────────────────────────────────────────────────');
-  console.log(`  Already in map (skipped): ${espnTeams.length - newTeams.length}`);
+  console.log(
+    '\n── Results ───────────────────────────────────────────────────',
+  );
+  console.log(
+    `  Already in map (skipped): ${espnTeams.length - newTeams.length}`,
+  );
   console.log(`  New matched:              ${Object.keys(matched).length}`);
   console.log(`  New unmatched (null):     ${unmatched.length}`);
-  console.log(`  Match rate on new teams:  ${Math.round(Object.keys(matched).length / newTeams.length * 100)}%`);
+  console.log(
+    `  Match rate on new teams:  ${Math.round((Object.keys(matched).length / newTeams.length) * 100)}%`,
+  );
 
   if (isDryRun) {
     console.log('\n[DRY RUN] No changes written.');
@@ -172,13 +187,13 @@ async function main() {
 
   if (unmatched.length > 0) {
     console.log(`\nUnmatched teams (fill these in manually if needed):`);
-    unmatched.forEach(n => console.log(`  "${n}"`));
+    unmatched.forEach((n) => console.log(`  "${n}"`));
   }
 
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });

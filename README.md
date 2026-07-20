@@ -13,6 +13,8 @@ A self-hostable web app for running a march basketball bracket pool with your fr
 
 ## Getting Started
 
+New here? Read **[How it works](docs/how-it-works.html)** for a tour of what the app does before you set it up.
+
 Two paths:
 
 - **🚀 [Quick local boot](#path-1--quick-local-boot)** — running on your laptop in ~10 minutes. No GCP account needed; uses the free Firestore emulator. Good for kicking the tires or contributing a PR.
@@ -293,10 +295,10 @@ Runtime dependencies are intentionally kept small and boring:
 
 Recent cleanup removed two app-level dependencies:
 
-| Removed dependency   | Replacement                                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `node-cache`         | Local TTL `Map` cache in [src/utils/cacheUtils.js](./src/utils/cacheUtils.js)            |
-| `express-rate-limit` | Local middleware in [src/middleware/rateLimit.js](./src/middleware/rateLimit.js)         |
+| Removed dependency   | Replacement                                                                      |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `node-cache`         | Local TTL `Map` cache in [src/utils/cacheUtils.js](./src/utils/cacheUtils.js)    |
+| `express-rate-limit` | Local middleware in [src/middleware/rateLimit.js](./src/middleware/rateLimit.js) |
 
 Measured production install impact:
 

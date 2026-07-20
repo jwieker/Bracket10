@@ -5,25 +5,33 @@ import {
   updateBracket,
   updateEntrywithNewSchools,
   deleteTournament,
-} from "../services/index.js";
-import { fetchScheduledTournamentGames, loadTeamMap } from "../services/espnService.js";
-import { gameRepository } from "../repositories/index.js";
-import { controllerWrapper, parseYear, parsePositiveInt } from "../utils/controllerUtils.js";
+} from '../services/index.js';
+import {
+  fetchScheduledTournamentGames,
+  loadTeamMap,
+} from '../services/espnService.js';
+import { gameRepository } from '../repositories/index.js';
+import {
+  controllerWrapper,
+  parseYear,
+  parsePositiveInt,
+} from '../utils/controllerUtils.js';
+import { ValidationError } from '../utils/errors.js';
 
 const regionVerify = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
   const regions = [0, 1, 2, 3].map((i) => Number(req.body[`region${i}`]));
   const data = await prepareRegionVerifyData(regions, year);
-  res.render("newTourneyGames", { year, ...data });
-}, "regionVerify");
+  res.render('newTourneyGames', { year, ...data });
+}, 'regionVerify');
 
 const gamesVerify = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
   const regionData = String(req.body.region).split(',').map(Number);
   const gamesData = req.body.games;
   await createNewBracket(gamesData, year, regionData);
-  res.status(200).json({ message: "New Bracket Created Successfully" });
-}, "gamesVerify");
+  res.status(200).json({ message: 'New Bracket Created Successfully' });
+}, 'gamesVerify');
 
 const viewTournament = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
@@ -33,33 +41,54 @@ const viewTournament = controllerWrapper(async (req, res) => {
   const regionIDs = regionObjects.map((r) => r.regionID);
 
   const data = await prepareRegionVerifyData(regionIDs, year);
-  res.render("editTourneyGames", {
+  res.render('editTourneyGames', {
     year,
     ...data,
     existingGames,
   });
-}, "viewTournament");
+}, 'viewTournament');
 
 const tournamentUpdate = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
-  const regionData = [0, 1, 2, 3].map((i) => Number(req.body[`region${i}`]));
+  // The edit flow's form (editTourneyGames.ejs) posts a single comma-joined
+  // "region" field — the same shape the create flow's second step
+  // (gamesVerify) parses — not the region0..region3 fields that only the
+  // create flow's first step (regionVerify) reads from its own form. The
+  // edit view's list also carries the Final Four/Championship pseudo-regions
+  // (5, 6), which updateBracket must not receive — it expects only the 4
+  // bracket quadrants and appends 5/6 itself.
+  const regionData = String(req.body.region)
+    .split(',')
+    .map(Number)
+    .filter((id) => id >= 1 && id <= 4);
+  // A partial or duplicated quadrant list would let updateBracket write an
+  // incomplete bracket while still returning 200 — the same silent-corruption
+  // class as the region0..region3 bug this guard accompanies.
+  if (regionData.length !== 4 || new Set(regionData).size !== 4) {
+    throw new ValidationError(
+      `tournamentUpdate expected exactly 4 distinct bracket-quadrant regionIDs, got [${regionData}] from region="${req.body.region}"`,
+      'region',
+    );
+  }
   const gamesData = req.body.games;
   const schoolChanges = await updateBracket(gamesData, year, regionData);
   await updateEntrywithNewSchools(schoolChanges, year);
-  res.status(200).json({ message: "Tournament updated successfully" });
-}, "tournamentUpdate");
+  res.status(200).json({ message: 'Tournament updated successfully' });
+}, 'tournamentUpdate');
 
 const deleteTournamentHandler = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
   await deleteTournament(year);
-  res.status(200).json({ message: `Tournament for ${year} deleted successfully` });
-}, "deleteTournament");
+  res
+    .status(200)
+    .json({ message: `Tournament for ${year} deleted successfully` });
+}, 'deleteTournament');
 
 const setupNewTourney = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
   const data = await prepareNewTournamentData();
-  res.render("newTourneyComplete", { year, ...data });
-}, "setupNewTourney");
+  res.render('newTourneyComplete', { year, ...data });
+}, 'setupNewTourney');
 
 const createTournament = controllerWrapper(async (req, res) => {
   const year = parseYear(req.body.year);
@@ -69,7 +98,11 @@ const createTournament = controllerWrapper(async (req, res) => {
   const includeFirstFour = req.body.includeFirstFour === true;
   let firstFourData = null;
   if (includeFirstFour) {
-    const ffCount = parsePositiveInt(req.body.firstFourCount, 'firstFourCount', { defaultValue: 4, max: 8 });
+    const ffCount = parsePositiveInt(
+      req.body.firstFourCount,
+      'firstFourCount',
+      { defaultValue: 4, max: 8 },
+    );
     firstFourData = [];
     for (let i = 0; i < ffCount; i++) {
       firstFourData.push({
@@ -83,8 +116,8 @@ const createTournament = controllerWrapper(async (req, res) => {
   }
 
   await createNewBracket(gamesData, year, regions, firstFourData);
-  res.status(200).json({ message: "Tournament created successfully" });
-}, "createTournament");
+  res.status(200).json({ message: 'Tournament created successfully' });
+}, 'createTournament');
 
 const pollEspnScheduled = controllerWrapper(async (req, res) => {
   const { date1, date2 } = req.body;
@@ -96,7 +129,7 @@ const pollEspnScheduled = controllerWrapper(async (req, res) => {
   ]);
 
   const allGames = Array.from(
-    new Map([...games1, ...games2].map((g) => [g.espnEventId, g])).values()
+    new Map([...games1, ...games2].map((g) => [g.espnEventId, g])).values(),
   );
 
   const resolved = allGames.map((g) => ({
@@ -106,7 +139,7 @@ const pollEspnScheduled = controllerWrapper(async (req, res) => {
   }));
 
   res.json({ games: resolved });
-}, "pollEspnScheduled");
+}, 'pollEspnScheduled');
 
 export {
   regionVerify,

@@ -164,7 +164,6 @@
   </template>
 
   <!-- Embedded data for client-side simulation -->
-  <% const safeJson=obj=> JSON.stringify(obj).replace(/</g, '\\u003c' ); %>
     <script nonce="<%= cspNonce %>">
       const PLAYGROUND_DATA = {
         entries:       <%- safeJson(entries) %>,

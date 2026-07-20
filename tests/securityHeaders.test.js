@@ -1,4 +1,7 @@
-import { securityHeaders, logCspReport } from '../src/middleware/securityHeaders.js';
+import {
+  securityHeaders,
+  logCspReport,
+} from '../src/middleware/securityHeaders.js';
 
 // Captures setHeader calls into a plain object so tests can assert on the
 // composed CSP / Referrer-Policy / HSTS values instead of mocking next().
@@ -42,7 +45,7 @@ describe('securityHeaders middleware', () => {
     expect(headers).toHaveProperty('X-Frame-Options', 'DENY');
     expect(headers).toHaveProperty(
       'Strict-Transport-Security',
-      'max-age=31536000; includeSubDomains'
+      'max-age=31536000; includeSubDomains',
     );
   });
 
@@ -51,6 +54,18 @@ describe('securityHeaders middleware', () => {
       const { headers } = runMiddleware();
       const csp = parseCSP(headers['Content-Security-Policy']);
       expect(csp['default-src']).toEqual(["'self'"]);
+    });
+
+    test("base-uri is locked to 'self' (blocks a <base> tag rewriting root-relative resource loads, #427)", () => {
+      const { headers } = runMiddleware();
+      const csp = parseCSP(headers['Content-Security-Policy']);
+      expect(csp['base-uri']).toEqual(["'self'"]);
+    });
+
+    test("report-only base-uri is also locked to 'self'", () => {
+      const { headers } = runMiddleware();
+      const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
+      expect(ro['base-uri']).toEqual(["'self'"]);
     });
 
     test("frame-src and object-src are locked to 'none' to block embedding/plugins", () => {
@@ -66,7 +81,11 @@ describe('securityHeaders middleware', () => {
       expect(csp['form-action']).toContain("'self'");
       expect(csp['form-action']).toContain('https://accounts.google.com');
       // No wildcard / data / blob allowed in form-action — those would weaken CSRF protection
-      expect(csp['form-action'].some((v) => v === '*' || v === 'data:' || v === 'blob:')).toBe(false);
+      expect(
+        csp['form-action'].some(
+          (v) => v === '*' || v === 'data:' || v === 'blob:',
+        ),
+      ).toBe(false);
     });
 
     test('script-src is nonce-based with strict-dynamic, no wildcard/http:/data:', () => {
@@ -80,10 +99,14 @@ describe('securityHeaders middleware', () => {
       // fallback for browsers that ignore 'strict-dynamic').
       expect(csp['script-src']).toContain('https:');
       // Regression guard: no wildcard, no http: schemes, no data: URLs
-      expect(csp['script-src'].some((v) => v === '*' || v === 'http:' || v === 'data:')).toBe(false);
+      expect(
+        csp['script-src'].some(
+          (v) => v === '*' || v === 'http:' || v === 'data:',
+        ),
+      ).toBe(false);
     });
 
-    test("img-src allows data: URIs and https sources (covers icons, OG images, analytics pixels)", () => {
+    test('img-src allows data: URIs and https sources (covers icons, OG images, analytics pixels)', () => {
       const { headers } = runMiddleware();
       const csp = parseCSP(headers['Content-Security-Policy']);
       expect(csp['img-src']).toContain("'self'");
@@ -125,7 +148,7 @@ describe('securityHeaders middleware', () => {
       expect(csp['script-src']).not.toContain("'unsafe-inline'");
     });
 
-    test("script-src-attr is dropped entirely (inline on*= handlers migrated — #165)", () => {
+    test('script-src-attr is dropped entirely (inline on*= handlers migrated — #165)', () => {
       const { headers } = runMiddleware();
       const csp = parseCSP(headers['Content-Security-Policy']);
       expect(csp).not.toHaveProperty('script-src-attr');
@@ -154,9 +177,11 @@ describe('securityHeaders middleware', () => {
       });
       const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
       expect(headers['Reporting-Endpoints']).toContain(
-        'https://bracket10.example/csp-report'
+        'https://bracket10.example/csp-report',
       );
-      expect(ro['report-uri']).toContain('https://bracket10.example/csp-report');
+      expect(ro['report-uri']).toContain(
+        'https://bracket10.example/csp-report',
+      );
     });
 
     test("logCspReport strips newlines so log lines can't be forged (CWE-117, audit finding 3)", () => {
@@ -164,7 +189,9 @@ describe('securityHeaders middleware', () => {
       const orig = console.warn;
       console.warn = (s) => lines.push(s);
       try {
-        logCspReport({ 'csp-report': { 'blocked-uri': 'a\n[csp-report] FORGED' } });
+        logCspReport({
+          'csp-report': { 'blocked-uri': 'a\n[csp-report] FORGED' },
+        });
       } finally {
         console.warn = orig;
       }
@@ -200,7 +227,11 @@ describe('securityHeaders middleware', () => {
       const orig = console.warn;
       console.warn = (s) => lines.push(s);
       try {
-        logCspReport(Array.from({ length: 50 }, (_, i) => ({ body: { blockedURL: `u${i}` } })));
+        logCspReport(
+          Array.from({ length: 50 }, (_, i) => ({
+            body: { blockedURL: `u${i}` },
+          })),
+        );
       } finally {
         console.warn = orig;
       }
@@ -212,7 +243,9 @@ describe('securityHeaders middleware', () => {
       process.env.CSP_REPORT_ONLY = 'off';
       try {
         const { headers } = runMiddleware();
-        expect(headers).not.toHaveProperty('Content-Security-Policy-Report-Only');
+        expect(headers).not.toHaveProperty(
+          'Content-Security-Policy-Report-Only',
+        );
         // The enforcing policy must still be present regardless of the switch.
         expect(headers).toHaveProperty('Content-Security-Policy');
       } finally {

@@ -30,17 +30,49 @@ cd jobs && npm outdated     # in jobs/
 For every package about to change, confirm the target version is **at least 72 hours old** and was published by an expected account:
 
 ```bash
-npm view <pkg>@<version> time.modified _npmUser
+npm view <pkg> time --json | grep '"<version>"'   # per-version publish date
+curl -s https://registry.npmjs.org/<pkg> | jq '.versions["<version>"]._npmUser'
 ```
+
+Two traps to avoid here: `time.modified` is the packument-level last-modified date (the newest release of _any_ version), so it reports the wrong age for anything but the latest version — always read the per-version `time` map. And `npm view`'s `_npmUser` output is unreliable on npm 11, which collapses it to a `"name <email>"` string and silently drops the `trustedPublisher` / `approver` metadata that distinguishes a legitimate OIDC trusted-publishing release (how prettier publishes, for example) from an unknown publisher — read `_npmUser` from the raw packument instead, as above.
 
 If a target version is fresher than 72h, wait. Compromised releases are usually yanked within a day or two; the cooldown is the cheapest defense against installing one. If the publisher is not the expected maintainer / org, stop and investigate.
 
-### 3. Run the update
+This check also runs automatically in CI: `.github/workflows/dependency-publisher-check.yml` diffs `package-lock.json` (root and `jobs/`) on every PR against `main` and runs `scripts/check-dependency-publishers.mjs`, which fails the check if any changed package — including transitive ones dependabot's grouping doesn't surface individually — is younger than 72h or was published by an identity absent from the package's registered maintainer list. Treat a red check the same as a manual cooldown failure: wait it out or investigate, don't override it. It's a backstop, not a replacement for `dependabot.yml`'s own `cooldown` setting or for reading a change before merging it.
+
+**Run the same check locally before pushing**, rather than waiting on a CI round-trip. It reads
+lockfile contents via `git show <ref>:<path>`, so it needs both refs to already be commits —
+commit the lockfile change first (you can amend/reword after), then diff against the branch's
+fork point:
 
 ```bash
-npm update                  # root
-cd jobs && npm update       # jobs/
+git add package-lock.json jobs/package-lock.json
+git commit -m "chore(deps): ..."
+BASE_SHA=$(git merge-base main HEAD) HEAD_SHA=HEAD node scripts/check-dependency-publishers.mjs
 ```
+
+If anything fails, do not commit that lockfile as-is. Either drop back to a narrower scoped
+update (step 3) that excludes the flagged package, or investigate and wait out the cooldown.
+A failure here after a blanket `npm update` is the signal to redo the update scoped to only
+the packages you actually meant to touch.
+
+### 3. Run the update
+
+**Prefer a scoped update over a blanket one.** `npm update` with no arguments walks the
+*entire* dependency tree, not just the packages `npm outdated` listed — it will happily bump
+dozens of transitive packages (babel, bundler internals, native binaries, etc.) that never
+appeared in step 1's output and were never individually cooldown/publisher-checked. That is
+what makes the CI check in step 2 necessary in the first place, and a large blanket diff makes
+its output hard to triage. Scope the update to the packages you actually intend to change:
+
+```bash
+npm update <pkg1> <pkg2> ...          # root — only the packages from `npm outdated`
+cd jobs && npm update <pkg1> <pkg2> ... # jobs/
+```
+
+A scoped update still pulls in that package's own transitive deps (e.g. `@typescript-eslint/*`
+internals), which is expected — the point is to avoid touching unrelated subtrees like a
+bundler or CSS-processing chain that happen to share the top-level `node_modules`.
 
 Install scripts are skipped because of `.npmrc`. This is intentional and safe — see the next step for packages that legitimately need their scripts.
 
