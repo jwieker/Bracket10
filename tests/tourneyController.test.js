@@ -34,7 +34,10 @@ import {
   deleteTournament,
 } from '../src/services/index.js';
 import { gameRepository } from '../src/repositories/index.js';
-import { fetchScheduledTournamentGames, loadTeamMap } from '../src/services/espnService.js';
+import {
+  fetchScheduledTournamentGames,
+  loadTeamMap,
+} from '../src/services/espnService.js';
 
 function mockRes() {
   return {
@@ -53,13 +56,23 @@ describe('regionVerify', () => {
   test('parses four region numbers and calls prepareRegionVerifyData', async () => {
     prepareRegionVerifyData.mockResolvedValue({ teams: [], games: [] });
     const req = {
-      body: { region0: '1', region1: '2', region2: '3', region3: '4', year: '2024' },
-      method: 'POST', url: '/regionVerify',
+      body: {
+        region0: '1',
+        region1: '2',
+        region2: '3',
+        region3: '4',
+        year: '2024',
+      },
+      method: 'POST',
+      url: '/regionVerify',
     };
     const res = mockRes();
     await regionVerify(req, res);
     expect(prepareRegionVerifyData).toHaveBeenCalledWith([1, 2, 3, 4], 2024);
-    expect(res.render).toHaveBeenCalledWith('newTourneyGames', expect.objectContaining({ year: 2024 }));
+    expect(res.render).toHaveBeenCalledWith(
+      'newTourneyGames',
+      expect.objectContaining({ year: 2024 }),
+    );
   });
 });
 
@@ -68,13 +81,20 @@ describe('gamesVerify', () => {
     createNewBracket.mockResolvedValue();
     const req = {
       body: { year: '2024', region: '1,2,3,4', games: [{ id: 1 }] },
-      method: 'POST', url: '/gamesVerify',
+      method: 'POST',
+      url: '/gamesVerify',
     };
     const res = mockRes();
     await gamesVerify(req, res);
-    expect(createNewBracket).toHaveBeenCalledWith([{ id: 1 }], 2024, [1, 2, 3, 4]);
+    expect(createNewBracket).toHaveBeenCalledWith(
+      [{ id: 1 }],
+      2024,
+      [1, 2, 3, 4],
+    );
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ message: 'New Bracket Created Successfully' });
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'New Bracket Created Successfully',
+    });
   });
 });
 
@@ -86,44 +106,108 @@ describe('viewTournament', () => {
     });
     prepareRegionVerifyData.mockResolvedValue({ teams: [] });
 
-    const req = { body: { year: '2024' }, method: 'POST', url: '/viewTournament' };
+    const req = {
+      body: { year: '2024' },
+      method: 'POST',
+      url: '/viewTournament',
+    };
     const res = mockRes();
     await viewTournament(req, res);
 
     expect(gameRepository.getAllTournamentDetails).toHaveBeenCalledWith(2024);
     expect(prepareRegionVerifyData).toHaveBeenCalledWith([1, 2], 2024);
-    expect(res.render).toHaveBeenCalledWith('editTourneyGames', expect.objectContaining({
-      year: 2024,
-      existingGames: [{ gameID: 1 }],
-    }));
+    expect(res.render).toHaveBeenCalledWith(
+      'editTourneyGames',
+      expect.objectContaining({
+        year: 2024,
+        existingGames: [{ gameID: 1 }],
+      }),
+    );
   });
 });
 
 describe('tournamentUpdate', () => {
+  // Body shape must match what editTourneyGames.ejs actually posts: a single
+  // comma-joined "region" hidden field, NOT region0..region3 (issue #371).
   test('calls updateBracket and updateEntrywithNewSchools, returns 200', async () => {
     updateBracket.mockResolvedValue({ old: 1, new: 2 });
     updateEntrywithNewSchools.mockResolvedValue();
     const req = {
-      body: { year: '2024', region0: '1', region1: '2', region2: '3', region3: '4', games: [] },
-      method: 'POST', url: '/tournamentUpdate',
+      body: { year: '2024', region: '1,2,3,4', games: [] },
+      method: 'POST',
+      url: '/tournamentUpdate',
     };
     const res = mockRes();
     await tournamentUpdate(req, res);
     expect(updateBracket).toHaveBeenCalledWith([], 2024, [1, 2, 3, 4]);
-    expect(updateEntrywithNewSchools).toHaveBeenCalledWith({ old: 1, new: 2 }, 2024);
+    expect(updateEntrywithNewSchools).toHaveBeenCalledWith(
+      { old: 1, new: 2 },
+      2024,
+    );
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test('never passes NaN regionIDs to updateBracket from the real form field shape', async () => {
+    updateBracket.mockResolvedValue({});
+    updateEntrywithNewSchools.mockResolvedValue();
+    const req = {
+      body: { year: '2024', region: '1,2,3,4', games: [] },
+      method: 'POST',
+      url: '/tournamentUpdate',
+    };
+    await tournamentUpdate(req, mockRes());
+    const regionArg = updateBracket.mock.calls[0][2];
+    expect(regionArg).toHaveLength(4);
+    expect(regionArg.every(Number.isFinite)).toBe(true);
+    expect(updateBracket).toHaveBeenCalledTimes(1);
+  });
+
+  test('strips Final Four/Championship pseudo-regions (5, 6) from the posted region list', async () => {
+    updateBracket.mockResolvedValue({});
+    updateEntrywithNewSchools.mockResolvedValue();
+    // viewTournament renders all region docs into the hidden field, so the
+    // edit form posts "1,2,3,4,5,6" — updateBracket must only see the quadrants.
+    const req = {
+      body: { year: '2024', region: '1,2,3,4,5,6', games: [] },
+      method: 'POST',
+      url: '/tournamentUpdate',
+    };
+    await tournamentUpdate(req, mockRes());
+    expect(updateBracket).toHaveBeenCalledWith([], 2024, [1, 2, 3, 4]);
+    expect(updateBracket).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejects a partial or duplicated quadrant list without calling updateBracket', async () => {
+    for (const region of ['1,2', '1,1,2,3', 'a,b,c,d', '5,6']) {
+      updateBracket.mockClear();
+      const req = {
+        body: { year: '2024', region, games: [] },
+        method: 'POST',
+        url: '/tournamentUpdate',
+      };
+      const res = mockRes();
+      await tournamentUpdate(req, res);
+      expect(updateBracket).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    }
   });
 });
 
 describe('deleteTournamentHandler', () => {
   test('calls deleteTournament and returns 200 with year in message', async () => {
     deleteTournament.mockResolvedValue();
-    const req = { body: { year: '2024' }, method: 'POST', url: '/deleteTournament' };
+    const req = {
+      body: { year: '2024' },
+      method: 'POST',
+      url: '/deleteTournament',
+    };
     const res = mockRes();
     await deleteTournamentHandler(req, res);
     expect(deleteTournament).toHaveBeenCalledWith(2024);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ message: 'Tournament for 2024 deleted successfully' });
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'Tournament for 2024 deleted successfully',
+    });
   });
 });
 
@@ -134,12 +218,17 @@ describe('pollEspnScheduled', () => {
       'Kansas Jayhawks': 2305,
     });
     fetchScheduledTournamentGames.mockResolvedValueOnce([
-      { espnEventId: '1', team1DisplayName: 'Duke Blue Devils', team2DisplayName: 'Kansas Jayhawks' },
+      {
+        espnEventId: '1',
+        team1DisplayName: 'Duke Blue Devils',
+        team2DisplayName: 'Kansas Jayhawks',
+      },
     ]);
 
     const req = {
       body: { date1: '20240321' },
-      method: 'POST', url: '/pollEspnScheduled',
+      method: 'POST',
+      url: '/pollEspnScheduled',
     };
     const res = mockRes();
 
@@ -163,12 +252,17 @@ describe('pollEspnScheduled', () => {
   test('handles missing team mapping gracefully', async () => {
     loadTeamMap.mockReturnValue({});
     fetchScheduledTournamentGames.mockResolvedValueOnce([
-      { espnEventId: '2', team1DisplayName: 'Unknown Team', team2DisplayName: 'Another Unknown' },
+      {
+        espnEventId: '2',
+        team1DisplayName: 'Unknown Team',
+        team2DisplayName: 'Another Unknown',
+      },
     ]);
 
     const req = {
       body: { date1: '20240322' },
-      method: 'POST', url: '/pollEspnScheduled',
+      method: 'POST',
+      url: '/pollEspnScheduled',
     };
     const res = mockRes();
 

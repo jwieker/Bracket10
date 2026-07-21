@@ -1,4 +1,4 @@
-import { ValidationError } from "./errors.js";
+import { ValidationError } from './errors.js';
 
 /**
  * Parses the 10 `teamSelect{i}` form fields ("sID, Team Name" shape) submitted
@@ -18,11 +18,23 @@ function extractPicks(body) {
     if (typeof raw !== 'string') {
       throw new ValidationError(`Pick ${i} must be a string.`, key);
     }
-    const parts = raw.split(", ").map((s) => s.trim());
-    if (parts.length !== 2) {
-      throw new ValidationError(`Pick ${i} is malformed. Please re-select the team.`, key);
+    // The option value is `${schoolId}, ${schoolName}` and schoolId is always
+    // numeric, so split on the FIRST ", " only. Splitting on every ", " (and
+    // requiring exactly 2 parts) wrongly rejected a legitimate team name that
+    // itself contains ", " as malformed.
+    const sep = raw.indexOf(', ');
+    // sep === -1: no separator at all. sep === 0: a leading ", " with no id
+    // before it. Both are structurally malformed, so reject with the re-select
+    // guidance rather than letting an empty idStr fall through to the
+    // less-accurate "invalid team ID" message.
+    if (sep <= 0) {
+      throw new ValidationError(
+        `Pick ${i} is malformed. Please re-select the team.`,
+        key,
+      );
     }
-    const [idStr, name] = parts;
+    const idStr = raw.slice(0, sep).trim();
+    const name = raw.slice(sep + 2).trim();
     const id = Number(idStr);
     if (!Number.isInteger(id) || id <= 0) {
       throw new ValidationError(`Pick ${i} has an invalid team ID.`, key);

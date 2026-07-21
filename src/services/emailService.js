@@ -1,12 +1,6 @@
-import { entryRepository } from '../repositories/index.js';
+import { entryRepository, gameRepository } from '../repositories/index.js';
 import { thisYear, APP_CONFIG } from '../config/app.js';
-import { db } from '../config/firestore.js';
 import Logger from '../utils/logger.js';
-
-/** Returns the schoolRecords subcollection ref for a given year */
-function schoolRecordsCol(year) {
-    return db.collection('tournaments').doc(String(Number(year))).collection('schoolRecords');
-}
 
 const EMAIL_GROUP = APP_CONFIG.tournament.emailGroup;
 
@@ -16,22 +10,26 @@ const EMAIL_GROUP = APP_CONFIG.tournament.emailGroup;
  * An entry is considered "unsent" if its emailSent field is missing or false.
  */
 export async function getUnsentEmailEntries(year = thisYear) {
-    const [entries, schoolRecordsSnap] = await Promise.all([
-        entryRepository.getUnsentEmailEntries(EMAIL_GROUP, year),
-        schoolRecordsCol(year).get(),
-    ]);
+  const [entries, teams] = await Promise.all([
+    entryRepository.getUnsentEmailEntries(EMAIL_GROUP, year),
+    // Reuses the repository's cached team read (300s TTL) instead of a
+    // second, uncached schoolRecords scan — see AGENTS.md: only
+    // src/repositories/* may touch Firestore directly.
+    gameRepository.getTournamentTeams(year),
+  ]);
 
-    // Build sID → team name map from schoolRecords
-    const teamMap = new Map();
-    schoolRecordsSnap.docs.forEach(doc => {
-        const d = doc.data();
-        teamMap.set(d.sID, d.nameNick || d.schoolName || `Team ${d.sID}`);
-    });
+  // Build sID → team name map from the tournament's teams
+  const teamMap = new Map();
+  teams.forEach((team) => {
+    teamMap.set(team.sID, team.nameNick || team.name || `Team ${team.sID}`);
+  });
 
-    return entries.map(entry => ({
-        ...entry,
-        pickNames: (entry.picks || []).map(sID => teamMap.get(sID) || `Team ${sID}`),
-    }));
+  return entries.map((entry) => ({
+    ...entry,
+    pickNames: (entry.picks || []).map(
+      (sID) => teamMap.get(sID) || `Team ${sID}`,
+    ),
+  }));
 }
 
 /**
@@ -39,6 +37,8 @@ export async function getUnsentEmailEntries(year = thisYear) {
  * Call this after drafts have been sent from Gmail.
  */
 export async function markEmailsSent(entryIds, year = thisYear) {
-    await entryRepository.markEmailsSent(entryIds, year);
-    Logger.info(`Marked ${entryIds.length} entries as emailSent for year ${year}`);
+  await entryRepository.markEmailsSent(entryIds, year);
+  Logger.info(
+    `Marked ${entryIds.length} entries as emailSent for year ${year}`,
+  );
 }

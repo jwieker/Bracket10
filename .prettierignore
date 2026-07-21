@@ -1,0 +1,16 @@
+# Mirrors the ESLint global ignores (eslint.config.js) — generated/private/data
+# trees stay untouched by the formatter.
+node_modules/
+coverage/
+databasebackup/
+data/
+ai_private/
+scripts/private/
+docs/
+product-backlog/
+*.min.js
+package-lock.json
+
+# EJS templates: Prettier's HTML parser doesn't understand <% %> tags and
+# mangles them — templates keep their hand formatting.
+views/

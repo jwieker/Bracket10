@@ -3,21 +3,22 @@ export { default as Logger } from '../utils/logger.js';
 
 // Points Service
 export {
-    updatePossiblePoints,
-    getFuturePoints,
-    findNextGameId,
-    getTournamentData,
-    possibleRanking,
-    calculateEntryPointsAndPaths,
-    enrichEntriesWithPotentialRankings,
-    getNextFutureGame,
+  updatePossiblePoints,
+  getFuturePoints,
+  findNextGameId,
+  getTournamentData,
+  possibleRanking,
+  calculateEntryPointsAndPaths,
+  enrichEntriesWithPotentialRankings,
+  getNextFutureGame,
+  updatePointsForAffectedEntries,
 } from './pointsService.js';
 
 // Game Service
 export {
-    updateTeamRecords,
-    undoTeamRecords,
-    setRepositories,
+  updateTeamRecords,
+  undoTeamRecords,
+  setRepositories,
 } from './gameService.js';
 
 // ESPN Poll Service
@@ -25,15 +26,15 @@ export { runEspnPoll } from './pollService.js';
 
 // Tourney Service
 export {
-    createNewBracketStructure,
-    updateEntrywithNewSchools,
-    prepareRegionVerifyData,
-    prepareNewTournamentData,
-    createNewBracket,
-    createFirstFourGames,
-    getAllGames,
-    updateBracket,
-    deleteTournament,
+  createNewBracketStructure,
+  updateEntrywithNewSchools,
+  prepareRegionVerifyData,
+  prepareNewTournamentData,
+  createNewBracket,
+  createFirstFourGames,
+  getAllGames,
+  updateBracket,
+  deleteTournament,
 } from './tourneyService.js';
 
 // ESPN Service
@@ -44,30 +45,31 @@ export { getUnsentEmailEntries, markEmailsSent } from './emailService.js';
 
 // Cloud Service (GCP budget + deploy trigger for admin dashboard)
 export {
-    getBudgetStatus,
-    triggerProductionDeploy,
-    getCloudConsoleLinks,
+  getBudgetStatus,
+  triggerProductionDeploy,
+  getCloudConsoleLinks,
 } from './cloudService.js';
 
 // View Service
 export {
-    getGroupTeamDetails,
-    addTeamProgressforGroup,
-    verifyGroupExists,
-    getGroupRegistrationData,
-    createNewEntry,
-    addPickCount,
-    calculateMaxPossiblePoints,
-    getAllYearsforGroup,
-    getEntriesForUser,
-    getEntryIdsForUserInGroup,
-    getRegionsForYear,
-    findEntriesByName,
-    addNewGroup,
-    getRegionIDForYear,
-    normalizeFirstFourPicks,
-    validateEntryPicks,
-    normalizeAndValidateEntryPicks,
-    buildFullGridData,
-    buildGameViewData,
+  getGroupTeamDetails,
+  addTeamProgressforGroup,
+  verifyGroupExists,
+  getGroupRegistrationData,
+  createNewEntry,
+  addPickCount,
+  calculateMaxPossiblePoints,
+  getAllYearsforGroup,
+  getEntriesForUser,
+  getEntryIdsForUserInGroup,
+  getRegionsForYear,
+  findEntriesByName,
+  addNewGroup,
+  getRegionIDForYear,
+  normalizeFirstFourPicks,
+  validateEntryPicks,
+  normalizeAndValidateEntryPicks,
+  resolveConfirmedPickNames,
+  buildFullGridData,
+  buildGameViewData,
 } from './viewService.js';

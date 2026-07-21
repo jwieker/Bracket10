@@ -1,4 +1,12 @@
-import { viewTeam, updateTeam, findTeam, addTeamPage, addTeam, addTeamApi, deleteTeam } from '../src/controllers/teamController.js';
+import {
+  viewTeam,
+  updateTeam,
+  findTeam,
+  addTeamPage,
+  addTeam,
+  addTeamApi,
+  deleteTeam,
+} from '../src/controllers/teamController.js';
 
 vi.mock('../src/repositories/index.js', () => ({
   gameRepository: { getEntryById: vi.fn(), updateEntry: vi.fn() },
@@ -17,7 +25,10 @@ vi.mock('../src/repositories/index.js', () => ({
   conferenceRepository: { getAllConferences: vi.fn() },
 }));
 
-import { teamRepository, conferenceRepository } from '../src/repositories/index.js';
+import {
+  teamRepository,
+  conferenceRepository,
+} from '../src/repositories/index.js';
 
 function mockRes() {
   return {
@@ -30,7 +41,9 @@ function mockRes() {
   };
 }
 
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('viewTeam', () => {
   test('returns 400 when teamId is missing', async () => {
@@ -58,7 +71,11 @@ describe('viewTeam', () => {
     const res = mockRes();
     await viewTeam(req, res);
     expect(teamRepository.getSchoolById).toHaveBeenCalledWith(1);
-    expect(res.render).toHaveBeenCalledWith('editTeam', { team, isNew: false, conferences });
+    expect(res.render).toHaveBeenCalledWith('editTeam', {
+      team,
+      isNew: false,
+      conferences,
+    });
   });
 });
 
@@ -84,12 +101,25 @@ describe('updateTeam', () => {
   test('calls updateSchool and redirects on success', async () => {
     teamRepository.updateSchool.mockResolvedValue();
     const req = {
-      body: { sid: '1', name: 'Duke', mascot: 'Blue Devils', nameNick: 'Duke', confID: 'ACC' },
-      method: 'POST', url: '/updateTeam',
+      body: {
+        sid: '1',
+        name: 'Duke',
+        mascot: 'Blue Devils',
+        nameNick: 'Duke',
+        confID: 'ACC',
+      },
+      method: 'POST',
+      url: '/updateTeam',
     };
     const res = mockRes();
     await updateTeam(req, res);
-    expect(teamRepository.updateSchool).toHaveBeenCalledWith({ sid: 1, name: 'Duke', mascot: 'Blue Devils', nameNick: 'Duke', confID: 'ACC' });
+    expect(teamRepository.updateSchool).toHaveBeenCalledWith({
+      sid: 1,
+      name: 'Duke',
+      mascot: 'Blue Devils',
+      nameNick: 'Duke',
+      confID: 'ACC',
+    });
     expect(res.redirect).toHaveBeenCalledWith('/viewTeam?teamId=1');
   });
 
@@ -98,16 +128,19 @@ describe('updateTeam', () => {
     teamRepository.updateSchoolConferenceHistory.mockResolvedValue();
     const req = {
       body: {
-        sid: '1', name: 'Duke',
+        sid: '1',
+        name: 'Duke',
         confHistory: [{ confID: 'ACC', startYear: '2000', endYear: '' }],
       },
-      method: 'POST', url: '/updateTeam',
+      method: 'POST',
+      url: '/updateTeam',
     };
     const res = mockRes();
     await updateTeam(req, res);
-    expect(teamRepository.updateSchoolConferenceHistory).toHaveBeenCalledWith(1, [
-      { confID: 'ACC', startYear: 2000, endYear: null },
-    ]);
+    expect(teamRepository.updateSchoolConferenceHistory).toHaveBeenCalledWith(
+      1,
+      [{ confID: 'ACC', startYear: 2000, endYear: null }],
+    );
   });
 
   test('skips confHistory rows with empty confID', async () => {
@@ -115,14 +148,19 @@ describe('updateTeam', () => {
     teamRepository.updateSchoolConferenceHistory.mockResolvedValue();
     const req = {
       body: {
-        sid: '1', name: 'Duke',
+        sid: '1',
+        name: 'Duke',
         confHistory: [{ confID: '', startYear: '2000', endYear: '' }],
       },
-      method: 'POST', url: '/updateTeam',
+      method: 'POST',
+      url: '/updateTeam',
     };
     const res = mockRes();
     await updateTeam(req, res);
-    expect(teamRepository.updateSchoolConferenceHistory).toHaveBeenCalledWith(1, []);
+    expect(teamRepository.updateSchoolConferenceHistory).toHaveBeenCalledWith(
+      1,
+      [],
+    );
   });
 });
 
@@ -159,7 +197,10 @@ describe('addTeamPage', () => {
     const req = { method: 'GET', url: '/addTeamPage' };
     const res = mockRes();
     await addTeamPage(req, res);
-    expect(res.render).toHaveBeenCalledWith('editTeam', expect.objectContaining({ isNew: true }));
+    expect(res.render).toHaveBeenCalledWith(
+      'editTeam',
+      expect.objectContaining({ isNew: true }),
+    );
   });
 });
 
@@ -179,13 +220,19 @@ describe('addTeam', () => {
     teamRepository.getMaxSchoolId.mockResolvedValue(10);
     teamRepository.insertSchool.mockResolvedValue();
     const req = {
-      body: { name: 'Duke', mascot: 'Blue Devils', nameNick: 'Duke', confID: 'ACC' },
-      method: 'POST', url: '/addTeam',
+      body: {
+        name: 'Duke',
+        mascot: 'Blue Devils',
+        nameNick: 'Duke',
+        confID: 'ACC',
+      },
+      method: 'POST',
+      url: '/addTeam',
     };
     const res = mockRes();
     await addTeam(req, res);
     expect(teamRepository.insertSchool).toHaveBeenCalledWith(
-      expect.objectContaining({ sid: 11, name: 'Duke' })
+      expect.objectContaining({ sid: 11, name: 'Duke' }),
     );
     expect(res.redirect).toHaveBeenCalledWith('/viewTeam?teamId=11');
   });
@@ -193,10 +240,16 @@ describe('addTeam', () => {
   test('uses sid=1 when max school id is null', async () => {
     teamRepository.getMaxSchoolId.mockResolvedValue(null);
     teamRepository.insertSchool.mockResolvedValue();
-    const req = { body: { name: 'New School' }, method: 'POST', url: '/addTeam' };
+    const req = {
+      body: { name: 'New School' },
+      method: 'POST',
+      url: '/addTeam',
+    };
     const res = mockRes();
     await addTeam(req, res);
-    expect(teamRepository.insertSchool).toHaveBeenCalledWith(expect.objectContaining({ sid: 1 }));
+    expect(teamRepository.insertSchool).toHaveBeenCalledWith(
+      expect.objectContaining({ sid: 1 }),
+    );
   });
 
   test('sets confID to null when not provided', async () => {
@@ -205,7 +258,9 @@ describe('addTeam', () => {
     const req = { body: { name: 'Duke' }, method: 'POST', url: '/addTeam' };
     const res = mockRes();
     await addTeam(req, res);
-    expect(teamRepository.insertSchool).toHaveBeenCalledWith(expect.objectContaining({ confID: null }));
+    expect(teamRepository.insertSchool).toHaveBeenCalledWith(
+      expect.objectContaining({ confID: null }),
+    );
   });
 });
 
@@ -226,14 +281,20 @@ describe('addTeamApi', () => {
     teamRepository.getMaxSchoolId.mockResolvedValue(20);
     teamRepository.insertSchool.mockResolvedValue();
     const req = {
-      body: { name: 'Duke', mascot: 'Blue Devils', nameNick: 'Duke', confID: 'ACC' },
-      method: 'POST', url: '/addTeamApi',
+      body: {
+        name: 'Duke',
+        mascot: 'Blue Devils',
+        nameNick: 'Duke',
+        confID: 'ACC',
+      },
+      method: 'POST',
+      url: '/addTeamApi',
     };
     const res = mockRes();
     await addTeamApi(req, res);
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ sid: 21, name: 'Duke', confID: 'ACC' })
+      expect.objectContaining({ sid: 21, name: 'Duke', confID: 'ACC' }),
     );
   });
 });
@@ -263,4 +324,3 @@ describe('deleteTeam', () => {
 // ---------------------------------------------------------------------------
 // viewEntry
 // ---------------------------------------------------------------------------
-

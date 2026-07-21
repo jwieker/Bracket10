@@ -1,0 +1,4 @@
+Contact: https://github.com/jwieker/bracket10/security/advisories/new
+Policy: https://bracket10.app/SECURITY.md
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en

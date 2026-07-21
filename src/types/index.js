@@ -84,11 +84,11 @@
 
 // Export type definitions for JSDoc usage
 export const Types = {
-    TournamentRound: 'TournamentRound',
-    Team: 'Team',
-    Game: 'Game',
-    Entry: 'Entry',
-    GroupTeam: 'GroupTeam',
-    PointsCalculation: 'PointsCalculation',
-    TournamentData: 'TournamentData',
+  TournamentRound: 'TournamentRound',
+  Team: 'Team',
+  Game: 'Game',
+  Entry: 'Entry',
+  GroupTeam: 'GroupTeam',
+  PointsCalculation: 'PointsCalculation',
+  TournamentData: 'TournamentData',
 };

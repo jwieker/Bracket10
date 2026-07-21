@@ -51,7 +51,7 @@ The results page (`views/results.ejs`) handles both a traditional desktop table 
 ## Admin Routes (`/src/routes/adminRoutes.js`)
 
 *   `GET /admin`: Redirects to `GET /admin/tournament`.
-*   `GET /admin/tournament`: Game results page. Landing page after login.
+*   `GET /admin/tournament`: Game results page. Landing page after login. Games render unresolved-first in `gameID` order, except unresolved First Four (round 0) games, which are pinned to the top; once a First Four game has a winner it sorts with the other completed games at the bottom.
 *   `GET /admin/entries`: Entry management (find, view, unpaid, bracket emails, new group).
 *   `GET /admin/teams`: Team management plus link to Conferences.
 *   `GET /admin/system`: System tools (recalculate points, clear cache, change year).

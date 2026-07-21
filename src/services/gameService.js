@@ -1,16 +1,24 @@
-import { gameRepository as _gameRepository, teamRepository as _teamRepository } from "../repositories/index.js";
-import { updateEntrywithNewSchools as _updateEntrywithNewSchools } from "./tourneyService.js";
-import { TOURNAMENT_ROUNDS } from "../config/const.js";
-import Logger from "../utils/logger.js";
+import {
+  gameRepository as _gameRepository,
+  teamRepository as _teamRepository,
+} from '../repositories/index.js';
+import { updateEntrywithNewSchools as _updateEntrywithNewSchools } from './tourneyService.js';
+import { TOURNAMENT_ROUNDS } from '../config/const.js';
+import Logger from '../utils/logger.js';
 
 let teamRepository = _teamRepository;
 let gameRepository = _gameRepository;
 let updateEntrywithNewSchools = _updateEntrywithNewSchools;
 
-function setRepositories(newTeamRepository, newGameRepository, newUpdateEntrywithNewSchools = null) {
+function setRepositories(
+  newTeamRepository,
+  newGameRepository,
+  newUpdateEntrywithNewSchools = null,
+) {
   teamRepository = newTeamRepository;
   gameRepository = newGameRepository;
-  if (newUpdateEntrywithNewSchools) updateEntrywithNewSchools = newUpdateEntrywithNewSchools;
+  if (newUpdateEntrywithNewSchools)
+    updateEntrywithNewSchools = newUpdateEntrywithNewSchools;
 }
 /**
  * Reverts team records when undoing a game result
@@ -27,7 +35,7 @@ async function undoTeamRecords(
   nextGame,
   nextGameSpot,
   year,
-  team1ID = null
+  team1ID = null,
 ) {
   const config = TOURNAMENT_ROUNDS[round];
   if (!config) {
@@ -67,12 +75,19 @@ async function undoTeamRecords(
       await updateEntrywithNewSchools(swaps, year);
       await teamRepository.deleteCanonicalSchoolRecord(winner, year);
       if (nextGame) {
-        await gameRepository.updateNextGameTeam(nextGame, nextGameSpot, null, year);
+        await gameRepository.updateNextGameTeam(
+          nextGame,
+          nextGameSpot,
+          null,
+          year,
+        );
       }
       await gameRepository.clearWinnerWithHold(gameID, year);
-      Logger.info(`[FF] Undone game ${gameID}: restored ${loser}, removed ${winner}, hold set`);
+      Logger.info(
+        `[FF] Undone game ${gameID}: restored ${loser}, removed ${winner}, hold set`,
+      );
     } catch (error) {
-      Logger.error("Error undoing FF game records:", error);
+      Logger.error('Error undoing FF game records:', error);
       throw error;
     }
     return;
@@ -86,7 +101,7 @@ async function undoTeamRecords(
     // Round 1 restores a team to its pre-tournament state (points: null);
     // later rounds restore both teams to "won the previous round".
     const restorePoints = round === 1 ? null : config.loserPoints;
-    const restoreStatus = round === 1 ? [] : Array(config.wins - 1).fill("W");
+    const restoreStatus = round === 1 ? [] : Array(config.wins - 1).fill('W');
     await gameRepository.undoResolvedGame(
       {
         gameID,
@@ -97,10 +112,10 @@ async function undoTeamRecords(
         restorePoints,
         restoreStatus,
       },
-      year
+      year,
     );
   } catch (error) {
-    Logger.error("Error undoing teams records:", error);
+    Logger.error('Error undoing teams records:', error);
     throw error;
   }
 }
@@ -122,7 +137,7 @@ async function updateTeamRecords(
   gameID,
   nextGame,
   nextGameSpot,
-  year
+  year,
 ) {
   const config = TOURNAMENT_ROUNDS[round];
   if (!config) {
@@ -139,22 +154,29 @@ async function updateTeamRecords(
       // set, the pick swap is a no-op once no entry holds the loser, and the
       // canonical-record create no-ops once the doc exists.
       if (nextGame) {
-        await gameRepository.updateNextGameTeam(nextGame, nextGameSpot, winner, year);
+        await gameRepository.updateNextGameTeam(
+          nextGame,
+          nextGameSpot,
+          winner,
+          year,
+        );
       }
       // Auto-swap all entry picks: loser → winner
       await updateEntrywithNewSchools([[winner, loser]], year);
       await teamRepository.createCanonicalSchoolRecord(winner, year);
       await gameRepository.updateWinner(gameID, winner, year);
-      Logger.info(`[FF] Resolved game ${gameID}: winner ${winner}, loser ${loser}`);
+      Logger.info(
+        `[FF] Resolved game ${gameID}: winner ${winner}, loser ${loser}`,
+      );
     } catch (error) {
-      Logger.error("Error updating FF game records:", error);
+      Logger.error('Error updating FF game records:', error);
       throw error;
     }
     return;
   }
 
-  const winArray = Array(config.wins).fill("W");
-  const loseArray = [...Array(config.wins - 1).fill("W"), "L"];
+  const winArray = Array(config.wins).fill('W');
+  const loseArray = [...Array(config.wins - 1).fill('W'), 'L'];
 
   try {
     // Single transaction per game: winner, next-round slot, and both team
@@ -174,10 +196,10 @@ async function updateTeamRecords(
         loserPoints: config.loserPoints,
         loserStatus: loseArray,
       },
-      year
+      year,
     );
   } catch (error) {
-    Logger.error("Error updating team records:", error);
+    Logger.error('Error updating team records:', error);
     throw error;
   }
 }

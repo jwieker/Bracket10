@@ -49,8 +49,12 @@
   background-color: var(--badge-danger-bg) !important;
 }
 
-.rank-up { color: var(--success-color); }
-.rank-down { color: var(--danger-color); }
+.rank-up {
+  color: var(--success-color);
+}
+.rank-down {
+  color: var(--danger-color);
+}
 
 .card-up {
   background-color: var(--badge-success-bg) !important;

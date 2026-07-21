@@ -1,8 +1,12 @@
-import { gameRepository } from "../repositories/index.js";
-import { updateTeamRecords } from "./gameService.js";
-import { updatePointsForAffectedEntries } from "./pointsService.js";
-import { fetchCompletedTournamentGames, getDateStrDaysAgo, loadTeamMap } from "./espnService.js";
-import Logger from "../utils/logger.js";
+import { gameRepository } from '../repositories/index.js';
+import { updateTeamRecords } from './gameService.js';
+import { updatePointsForAffectedEntries } from './pointsService.js';
+import {
+  fetchCompletedTournamentGames,
+  getDateStrDaysAgo,
+  loadTeamMap,
+} from './espnService.js';
+import Logger from '../utils/logger.js';
 
 /**
  * Runs the points recalc for every team sID in the durable pending-recalc
@@ -15,7 +19,9 @@ import Logger from "../utils/logger.js";
 async function recalcPendingEntries(year) {
   const pendingSIDs = await gameRepository.getPendingRecalcSIDs(year);
   if (pendingSIDs.length === 0) return;
-  Logger.info(`ESPN poll: recalculating points for entries holding ${pendingSIDs.length} pending team(s)`);
+  Logger.info(
+    `ESPN poll: recalculating points for entries holding ${pendingSIDs.length} pending team(s)`,
+  );
   await updatePointsForAffectedEntries(year, pendingSIDs);
   await gameRepository.clearPendingRecalcSIDs(year, pendingSIDs);
 }
@@ -29,7 +35,10 @@ async function recalcPendingEntries(year) {
  * @param {boolean} [options.dryRun=false] - If true, skip DB writes and just return what would be updated
  * @returns {Promise<{updated: number, skipped: number, unmapped: string[], games: Array}>}
  */
-export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {}) {
+export async function runEspnPoll(
+  year,
+  { dryRun = false, dateStr = null } = {},
+) {
   const teamMap = loadTeamMap();
   const summary = { updated: 0, skipped: 0, unmapped: [], games: [] };
 
@@ -48,10 +57,12 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
   // would re-resolve an undone game within one cycle. The hold is released
   // when an admin records a result (updateWinner) or explicitly releases it.
   const allGames = await gameRepository.getActiveAndFutureGames(year);
-  const unresolvedGames = allGames.filter((g) => g.winner == null && !g.manualHold);
+  const unresolvedGames = allGames.filter(
+    (g) => g.winner == null && !g.manualHold,
+  );
 
   if (unresolvedGames.length === 0) {
-    Logger.info("ESPN poll: no unresolved games in DB — nothing to do");
+    Logger.info('ESPN poll: no unresolved games in DB — nothing to do');
     return summary;
   }
 
@@ -81,19 +92,23 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
       ]);
       // Deduplicate by espnEventId — yesterday's games may already appear in today's feed
       const seen = new Set();
-      espnGames = [...todayGames, ...yesterdayGames].filter(({ espnEventId }) => {
-        if (seen.has(espnEventId)) return false;
-        seen.add(espnEventId);
-        return true;
-      });
+      espnGames = [...todayGames, ...yesterdayGames].filter(
+        ({ espnEventId }) => {
+          if (seen.has(espnEventId)) return false;
+          seen.add(espnEventId);
+          return true;
+        },
+      );
     }
   } catch (err) {
-    Logger.error("ESPN poll: aborting due to ESPN fetch error", err);
+    Logger.error('ESPN poll: aborting due to ESPN fetch error', err);
     throw err;
   }
 
   if (espnGames.length === 0) {
-    Logger.info("ESPN poll: ESPN returned no completed games today or yesterday");
+    Logger.info(
+      'ESPN poll: ESPN returned no completed games today or yesterday',
+    );
     return summary;
   }
   // 3. Match each ESPN completed game to an unresolved DB game
@@ -112,14 +127,16 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
         loserSID == null ? loserDisplayName : null,
       ].filter(Boolean);
       summary.unmapped.push(...unmappedNames);
-      Logger.warn(`ESPN poll: no mapping for team(s): ${unmappedNames.join(", ")}`);
+      Logger.warn(
+        `ESPN poll: no mapping for team(s): ${unmappedNames.join(', ')}`,
+      );
       continue;
     }
 
     // Find matching unresolved game where both teams are present
     // Strict type check to prevent string/number coercion mismatches that weren't possible with `.find(===)`
     let dbGame = null;
-    if (typeof winnerSID === "number" && typeof loserSID === "number") {
+    if (typeof winnerSID === 'number' && typeof loserSID === 'number') {
       const minSID = Math.min(winnerSID, loserSID);
       const maxSID = Math.max(winnerSID, loserSID);
       dbGame = unresolvedGamesMap.get(`${minSID}-${maxSID}`);
@@ -145,7 +162,7 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
 
     if (dryRun) {
       Logger.info(
-        `ESPN poll (dry-run): would record winner sID=${winnerSID} for game ${dbGame.gameID} (round ${dbGame.round})`
+        `ESPN poll (dry-run): would record winner sID=${winnerSID} for game ${dbGame.gameID} (round ${dbGame.round})`,
       );
       summary.updated++;
       continue;
@@ -164,15 +181,22 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
     // extra recalc on the next run. If this write fails, nothing has been
     // written yet and the whole run aborts cleanly.
     const affectedSIDs = [
-      ...new Set(gamesToWrite.flatMap(({ winnerSID, loserSID }) => [winnerSID, loserSID])),
+      ...new Set(
+        gamesToWrite.flatMap(({ winnerSID, loserSID }) => [
+          winnerSID,
+          loserSID,
+        ]),
+      ),
     ];
     await gameRepository.addPendingRecalcSIDs(year, affectedSIDs);
 
-    Logger.info(`ESPN poll: recording ${gamesToWrite.length} game result(s) in parallel`);
+    Logger.info(
+      `ESPN poll: recording ${gamesToWrite.length} game result(s) in parallel`,
+    );
     const results = await Promise.allSettled(
       gamesToWrite.map(({ dbGame, winnerSID, loserSID }) => {
         Logger.info(
-          `ESPN poll: recording winner sID=${winnerSID} for game ${dbGame.gameID} (round ${dbGame.round})`
+          `ESPN poll: recording winner sID=${winnerSID} for game ${dbGame.gameID} (round ${dbGame.round})`,
         );
         return updateTeamRecords(
           winnerSID,
@@ -181,15 +205,18 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
           dbGame.gameID,
           dbGame.nextGameID,
           dbGame.nextGameSpot,
-          year
+          year,
         );
-      })
+      }),
     );
     for (let i = 0; i < results.length; i++) {
-      if (results[i].status === "fulfilled") {
+      if (results[i].status === 'fulfilled') {
         summary.updated++;
       } else {
-        Logger.error(`ESPN poll: failed to update game ${gamesToWrite[i].dbGame.gameID}`, results[i].reason);
+        Logger.error(
+          `ESPN poll: failed to update game ${gamesToWrite[i].dbGame.gameID}`,
+          results[i].reason,
+        );
       }
     }
   }
@@ -203,7 +230,7 @@ export async function runEspnPoll(year, { dryRun = false, dateStr = null } = {})
   }
 
   Logger.info(
-    `ESPN poll complete — updated: ${summary.updated}, skipped: ${summary.skipped}, unmapped teams: ${summary.unmapped.length}`
+    `ESPN poll complete — updated: ${summary.updated}, skipped: ${summary.skipped}, unmapped teams: ${summary.unmapped.length}`,
   );
   return summary;
 }

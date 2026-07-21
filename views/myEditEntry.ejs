@@ -27,9 +27,7 @@
 </style>
 
 <body>
-    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
-        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
-        crossorigin="anonymous"></script>
+    <!-- Popper.js is included in Bootstrap bundle, no need to load separately -->
     <div class="container-lg pt-3" id="regcont">
         <div class="row" id="row1">
             <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
@@ -60,6 +58,7 @@
                     <% }); %>
 
                     <input type="hidden" name="entryId" value="<%= entryData.id %>" />
+                    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
                     <input type="hidden" name="year" value="<%= year %>" />
                     <input type="hidden" name="maxPoints" id="maxPointsHidden" value="0" />
 
@@ -120,10 +119,10 @@
         <%- include('partials/scripts') %>
     </div>
 
-    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="entryPicksFromServerJson"><%- JSON.stringify(entryData.picks || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- safeJson(gameData || {}) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- safeJson(regions || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="entryPicksFromServerJson"><%- safeJson(entryData.picks || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- safeJson(teamData || []) %></script>
 
     <script nonce="<%= cspNonce %>">
         const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);

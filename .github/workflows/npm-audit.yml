@@ -3,7 +3,7 @@ name: npm audit
 on:
   schedule:
     # Mondays at 14:00 UTC.
-    - cron: "0 14 * * 1"
+    - cron: '0 14 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -13,25 +13,25 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "24.16.0"
+          node-version: '24.16.0'
 
       - name: Run npm audit (root)
         id: audit-root
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=moderate
         continue-on-error: true
 
       - name: Run npm audit (jobs)
         id: audit-jobs
         working-directory: jobs
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=moderate
         continue-on-error: true
 
       - name: Fail if either audit found issues
         if: steps.audit-root.outcome == 'failure' || steps.audit-jobs.outcome == 'failure'
         run: |
-          echo "::error::npm audit found high-severity vulnerabilities. Review the logs above."
+          echo "::error::npm audit found moderate-or-higher-severity vulnerabilities. Review the logs above."
           exit 1

@@ -5,7 +5,12 @@ body {
   color: var(--text-main);
   margin: 0;
   line-height: 1.5;
-  background-image: linear-gradient(135deg, var(--bg-soft) 0%, var(--bg-body) 50%, var(--bg-softer) 100%);
+  background-image: linear-gradient(
+    135deg,
+    var(--bg-soft) 0%,
+    var(--bg-body) 50%,
+    var(--bg-softer) 100%
+  );
   /* Cover the page once instead of tiling: on pages taller than the viewport the
      default repeat would restart the gradient each viewport, and in dark mode the
      dark-to-light tile seam shows up as horizontal bands of "different blacks".
@@ -20,14 +25,14 @@ body {
 /* Pseudo-element for the light mode background image to allow premium fallback gradient
    when the image is missing, and to avoid background-attachment: fixed mobile performance lag. */
 body::before {
-  content: "";
+  content: '';
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: -1;
-  background-image: url("/teams.webp");
+  background-image: url('/teams.webp');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -36,11 +41,16 @@ body::before {
 }
 
 /* In dark mode, drop the photo background and use a stunning rich dark gradient fallback. */
-[data-theme="dark"] body {
-  background-image: linear-gradient(135deg, #2b303c 0%, #242830 50%, #1a1d24 100%);
+[data-theme='dark'] body {
+  background-image: linear-gradient(
+    135deg,
+    #2b303c 0%,
+    #242830 50%,
+    #1a1d24 100%
+  );
   background-color: var(--bg-body);
 }
-[data-theme="dark"] body::before {
+[data-theme='dark'] body::before {
   display: none;
 }
 
@@ -180,12 +190,18 @@ a:hover {
   font-weight: 600;
   border: 0;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   color: rgba(255, 255, 255, 0.75);
   background: transparent;
 }
 
-.mode-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.mode-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
 
 .mode-btn.active,
 /* Pre-JS highlight: keyed off the theme attribute that the head script sets
@@ -197,11 +213,13 @@ html:not([data-theme="dark"]) #theme-light {
   color: var(--primary-color);
 }
 
-.mode-btn:hover:not(.active) { color: rgba(255, 255, 255, 0.95); }
+.mode-btn:hover:not(.active) {
+  color: rgba(255, 255, 255, 0.95);
+}
 
 /* Keep the pre-JS (CSS-driven) active button from picking up the hover color. */
-[data-theme="dark"] #theme-dark:hover,
-html:not([data-theme="dark"]) #theme-light:hover {
+[data-theme='dark'] #theme-dark:hover,
+html:not([data-theme='dark']) #theme-light:hover {
   color: var(--primary-color);
 }
 
@@ -216,18 +234,18 @@ html:not([data-theme="dark"]) #theme-light:hover {
 }
 
 /* Bootstrap modal dark-mode overrides */
-[data-theme="dark"] .modal-content {
+[data-theme='dark'] .modal-content {
   background-color: var(--bg-card);
   border-color: var(--border-color);
   color: var(--text-main);
 }
 
-[data-theme="dark"] .modal-header,
-[data-theme="dark"] .modal-footer {
+[data-theme='dark'] .modal-header,
+[data-theme='dark'] .modal-footer {
   border-color: var(--border-color);
 }
 
-[data-theme="dark"] .modal-header .btn-close {
+[data-theme='dark'] .modal-header .btn-close {
   filter: invert(1) brightness(0.8);
 }
 
@@ -237,7 +255,9 @@ html:not([data-theme="dark"]) #theme-light:hover {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   --bs-card-bg: var(--bg-card);
   --bs-card-color: var(--text-main);
   --bs-card-border-color: var(--border-color);
@@ -279,7 +299,8 @@ html:not([data-theme="dark"]) #theme-light:hover {
 }
 
 /* -- Forms & Inputs -- */
-.form-control, .input {
+.form-control,
+.input {
   background-color: var(--bg-card);
   color: var(--text-main) !important;
   border: 1px solid var(--border-color);
@@ -287,13 +308,14 @@ html:not([data-theme="dark"]) #theme-light:hover {
   box-shadow: none;
 }
 
-[data-theme="dark"] .form-control, 
-[data-theme="dark"] .input {
+[data-theme='dark'] .form-control,
+[data-theme='dark'] .input {
   background-color: var(--bg-soft) !important;
   border: 1.5px solid var(--border-color);
 }
 
-.form-control:focus, .input:focus {
+.form-control:focus,
+.input:focus {
   background-color: var(--bg-card);
   border-color: var(--primary-color) !important;
   box-shadow: 0 0 0 3px var(--primary-soft) !important;
@@ -301,21 +323,22 @@ html:not([data-theme="dark"]) #theme-light:hover {
   outline: none;
 }
 
-[data-theme="dark"] .form-control:focus,
-[data-theme="dark"] .input:focus {
+[data-theme='dark'] .form-control:focus,
+[data-theme='dark'] .input:focus {
   background-color: var(--bg-soft) !important;
 }
 
-.form-control::placeholder, .input::placeholder {
+.form-control::placeholder,
+.input::placeholder {
   color: var(--text-xmuted) !important;
 }
 
 /* Chrome's autofill paints its own pale-yellow background — paint over it
    so dark-mode inputs don't flash to a near-white surface. */
-[data-theme="dark"] .form-control:-webkit-autofill,
-[data-theme="dark"] .input:-webkit-autofill,
-[data-theme="dark"] .form-control:-webkit-autofill:focus,
-[data-theme="dark"] .input:-webkit-autofill:focus {
+[data-theme='dark'] .form-control:-webkit-autofill,
+[data-theme='dark'] .input:-webkit-autofill,
+[data-theme='dark'] .form-control:-webkit-autofill:focus,
+[data-theme='dark'] .input:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--text-main);
   -webkit-box-shadow: 0 0 0 1000px var(--bg-soft) inset;
   caret-color: var(--text-main);
@@ -374,14 +397,33 @@ html:not([data-theme="dark"]) #theme-light:hover {
   font-size: 13px;
   border: 1px solid transparent;
 }
-.alert-info    { background: var(--alert-info-bg);    color: var(--alert-info-fg);    border-color: var(--alert-info-border); }
-.alert-success { background: var(--alert-success-bg); color: var(--alert-success-fg); border-color: var(--alert-success-border); }
-.alert-warn    { background: var(--alert-warn-bg);    color: var(--alert-warn-fg);    border-color: var(--alert-warn-border); }
-.alert-danger  { background: var(--alert-danger-bg);  color: var(--alert-danger-fg);  border-color: var(--alert-danger-border); }
+.alert-info {
+  background: var(--alert-info-bg);
+  color: var(--alert-info-fg);
+  border-color: var(--alert-info-border);
+}
+.alert-success {
+  background: var(--alert-success-bg);
+  color: var(--alert-success-fg);
+  border-color: var(--alert-success-border);
+}
+.alert-warn {
+  background: var(--alert-warn-bg);
+  color: var(--alert-warn-fg);
+  border-color: var(--alert-warn-border);
+}
+.alert-danger {
+  background: var(--alert-danger-bg);
+  color: var(--alert-danger-fg);
+  border-color: var(--alert-danger-border);
+}
 .alert-info strong,
 .alert-success strong,
 .alert-warn strong,
-.alert-danger strong { display: block; margin-bottom: 2px; }
+.alert-danger strong {
+  display: block;
+  margin-bottom: 2px;
+}
 
 /* ── Badges & chips ───────────────────────────────────────────────── */
 .badge-ds {
@@ -395,11 +437,26 @@ html:not([data-theme="dark"]) #theme-light:hover {
   background: var(--badge-bg);
   color: var(--badge-fg);
 }
-.badge-success { background: var(--badge-success-bg); color: var(--badge-success-fg); }
-.badge-warn    { background: var(--badge-warn-bg);    color: var(--badge-warn-fg); }
-.badge-danger  { background: var(--badge-danger-bg);  color: var(--badge-danger-fg); }
-.badge-info    { background: var(--badge-info-bg);    color: var(--badge-info-fg); }
-.badge-zero    { background: var(--badge-bg);         color: var(--text-xmuted); }
+.badge-success {
+  background: var(--badge-success-bg);
+  color: var(--badge-success-fg);
+}
+.badge-warn {
+  background: var(--badge-warn-bg);
+  color: var(--badge-warn-fg);
+}
+.badge-danger {
+  background: var(--badge-danger-bg);
+  color: var(--badge-danger-fg);
+}
+.badge-info {
+  background: var(--badge-info-bg);
+  color: var(--badge-info-fg);
+}
+.badge-zero {
+  background: var(--badge-bg);
+  color: var(--text-xmuted);
+}
 
 /* W / L chip — round-by-round outcomes */
 .wl-chip {
@@ -414,9 +471,18 @@ html:not([data-theme="dark"]) #theme-light:hover {
   border-radius: 4px;
   font-family: var(--mono);
 }
-.wl-chip.win     { background: var(--badge-success-bg); color: var(--badge-success-fg); }
-.wl-chip.loss    { background: var(--badge-danger-bg);  color: var(--badge-danger-fg); }
-.wl-chip.pending { background: var(--bg-softer);        color: var(--text-xmuted); }
+.wl-chip.win {
+  background: var(--badge-success-bg);
+  color: var(--badge-success-fg);
+}
+.wl-chip.loss {
+  background: var(--badge-danger-bg);
+  color: var(--badge-danger-fg);
+}
+.wl-chip.pending {
+  background: var(--bg-softer);
+  color: var(--text-xmuted);
+}
 
 /* Alive dot */
 .alive-dot {
@@ -427,7 +493,9 @@ html:not([data-theme="dark"]) #theme-light:hover {
   background: var(--success-color);
   vertical-align: middle;
 }
-.alive-dot.eliminated { background: var(--border-strong); }
+.alive-dot.eliminated {
+  background: var(--border-strong);
+}
 
 /* ── Design-system card (used by index/landing form containers) ───── */
 .ds-card {
@@ -440,8 +508,12 @@ html:not([data-theme="dark"]) #theme-light:hover {
 .ds-card-accent {
   border-top: 4px solid var(--primary-color);
 }
-.ds-card-body { padding: var(--spacing-lg); }
-.ds-card-body.pad-lg { padding: var(--spacing-xl); }
+.ds-card-body {
+  padding: var(--spacing-lg);
+}
+.ds-card-body.pad-lg {
+  padding: var(--spacing-xl);
+}
 
 /* ── Admin form helpers (team-select dropdowns, ESPN autofill) ────── */
 .search-dropdown {
@@ -554,7 +626,6 @@ html:not([data-theme="dark"]) #theme-light:hover {
 
 /* -- Mobile Card View -- */
 @media (max-width: 768px) {
-
   .table-responsive.table-scroll-full-grid {
     display: none;
   }
@@ -623,7 +694,7 @@ html:not([data-theme="dark"]) #theme-light:hover {
   background-position: center center;
   min-height: 300px;
   margin: 0 auto;
-  background-image: url("/blank-bracket.jpg");
+  background-image: url('/blank-bracket.jpg');
   padding-top: 70%;
 }
 
@@ -725,28 +796,48 @@ html:not([data-theme="dark"]) #theme-light:hover {
 }
 
 /* -- PWA Install Banner dark mode -- */
-[data-theme="dark"] #pwaInstallBanner {
+[data-theme='dark'] #pwaInstallBanner {
   background-color: var(--bg-card) !important;
   border-color: var(--border-color) !important;
   color: var(--text-main);
 }
 
-[data-theme="dark"] #pwaInstallBanner h6 {
+[data-theme='dark'] #pwaInstallBanner h6 {
   color: var(--primary-color) !important;
 }
 
-[data-theme="dark"] #pwaInstallBanner p {
+[data-theme='dark'] #pwaInstallBanner p {
   color: var(--text-muted) !important;
 }
 
 /* -- Bootstrap Utility Re-mapping to Design Tokens -- */
-.bg-white { background-color: var(--bg-card) !important; }
-.bg-light { background-color: var(--bg-soft) !important; }
-.text-dark { color: var(--text-main) !important; }
-.border-dark { border-color: var(--border-color) !important; }
-.table-dark { background-color: var(--bg-soft) !important; color: var(--text-muted) !important; border-color: var(--border-color) !important; }
-.table-dark th { background-color: var(--bg-softer) !important; color: var(--text-muted) !important; border-bottom: 2px solid var(--border-color) !important; }
-.table-dark td { background-color: var(--bg-card) !important; color: var(--text-main) !important; border-bottom: 1px solid var(--border-color) !important; }
+.bg-white {
+  background-color: var(--bg-card) !important;
+}
+.bg-light {
+  background-color: var(--bg-soft) !important;
+}
+.text-dark {
+  color: var(--text-main) !important;
+}
+.border-dark {
+  border-color: var(--border-color) !important;
+}
+.table-dark {
+  background-color: var(--bg-soft) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-color) !important;
+}
+.table-dark th {
+  background-color: var(--bg-softer) !important;
+  color: var(--text-muted) !important;
+  border-bottom: 2px solid var(--border-color) !important;
+}
+.table-dark td {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
 
 /* Bootstrap tables — drive striping/hover from tokens so dark mode works */
 .table {
@@ -779,15 +870,15 @@ html:not([data-theme="dark"]) #theme-light:hover {
 /* Remap Bootstrap's .table-light custom properties so the light header
    block follows our tokens (Bootstrap paints via --bs-table-bg on cells). */
 .table-light {
-  --bs-table-color:           var(--text-main);
-  --bs-table-bg:              var(--bg-soft);
-  --bs-table-border-color:    var(--border-color);
-  --bs-table-striped-bg:      var(--bg-softer);
-  --bs-table-striped-color:   var(--text-main);
-  --bs-table-active-bg:       var(--bg-softer);
-  --bs-table-active-color:    var(--text-main);
-  --bs-table-hover-bg:        var(--bg-hover);
-  --bs-table-hover-color:     var(--text-main);
+  --bs-table-color: var(--text-main);
+  --bs-table-bg: var(--bg-soft);
+  --bs-table-border-color: var(--border-color);
+  --bs-table-striped-bg: var(--bg-softer);
+  --bs-table-striped-color: var(--text-main);
+  --bs-table-active-bg: var(--bg-softer);
+  --bs-table-active-color: var(--text-main);
+  --bs-table-hover-bg: var(--bg-hover);
+  --bs-table-hover-color: var(--text-main);
   color: var(--text-main);
   border-color: var(--border-color);
 }
@@ -800,54 +891,109 @@ html:not([data-theme="dark"]) #theme-light:hover {
 }
 
 /* Bootstrap modal body — inherit card token instead of default white */
-.modal-body { background-color: var(--bg-card); color: var(--text-main); }
+.modal-body {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
 
 /* Bootstrap form controls in dark mode (checkboxes/radios + selects) */
-[data-theme="dark"] .form-check-input {
+[data-theme='dark'] .form-check-input {
   background-color: var(--bg-softer);
   border-color: var(--border-strong);
 }
-[data-theme="dark"] .form-check-input:checked {
+[data-theme='dark'] .form-check-input:checked {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
 }
-[data-theme="dark"] .form-select {
+[data-theme='dark'] .form-select {
   background-color: var(--bg-card);
   color: var(--text-main);
   border-color: var(--border-color);
 }
 
 /* Buttons — solid */
-.btn-success { background-color: var(--success-color) !important; border-color: var(--success-color) !important; color: var(--text-light) !important; }
-.btn-danger  { background-color: var(--danger-color)  !important; border-color: var(--danger-color)  !important; color: var(--text-light) !important; }
-.btn-warning { background-color: var(--warning-color) !important; border-color: var(--warning-color) !important; color: var(--text-main) !important; }
-.btn-info    { background-color: var(--accent-color)  !important; border-color: var(--accent-color)  !important; color: var(--text-light) !important; }
-.btn-secondary { background-color: var(--secondary-color) !important; border-color: var(--secondary-color) !important; color: var(--text-light) !important; }
+.btn-success {
+  background-color: var(--success-color) !important;
+  border-color: var(--success-color) !important;
+  color: var(--text-light) !important;
+}
+.btn-danger {
+  background-color: var(--danger-color) !important;
+  border-color: var(--danger-color) !important;
+  color: var(--text-light) !important;
+}
+.btn-warning {
+  background-color: var(--warning-color) !important;
+  border-color: var(--warning-color) !important;
+  color: var(--text-main) !important;
+}
+.btn-info {
+  background-color: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--text-light) !important;
+}
+.btn-secondary {
+  background-color: var(--secondary-color) !important;
+  border-color: var(--secondary-color) !important;
+  color: var(--text-light) !important;
+}
 
 /* Buttons — outline (light theme keeps Bootstrap defaults; dark theme tokenizes) */
-[data-theme="dark"] .btn-outline-secondary,
-[data-theme="dark"] .btn-outline-dark {
+[data-theme='dark'] .btn-outline-secondary,
+[data-theme='dark'] .btn-outline-dark {
   border-color: var(--border-strong);
   color: var(--text-main);
 }
-[data-theme="dark"] .btn-outline-secondary:hover,
-[data-theme="dark"] .btn-outline-dark:hover {
+[data-theme='dark'] .btn-outline-secondary:hover,
+[data-theme='dark'] .btn-outline-dark:hover {
   background-color: var(--bg-softer);
   color: var(--text-main);
 }
-[data-theme="dark"] .btn-outline-primary { border-color: var(--primary-color); color: var(--primary-color); }
-[data-theme="dark"] .btn-outline-primary:hover { background-color: var(--primary-color); color: var(--secondary-color); }
-[data-theme="dark"] .btn-outline-info    { border-color: var(--accent-color);  color: var(--accent-color); }
-[data-theme="dark"] .btn-outline-info:hover    { background-color: var(--accent-color);  color: var(--secondary-color); }
-[data-theme="dark"] .btn-outline-success { border-color: var(--success-color); color: var(--success-color); }
-[data-theme="dark"] .btn-outline-success:hover { background-color: var(--success-color); color: var(--secondary-color); }
-[data-theme="dark"] .btn-outline-danger  { border-color: var(--danger-color);  color: var(--danger-color); }
-[data-theme="dark"] .btn-outline-danger:hover  { background-color: var(--danger-color);  color: var(--secondary-color); }
-[data-theme="dark"] .btn-outline-warning { border-color: var(--warning-color); color: var(--warning-color); }
-[data-theme="dark"] .btn-outline-warning:hover { background-color: var(--warning-color); color: var(--secondary-color); }
+[data-theme='dark'] .btn-outline-primary {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+[data-theme='dark'] .btn-outline-primary:hover {
+  background-color: var(--primary-color);
+  color: var(--secondary-color);
+}
+[data-theme='dark'] .btn-outline-info {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+[data-theme='dark'] .btn-outline-info:hover {
+  background-color: var(--accent-color);
+  color: var(--secondary-color);
+}
+[data-theme='dark'] .btn-outline-success {
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+[data-theme='dark'] .btn-outline-success:hover {
+  background-color: var(--success-color);
+  color: var(--secondary-color);
+}
+[data-theme='dark'] .btn-outline-danger {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+[data-theme='dark'] .btn-outline-danger:hover {
+  background-color: var(--danger-color);
+  color: var(--secondary-color);
+}
+[data-theme='dark'] .btn-outline-warning {
+  border-color: var(--warning-color);
+  color: var(--warning-color);
+}
+[data-theme='dark'] .btn-outline-warning:hover {
+  background-color: var(--warning-color);
+  color: var(--secondary-color);
+}
 
 /* Bootstrap link/btn-link in dark mode */
-[data-theme="dark"] .btn-link { color: var(--blue-link); }
+[data-theme='dark'] .btn-link {
+  color: var(--blue-link);
+}
 
 /* Google Sign-In button — mirrors the design system .btn-google (light + dark).
    These are Google's official brand colors, so they stay fixed rather than
@@ -877,24 +1023,38 @@ html:not([data-theme="dark"]) #theme-light:hover {
   box-shadow: 0 0 0 3px var(--primary-soft);
   outline: none;
 }
-.btn-google.btn-sm { padding: 5px 12px; }
-.btn-google.btn-lg { padding: 11px 22px; }
-.btn-google .g-logo { width: 18px; height: 18px; flex-shrink: 0; }
-.btn-google.btn-sm .g-logo { width: 16px; height: 16px; }
-.btn-google.btn-lg .g-logo { width: 20px; height: 20px; }
+.btn-google.btn-sm {
+  padding: 5px 12px;
+}
+.btn-google.btn-lg {
+  padding: 11px 22px;
+}
+.btn-google .g-logo {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.btn-google.btn-sm .g-logo {
+  width: 16px;
+  height: 16px;
+}
+.btn-google.btn-lg .g-logo {
+  width: 20px;
+  height: 20px;
+}
 
-[data-theme="dark"] .btn-google {
+[data-theme='dark'] .btn-google {
   background-color: #131314;
   color: #e3e3e3;
   border-color: #5f6368;
   box-shadow: none;
 }
-[data-theme="dark"] .btn-google:hover {
+[data-theme='dark'] .btn-google:hover {
   background-color: #1d1e20;
   border-color: #8e918f;
   color: #e3e3e3;
 }
-[data-theme="dark"] .btn-google:focus-visible {
+[data-theme='dark'] .btn-google:focus-visible {
   border-color: var(--primary-color);
   color: #e3e3e3;
   box-shadow: 0 0 0 3px var(--primary-soft);
@@ -907,45 +1067,58 @@ html:not([data-theme="dark"]) #theme-light:hover {
 }
 
 /* Admin .navbar-light — when used on admin pages, keep readable in dark mode */
-[data-theme="dark"] .navbar-light.bg-light {
+[data-theme='dark'] .navbar-light.bg-light {
   background-color: var(--bg-header) !important;
   border-color: var(--border-color) !important;
 }
-[data-theme="dark"] .navbar-light .navbar-brand,
-[data-theme="dark"] .navbar-light .nav-link {
+[data-theme='dark'] .navbar-light .navbar-brand,
+[data-theme='dark'] .navbar-light .nav-link {
   color: var(--text-main);
 }
-[data-theme="dark"] .navbar-light .nav-link:hover,
-[data-theme="dark"] .navbar-light .nav-link.active {
+[data-theme='dark'] .navbar-light .nav-link:hover,
+[data-theme='dark'] .navbar-light .nav-link.active {
   color: var(--primary-color);
 }
-[data-theme="dark"] .navbar-light .navbar-toggler {
+[data-theme='dark'] .navbar-light .navbar-toggler {
   border-color: rgba(255, 255, 255, 0.5);
 }
-[data-theme="dark"] .navbar-light .navbar-toggler-icon {
+[data-theme='dark'] .navbar-light .navbar-toggler-icon {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255%2C255%2C255%2C0.85%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }
 
 /* Bootstrap's `.alert-warning` (the others share names with our utilities at line ~284) */
-.alert-warning { background-color: var(--alert-warn-bg); color: var(--alert-warn-fg); border-color: var(--alert-warn-border); }
+.alert-warning {
+  background-color: var(--alert-warn-bg);
+  color: var(--alert-warn-fg);
+  border-color: var(--alert-warn-border);
+}
 
 /* List groups */
-[data-theme="dark"] .list-group-item {
+[data-theme='dark'] .list-group-item {
   background-color: var(--bg-card);
   color: var(--text-main);
   border-color: var(--border-color);
 }
 
 /* Dropdown menus */
-[data-theme="dark"] .dropdown-menu {
+[data-theme='dark'] .dropdown-menu {
   background-color: var(--bg-card);
   border-color: var(--border-color);
 }
-[data-theme="dark"] .dropdown-item { color: var(--text-main); }
-[data-theme="dark"] .dropdown-item:hover,
-[data-theme="dark"] .dropdown-item:focus { background-color: var(--bg-softer); color: var(--text-main); }
+[data-theme='dark'] .dropdown-item {
+  color: var(--text-main);
+}
+[data-theme='dark'] .dropdown-item:hover,
+[data-theme='dark'] .dropdown-item:focus {
+  background-color: var(--bg-softer);
+  color: var(--text-main);
+}
 
 /* Bootstrap badge utilities — keep brand backgrounds, fix the foreground for tokens */
-[data-theme="dark"] .badge.bg-light { background-color: var(--bg-softer) !important; color: var(--text-main) !important; }
-[data-theme="dark"] .badge.bg-secondary { color: var(--text-light) !important; }
-
+[data-theme='dark'] .badge.bg-light {
+  background-color: var(--bg-softer) !important;
+  color: var(--text-main) !important;
+}
+[data-theme='dark'] .badge.bg-secondary {
+  color: var(--text-light) !important;
+}

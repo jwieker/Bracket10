@@ -37,16 +37,19 @@ const ESPN_TEAMS_URL =
 const ESPN_TEAM_URL =
   'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams';
 
-const MAP_PATH      = path.join(__dirname, '../src/config/espnTeamMap.json');
-const OVERRIDE_PATH = path.join(__dirname, '../src/config/espnIDOverrides.json');
+const MAP_PATH = path.join(__dirname, '../src/config/espnTeamMap.json');
+const OVERRIDE_PATH = path.join(
+  __dirname,
+  '../src/config/espnIDOverrides.json',
+);
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
-const isForce  = args.includes('--force');
+const isForce = args.includes('--force');
 // Any non-flag arg is treated as the ESPN display name to run for a single team
-const singleTeamName = args.find(a => !a.startsWith('--')) ?? null;
+const singleTeamName = args.find((a) => !a.startsWith('--')) ?? null;
 
 // ── Load espnTeamMap ──────────────────────────────────────────────────────────
 
@@ -89,7 +92,8 @@ async function fetchEspnTeamsIndex() {
 async function fetchEspnTeamDetail(espnID) {
   const url = `${ESPN_TEAM_URL}/${espnID}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`ESPN team detail HTTP ${res.status} for espnID=${espnID}`);
+  if (!res.ok)
+    throw new Error(`ESPN team detail HTTP ${res.status} for espnID=${espnID}`);
   const data = await res.json();
   return data?.team ?? null;
 }
@@ -100,19 +104,19 @@ function extractEspnFields(teamDetail) {
   // Find the best 500px logo: prefer "default" (full-colour on white), fall back to first logo
   const logos = teamDetail.logos ?? [];
   const defaultLogo =
-    logos.find(l => l.rel?.includes('default') && !l.rel?.includes('dark')) ??
+    logos.find((l) => l.rel?.includes('default') && !l.rel?.includes('dark')) ??
     logos[0] ??
     null;
 
   return {
-    espnID:           Number(teamDetail.id),
-    espnSlug:         teamDetail.slug         ?? null,
-    espnAbbreviation: teamDetail.abbreviation  ?? null,
-    espnShortName:    teamDetail.shortDisplayName ?? null,
-    primaryColor:     teamDetail.color         ?? null,
-    alternateColor:   teamDetail.alternateColor ?? null,
-    logoURL:          defaultLogo?.href        ?? null,
-    fetchedAt:        new Date().toISOString(),
+    espnID: Number(teamDetail.id),
+    espnSlug: teamDetail.slug ?? null,
+    espnAbbreviation: teamDetail.abbreviation ?? null,
+    espnShortName: teamDetail.shortDisplayName ?? null,
+    primaryColor: teamDetail.color ?? null,
+    alternateColor: teamDetail.alternateColor ?? null,
+    logoURL: defaultLogo?.href ?? null,
+    fetchedAt: new Date().toISOString(),
   };
 }
 
@@ -126,7 +130,10 @@ async function hasEspnData(sID) {
 // ── Write ESPN data to Firestore ──────────────────────────────────────────────
 
 async function writeEspnData(sID, fields) {
-  await db.collection('school').doc(String(sID)).set({ espn: fields }, { merge: true });
+  await db
+    .collection('school')
+    .doc(String(sID))
+    .set({ espn: fields }, { merge: true });
 }
 
 // ── Process a single team ─────────────────────────────────────────────────────
@@ -141,7 +148,9 @@ async function processTeam(displayName, sID, espnIndex, idOverrides) {
     espnID = espnIndexEntry.id;
   } else if (idOverrides[displayName]) {
     espnID = String(idOverrides[displayName]);
-    console.log(`  ℹ  Not in ESPN index — using ID override (espnID=${espnID})`);
+    console.log(
+      `  ℹ  Not in ESPN index — using ID override (espnID=${espnID})`,
+    );
   } else {
     console.log(`  ⚠  Not found in ESPN teams index — skipping.`);
     return { status: 'not_found' };
@@ -151,7 +160,9 @@ async function processTeam(displayName, sID, espnIndex, idOverrides) {
   if (!isForce && !isDryRun) {
     const alreadyExists = await hasEspnData(sID);
     if (alreadyExists) {
-      console.log(`  ✓  ESPN data already exists in DB — skipping. (use --force to overwrite)`);
+      console.log(
+        `  ✓  ESPN data already exists in DB — skipping. (use --force to overwrite)`,
+      );
       return { status: 'skipped' };
     }
   }
@@ -190,9 +201,10 @@ async function processTeam(displayName, sID, espnIndex, idOverrides) {
 
 async function main() {
   if (isDryRun) console.log('🔍 DRY RUN mode — no DB writes will occur.\n');
-  if (isForce)  console.log('⚡ FORCE mode — existing ESPN data will be overwritten.\n');
+  if (isForce)
+    console.log('⚡ FORCE mode — existing ESPN data will be overwritten.\n');
 
-  const teamMap    = loadTeamMap();
+  const teamMap = loadTeamMap();
   const idOverrides = loadIDOverrides();
 
   // Determine which teams to process
@@ -216,7 +228,12 @@ async function main() {
   // Process each team
   const results = { written: 0, skipped: 0, not_found: 0, error: 0 };
   for (const [displayName, sID] of teamsToProcess) {
-    const { status } = await processTeam(displayName, sID, espnIndex, idOverrides);
+    const { status } = await processTeam(
+      displayName,
+      sID,
+      espnIndex,
+      idOverrides,
+    );
     results[status] = (results[status] ?? 0) + 1;
   }
 
@@ -224,13 +241,15 @@ async function main() {
   if (isDryRun) console.log('  (DRY RUN — nothing was written)');
   console.log(`  Written:   ${results.written ?? 0}`);
   console.log(`  Skipped:   ${results.skipped ?? 0}  (already had ESPN data)`);
-  console.log(`  Not found: ${results.not_found ?? 0}  (displayName not in ESPN index)`);
+  console.log(
+    `  Not found: ${results.not_found ?? 0}  (displayName not in ESPN index)`,
+  );
   console.log(`  Errors:    ${results.error ?? 0}`);
 
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });

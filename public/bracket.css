@@ -42,7 +42,9 @@ svg.bracket-connectors path {
   flex-wrap: nowrap;
 }
 
-.bracket-wrapper .bracket-half { display: flex; }
+.bracket-wrapper .bracket-half {
+  display: flex;
+}
 
 .bracket-wrapper .round {
   display: flex;
@@ -71,7 +73,9 @@ svg.bracket-connectors path {
   line-height: 1.2;
 }
 
-.bracket-wrapper .region-label2 { max-width: 20px; }
+.bracket-wrapper .region-label2 {
+  max-width: 20px;
+}
 
 .bracket-wrapper .region-label-text {
   color: var(--text-main);
@@ -89,7 +93,9 @@ svg.bracket-connectors path {
 }
 
 .bracket-wrapper #regionTopRight,
-.bracket-wrapper #regionBottomRight { margin-left: 10px; }
+.bracket-wrapper #regionBottomRight {
+  margin-left: 10px;
+}
 
 .bracket-wrapper .matchup {
   display: flex;
@@ -114,7 +120,10 @@ svg.bracket-connectors path {
   color: var(--text-main);
   box-shadow: var(--shadow-sm);
   position: relative;
-  transition: border-color 0.1s ease-in-out, background-color 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+  transition:
+    border-color 0.1s ease-in-out,
+    background-color 0.1s ease-in-out,
+    box-shadow 0.1s ease-in-out;
   overflow: hidden;
   text-align: center;
 }
@@ -142,7 +151,9 @@ svg.bracket-connectors path {
   border-color: var(--text-main);
   box-shadow: var(--shadow-md);
 }
-.bracket-wrapper .team.picked span.name { color: var(--text-main); }
+.bracket-wrapper .team.picked span.name {
+  color: var(--text-main);
+}
 
 /* Pick correct: outcome confirmed as a win. */
 .bracket-wrapper .team.picked-win {
@@ -167,10 +178,14 @@ svg.bracket-connectors path {
 }
 
 /* Extra space between the top-4 and bottom-4 matchups within each R1 region */
-.bracket-wrapper .round.r1 .region .matchup:nth-child(4) { margin-bottom: .3rem; }
+.bracket-wrapper .round.r1 .region .matchup:nth-child(4) {
+  margin-bottom: 0.3rem;
+}
 
 /* Extra space between the two regions (e.g. East/South, West/Midwest) in R1 */
-.bracket-wrapper .round.r1 .region:first-child { margin-bottom: .4rem; }
+.bracket-wrapper .round.r1 .region:first-child {
+  margin-bottom: 0.4rem;
+}
 
 /* ── Phase 1: R1 merged matchup cards ───────────────────────────── */
 .bracket-wrapper .round.r1 .matchup {
@@ -200,11 +215,17 @@ svg.bracket-connectors path {
 }
 
 /* picked-loss carries a shadow elsewhere; suppress it inside the merged card */
-.bracket-wrapper .round.r1 .matchup .team.picked-loss               { box-shadow: none; }
+.bracket-wrapper .round.r1 .matchup .team.picked-loss {
+  box-shadow: none;
+}
 
-.bracket-wrapper .matchup .team:first-of-type { margin-bottom: 1px; }
+.bracket-wrapper .matchup .team:first-of-type {
+  margin-bottom: 1px;
+}
 
-.bracket-wrapper .championship-column .matchup .team:first-of-type { margin-bottom: 0; }
+.bracket-wrapper .championship-column .matchup .team:first-of-type {
+  margin-bottom: 0;
+}
 
 .bracket-wrapper .championship-column .matchup {
   min-height: var(--matchup-base-height);
@@ -215,7 +236,9 @@ svg.bracket-connectors path {
   gap: 2px;
 }
 
-.bracket-wrapper .final-matchup { margin-bottom: 45px; }
+.bracket-wrapper .final-matchup {
+  margin-bottom: 45px;
+}
 .bracket-wrapper .final-matchup .team {
   flex-grow: 2;
   height: var(--matchup-base-height);

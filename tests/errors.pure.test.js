@@ -61,25 +61,33 @@ describe('withErrorHandling', () => {
 
   test('re-throws ValidationError unchanged', async () => {
     const original = new ValidationError('bad', 'field');
-    const fn = withErrorHandling(async () => { throw original; });
+    const fn = withErrorHandling(async () => {
+      throw original;
+    });
     await expect(fn()).rejects.toBe(original);
   });
 
   test('re-throws DatabaseError unchanged', async () => {
     const original = new DatabaseError('db down', 'read');
-    const fn = withErrorHandling(async () => { throw original; });
+    const fn = withErrorHandling(async () => {
+      throw original;
+    });
     await expect(fn()).rejects.toBe(original);
   });
 
   test('re-throws ServiceError unchanged', async () => {
     const original = new ServiceError('svc err', 'myService');
-    const fn = withErrorHandling(async () => { throw original; });
+    const fn = withErrorHandling(async () => {
+      throw original;
+    });
     await expect(fn()).rejects.toBe(original);
   });
 
   test('wraps unknown errors in ServiceError', async () => {
-    const fn = withErrorHandling(async () => { throw new Error('unexpected'); }, 'myContext');
-    const err = await fn().catch(e => e);
+    const fn = withErrorHandling(async () => {
+      throw new Error('unexpected');
+    }, 'myContext');
+    const err = await fn().catch((e) => e);
     expect(err).toBeInstanceOf(ServiceError);
     expect(err.message).toBe('unexpected');
     expect(err.service).toBe('myContext');

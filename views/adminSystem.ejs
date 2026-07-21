@@ -62,9 +62,18 @@
             <div class="col-12 col-md-6">
                 <div class="card h-100">
                     <div class="card-header fw-semibold">Google Sign-in Sessions</div>
-                    <div class="card-body d-flex align-items-center">
+                    <div class="card-body d-flex flex-column align-items-start">
                         <div class="w-100">
                             <button class="btn btn-outline-danger w-100" type="button" id="clearGoogleSessionsBtn">Clear Google Sign-Ins</button>
+                        </div>
+                        <!-- Default scope preserves an admin console session merged onto the
+                             same session doc as a participant login (#428) — only check this
+                             for a real incident response that must also sign out admins. -->
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="clearGoogleSessionsIncludeAdmins">
+                            <label class="form-check-label" for="clearGoogleSessionsIncludeAdmins">
+                                Also sign out admin console sessions
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -83,6 +92,7 @@
             const clearCacheBtn = document.getElementById('clearCacheBtn');
             const clearCacheForm = document.getElementById('clearCacheForm');
             const clearGoogleSessionsBtn = document.getElementById('clearGoogleSessionsBtn');
+            const clearGoogleSessionsIncludeAdmins = document.getElementById('clearGoogleSessionsIncludeAdmins');
 
             if (clearCacheBtn) {
                 clearCacheBtn.addEventListener('click', async () => {
@@ -113,11 +123,16 @@
 
             if (clearGoogleSessionsBtn) {
                 clearGoogleSessionsBtn.addEventListener('click', async () => {
-                    if (confirm("Are you sure you want to clear all Google sign-in sessions? You will be signed out.")) {
+                    const includeAdmins = !!clearGoogleSessionsIncludeAdmins?.checked;
+                    const confirmMsg = includeAdmins
+                        ? "Are you sure you want to clear all Google sign-in sessions, including other admins' console sessions? You will be signed out."
+                        : "Are you sure you want to clear all Google sign-in sessions? You will be signed out.";
+                    if (confirm(confirmMsg)) {
                         try {
                             const response = await fetch('/clearGoogleSessions', {
                                 method: 'POST',
-                                headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' }
+                                headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                body: JSON.stringify({ includeAdmins })
                             });
                             if (response.ok) {
                                 const responseData = await response.json();

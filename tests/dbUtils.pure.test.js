@@ -9,7 +9,8 @@ describe('retryOperation', () => {
   });
 
   test('retries on failure and succeeds on third attempt', async () => {
-    const op = vi.fn()
+    const op = vi
+      .fn()
       .mockRejectedValueOnce(new Error('fail 1'))
       .mockRejectedValueOnce(new Error('fail 2'))
       .mockResolvedValueOnce('success');
@@ -38,7 +39,8 @@ describe('retryOperation', () => {
       return 0;
     });
 
-    const op = vi.fn()
+    const op = vi
+      .fn()
       .mockRejectedValueOnce(new Error('fail 1'))
       .mockRejectedValueOnce(new Error('fail 2'))
       .mockResolvedValueOnce('done');

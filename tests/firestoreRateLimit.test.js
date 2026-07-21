@@ -3,7 +3,13 @@ import Logger from '../src/utils/logger.js';
 
 vi.mock('../src/utils/logger.js', () => ({
   __esModule: true,
-  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), performance: vi.fn() },
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    performance: vi.fn(),
+  },
 }));
 
 vi.mock('@google-cloud/firestore', () => ({
@@ -17,7 +23,9 @@ let storeShouldThrow = false;
 vi.mock('../src/config/firestore.js', () => {
   const ref = {
     get: vi.fn(async () => ({ exists: stored != null, data: () => stored })),
-    set: vi.fn((data) => { stored = data; }),
+    set: vi.fn((data) => {
+      stored = data;
+    }),
   };
   const tx = { get: (r) => r.get(), set: (r, data) => r.set(data) };
   return {
@@ -53,15 +61,23 @@ describe('firestoreRateLimit', () => {
 
   test('rejects invalid configuration', () => {
     const key = () => 'k';
-    expect(() => firestoreRateLimit({ windowMs: 0, max: 5, keyGenerator: key })).toThrow();
-    expect(() => firestoreRateLimit({ windowMs: 1000, max: 0, keyGenerator: key })).toThrow();
+    expect(() =>
+      firestoreRateLimit({ windowMs: 0, max: 5, keyGenerator: key }),
+    ).toThrow();
+    expect(() =>
+      firestoreRateLimit({ windowMs: 1000, max: 0, keyGenerator: key }),
+    ).toThrow();
     expect(() => firestoreRateLimit({ windowMs: 1000, max: 5 })).toThrow();
   });
 
   test('allows requests at or under max', async () => {
     // stored at count 4; incrementWindow returns count 5 (== max, still allowed)
     stored = { count: 4, resetTime: Date.now() + 10000 };
-    const limiter = firestoreRateLimit({ windowMs: 1000, max: 5, keyGenerator: (r) => `login:${r.ip}` });
+    const limiter = firestoreRateLimit({
+      windowMs: 1000,
+      max: 5,
+      keyGenerator: (r) => `login:${r.ip}`,
+    });
     const next = vi.fn();
 
     await limiter(makeReq(), makeRes(), next);
@@ -72,7 +88,12 @@ describe('firestoreRateLimit', () => {
   test('blocks requests over max with 429 and Retry-After', async () => {
     // stored at count == max; incrementWindow returns count+1 (blocked, no write)
     stored = { count: 5, resetTime: Date.now() + 30000 };
-    const limiter = firestoreRateLimit({ windowMs: 1000, max: 5, keyGenerator: () => 'k', message: 'slow down' });
+    const limiter = firestoreRateLimit({
+      windowMs: 1000,
+      max: 5,
+      keyGenerator: () => 'k',
+      message: 'slow down',
+    });
     const next = vi.fn();
     const res = makeRes();
 
@@ -81,12 +102,19 @@ describe('firestoreRateLimit', () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(429);
     expect(res.send).toHaveBeenCalledWith('slow down');
-    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(Number));
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Retry-After',
+      expect.any(Number),
+    );
   });
 
   test('fails open and logs when the store throws', async () => {
     storeShouldThrow = true;
-    const limiter = firestoreRateLimit({ windowMs: 1000, max: 5, keyGenerator: () => 'k' });
+    const limiter = firestoreRateLimit({
+      windowMs: 1000,
+      max: 5,
+      keyGenerator: () => 'k',
+    });
     const next = vi.fn();
 
     await limiter(makeReq(), makeRes(), next);
@@ -97,7 +125,11 @@ describe('firestoreRateLimit', () => {
 
   test('kill switch bypasses the store entirely', async () => {
     process.env.RATE_LIMIT_FIRESTORE_DISABLED = '1';
-    const limiter = firestoreRateLimit({ windowMs: 1000, max: 5, keyGenerator: () => 'k' });
+    const limiter = firestoreRateLimit({
+      windowMs: 1000,
+      max: 5,
+      keyGenerator: () => 'k',
+    });
     const next = vi.fn();
 
     await limiter(makeReq(), makeRes(), next);

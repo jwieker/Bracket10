@@ -7,6 +7,7 @@ import {
   parseYearOrDefault,
   parsePositiveInt,
   validateConferencePayload,
+  validateEntryId,
 } from '../src/utils/controllerUtils.js';
 import { ValidationError, ServiceError } from '../src/utils/errors.js';
 
@@ -19,7 +20,14 @@ function mockRes() {
 }
 
 function mockReq(overrides = {}) {
-  return { body: {}, query: {}, params: {}, method: 'GET', url: '/test', ...overrides };
+  return {
+    body: {},
+    query: {},
+    params: {},
+    method: 'GET',
+    url: '/test',
+    ...overrides,
+  };
 }
 
 describe('successResponse', () => {
@@ -27,13 +35,19 @@ describe('successResponse', () => {
     const res = mockRes();
     successResponse(res, { id: 1 }, 'Done');
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ success: true, message: 'Done', data: { id: 1 } });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Done',
+      data: { id: 1 },
+    });
   });
 
   test('uses default message "Success"', () => {
     const res = mockRes();
     successResponse(res, null);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Success' }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Success' }),
+    );
   });
 });
 
@@ -42,7 +56,10 @@ describe('errorResponse', () => {
     const res = mockRes();
     errorResponse(res, 404, 'Not found');
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.json).toHaveBeenCalledWith({ success: false, message: 'Not found' });
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'Not found',
+    });
   });
 
   test('includes details when provided', () => {
@@ -139,7 +156,9 @@ describe('parseYearOrDefault', () => {
     // This is the V1 regression: the old `Number(x) || default` pattern silently
     // accepted NaN/negatives by falling through to the default. The new validator
     // must surface bad input rather than masking it.
-    expect(() => parseYearOrDefault('not-a-year', 2024)).toThrow(ValidationError);
+    expect(() => parseYearOrDefault('not-a-year', 2024)).toThrow(
+      ValidationError,
+    );
     expect(() => parseYearOrDefault('-5', 2024)).toThrow(ValidationError);
     expect(() => parseYearOrDefault('99999', 2024)).toThrow(ValidationError);
   });
@@ -168,43 +187,92 @@ describe('parsePositiveInt', () => {
   });
 
   test('enforces max bound when supplied', () => {
-    expect(() => parsePositiveInt('9', 'count', { max: 8 })).toThrow(ValidationError);
+    expect(() => parsePositiveInt('9', 'count', { max: 8 })).toThrow(
+      ValidationError,
+    );
     expect(parsePositiveInt('8', 'count', { max: 8 })).toBe(8);
+  });
+});
+
+describe('validateEntryId', () => {
+  test('accepts digit strings from 1 to 20 digits', () => {
+    expect(() => validateEntryId('1')).not.toThrow();
+    expect(() => validateEntryId('123456789012345')).not.toThrow(); // 15 digits, generateUniqueEntryId's real max
+    expect(() => validateEntryId('1'.repeat(20))).not.toThrow(); // upper bound
+  });
+
+  test('rejects a path-shaped id (#335)', () => {
+    expect(() => validateEntryId('x/schoolRecords/y')).toThrow(ValidationError);
+  });
+
+  test('rejects an empty string', () => {
+    expect(() => validateEntryId('')).toThrow(ValidationError);
+  });
+
+  test('rejects a 21+ digit numeric string', () => {
+    expect(() => validateEntryId('1'.repeat(21))).toThrow(ValidationError);
+  });
+
+  test('rejects non-string input, e.g. an array from a repeated query param (?entryId=1&entryId=2)', () => {
+    expect(() => validateEntryId(['1', '2'])).toThrow(ValidationError);
+    expect(() => validateEntryId(123)).toThrow(ValidationError);
+    expect(() => validateEntryId(undefined)).toThrow(ValidationError);
+    expect(() => validateEntryId(null)).toThrow(ValidationError);
   });
 });
 
 describe('validateConferencePayload', () => {
   test('accepts a well-formed payload', () => {
-    expect(() => validateConferencePayload({
-      slug: 'acc',
-      name: 'Atlantic Coast Conference',
-      shortName: 'ACC',
-      division: 'I',
-    })).not.toThrow();
+    expect(() =>
+      validateConferencePayload({
+        slug: 'acc',
+        name: 'Atlantic Coast Conference',
+        shortName: 'ACC',
+        division: 'I',
+      }),
+    ).not.toThrow();
   });
 
   test('rejects empty or missing slug', () => {
-    expect(() => validateConferencePayload({ slug: '', name: 'X' })).toThrow(ValidationError);
-    expect(() => validateConferencePayload({ name: 'X' })).toThrow(ValidationError);
+    expect(() => validateConferencePayload({ slug: '', name: 'X' })).toThrow(
+      ValidationError,
+    );
+    expect(() => validateConferencePayload({ name: 'X' })).toThrow(
+      ValidationError,
+    );
   });
 
   test('rejects slug with disallowed characters (uppercase, spaces, punctuation)', () => {
-    expect(() => validateConferencePayload({ slug: 'Big-12', name: 'Big 12' })).toThrow(ValidationError);
-    expect(() => validateConferencePayload({ slug: 'big 12', name: 'Big 12' })).toThrow(ValidationError);
-    expect(() => validateConferencePayload({ slug: 'big.12', name: 'Big 12' })).toThrow(ValidationError);
+    expect(() =>
+      validateConferencePayload({ slug: 'Big-12', name: 'Big 12' }),
+    ).toThrow(ValidationError);
+    expect(() =>
+      validateConferencePayload({ slug: 'big 12', name: 'Big 12' }),
+    ).toThrow(ValidationError);
+    expect(() =>
+      validateConferencePayload({ slug: 'big.12', name: 'Big 12' }),
+    ).toThrow(ValidationError);
   });
 
   test('rejects slug longer than 64 chars', () => {
-    expect(() => validateConferencePayload({ slug: 'a'.repeat(65), name: 'X' })).toThrow(ValidationError);
+    expect(() =>
+      validateConferencePayload({ slug: 'a'.repeat(65), name: 'X' }),
+    ).toThrow(ValidationError);
   });
 
   test('rejects empty or oversized name', () => {
-    expect(() => validateConferencePayload({ slug: 'acc', name: '' })).toThrow(ValidationError);
-    expect(() => validateConferencePayload({ slug: 'acc', name: 'a'.repeat(129) })).toThrow(ValidationError);
+    expect(() => validateConferencePayload({ slug: 'acc', name: '' })).toThrow(
+      ValidationError,
+    );
+    expect(() =>
+      validateConferencePayload({ slug: 'acc', name: 'a'.repeat(129) }),
+    ).toThrow(ValidationError);
   });
 
   test('allows shortName and division to be omitted', () => {
-    expect(() => validateConferencePayload({ slug: 'acc', name: 'Atlantic' })).not.toThrow();
+    expect(() =>
+      validateConferencePayload({ slug: 'acc', name: 'Atlantic' }),
+    ).not.toThrow();
   });
 });
 
@@ -227,15 +295,19 @@ describe('controllerWrapper', () => {
   test('returns 400 json for ValidationError (field is non-sensitive, kept)', async () => {
     const res = mockRes();
     const req = mockReq();
-    const inner = vi.fn().mockRejectedValue(new ValidationError('bad field', 'email'));
+    const inner = vi
+      .fn()
+      .mockRejectedValue(new ValidationError('bad field', 'email'));
     const wrapped = controllerWrapper(inner);
     await wrapped(req, res);
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Validation Error',
-      message: 'bad field',
-      field: 'email',
-    }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Validation Error',
+        message: 'bad field',
+        field: 'email',
+      }),
+    );
   });
 
   // #168 regression: the internal `service` name and raw message must NOT be
@@ -245,7 +317,9 @@ describe('controllerWrapper', () => {
     delete process.env.DEBUG_ERRORS;
     const res = mockRes();
     const req = mockReq();
-    const inner = vi.fn().mockRejectedValue(new ServiceError('svc down', 'myService'));
+    const inner = vi
+      .fn()
+      .mockRejectedValue(new ServiceError('svc down', 'myService'));
     const wrapped = controllerWrapper(inner);
     await wrapped(req, res);
     expect(res.status).toHaveBeenCalledWith(500);
@@ -261,15 +335,19 @@ describe('controllerWrapper', () => {
     process.env.DEBUG_ERRORS = '1';
     const res = mockRes();
     const req = mockReq();
-    const inner = vi.fn().mockRejectedValue(new ServiceError('svc down', 'myService'));
+    const inner = vi
+      .fn()
+      .mockRejectedValue(new ServiceError('svc down', 'myService'));
     const wrapped = controllerWrapper(inner);
     await wrapped(req, res);
     expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Service Error',
-      message: 'svc down',
-      service: 'myService',
-    }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Service Error',
+        message: 'svc down',
+        service: 'myService',
+      }),
+    );
   });
 
   test('returns 500 json for unknown error', async () => {
@@ -279,8 +357,10 @@ describe('controllerWrapper', () => {
     const wrapped = controllerWrapper(inner);
     await wrapped(req, res);
     expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Internal Server Error',
-    }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Internal Server Error',
+      }),
+    );
   });
 });

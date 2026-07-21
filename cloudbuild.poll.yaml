@@ -22,14 +22,14 @@ steps:
     id: Deploy
     entrypoint: gcloud
     args:
-      - "run"
-      - "jobs"
-      - "deploy"
-      - "espn-poll"
-      - "--image"
-      - "us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA"
-      - "--region"
-      - "us-central1"
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'espn-poll'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/espn-poll/espn-poll-job:$COMMIT_SHA'

@@ -1,11 +1,11 @@
-import { teamRepository, conferenceRepository } from "../repositories/index.js";
-import { controllerWrapper } from "../utils/controllerUtils.js";
+import { teamRepository, conferenceRepository } from '../repositories/index.js';
+import { controllerWrapper } from '../utils/controllerUtils.js';
 
 // GET /viewTeam
 const viewTeam = controllerWrapper(async (req, res) => {
   const { teamId } = req.query;
   if (!teamId) {
-    return res.status(400).send("Missing teamId");
+    return res.status(400).send('Missing teamId');
   }
   const [team, conferences] = await Promise.all([
     teamRepository.getSchoolById(Number(teamId)),
@@ -13,17 +13,17 @@ const viewTeam = controllerWrapper(async (req, res) => {
   ]);
 
   if (!team) {
-    return res.status(404).send("School not found");
+    return res.status(404).send('School not found');
   }
 
-  res.render("editTeam", { team, isNew: false, conferences });
-}, "viewTeam");
+  res.render('editTeam', { team, isNew: false, conferences });
+}, 'viewTeam');
 
 // POST /updateTeam
 const updateTeam = controllerWrapper(async (req, res) => {
   const { sid, name, mascot, nameNick, confID } = req.body;
   if (!sid || !name) {
-    return res.status(400).send("Missing required fields");
+    return res.status(400).send('Missing required fields');
   }
 
   // Parse conferenceHistory rows submitted from form:
@@ -32,8 +32,8 @@ const updateTeam = controllerWrapper(async (req, res) => {
   let conferenceHistory;
   if (historyRaw && Array.isArray(historyRaw)) {
     conferenceHistory = historyRaw
-      .filter(row => row.confID && row.confID.trim() !== '')
-      .map(row => ({
+      .filter((row) => row.confID && row.confID.trim() !== '')
+      .map((row) => ({
         confID: row.confID.trim(),
         startYear: row.startYear ? Number(row.startYear) : null,
         endYear: row.endYear ? Number(row.endYear) : null,
@@ -55,40 +55,56 @@ const updateTeam = controllerWrapper(async (req, res) => {
     };
   }
 
-  await teamRepository.updateSchool({ sid: Number(sid), name, mascot, nameNick, confID });
+  await teamRepository.updateSchool({
+    sid: Number(sid),
+    name,
+    mascot,
+    nameNick,
+    confID,
+  });
   if (conferenceHistory) {
-    await teamRepository.updateSchoolConferenceHistory(Number(sid), conferenceHistory);
+    await teamRepository.updateSchoolConferenceHistory(
+      Number(sid),
+      conferenceHistory,
+    );
   }
   if (espn) {
     await teamRepository.updateSchoolEspn(Number(sid), espn);
   }
 
   res.redirect(`/viewTeam?teamId=${sid}`);
-}, "updateTeam");
+}, 'updateTeam');
 
 // Add this controller for finding teams by name
 const findTeam = controllerWrapper(async (req, res) => {
   const { name } = req.query;
   if (!name) {
-    return res.status(400).json({ error: "Name is required." });
+    return res.status(400).json({ error: 'Name is required.' });
   }
   const teams = await teamRepository.findSchoolsByName(name);
   res.json(teams);
-}, "findTeam");
+}, 'findTeam');
 
 const addTeamPage = controllerWrapper(async (req, res) => {
   const conferences = await conferenceRepository.getAllConferences();
-  res.render("editTeam", {
-    team: { sid: "", name: "", mascot: "", nameNick: "", confID: "", conferenceHistory: [] },
+  res.render('editTeam', {
+    team: {
+      sid: '',
+      name: '',
+      mascot: '',
+      nameNick: '',
+      confID: '',
+      conferenceHistory: [],
+    },
     isNew: true,
     conferences,
   });
-}, "addTeamPage");
+}, 'addTeamPage');
 
 const addTeam = controllerWrapper(async (req, res) => {
   const { name, mascot, nameNick, confID } = req.body;
   if (!name) {
-    return res.status(400).send("School name is required");
+    return res.status(400).send('School name is required');
   }
   const maxSid = await teamRepository.getMaxSchoolId();
   const newSid = (maxSid || 0) + 1;
@@ -100,13 +116,13 @@ const addTeam = controllerWrapper(async (req, res) => {
     confID: confID || null,
   });
   res.redirect(`/viewTeam?teamId=${newSid}`);
-}, "addTeam");
+}, 'addTeam');
 
 // JSON-returning version for AJAX use (e.g. inline add on newTourneyGames page)
 const addTeamApi = controllerWrapper(async (req, res) => {
   const { name, mascot, nameNick, confID } = req.body;
   if (!name) {
-    return res.status(400).json({ error: "School name is required" });
+    return res.status(400).json({ error: 'School name is required' });
   }
   const maxSid = await teamRepository.getMaxSchoolId();
   const newSid = (maxSid || 0) + 1;
@@ -117,18 +133,20 @@ const addTeamApi = controllerWrapper(async (req, res) => {
     nameNick,
     confID: confID || null,
   });
-  res.status(201).json({ sid: newSid, name, mascot, nameNick, confID: confID || null });
-}, "addTeamApi");
+  res
+    .status(201)
+    .json({ sid: newSid, name, mascot, nameNick, confID: confID || null });
+}, 'addTeamApi');
 
 // Add this controller for deleting a team and redirecting to /updates
 const deleteTeam = controllerWrapper(async (req, res) => {
   const { sid } = req.body;
   if (!sid) {
-    return res.status(400).send("Missing team id");
+    return res.status(400).send('Missing team id');
   }
   await teamRepository.deleteSchool(Number(sid));
-  res.redirect("/updates");
-}, "deleteTeam");
+  res.redirect('/updates');
+}, 'deleteTeam');
 
 export {
   viewTeam,

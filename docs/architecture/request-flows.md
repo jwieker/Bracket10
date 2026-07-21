@@ -140,9 +140,9 @@ POST /updateWinner         gameController.updateWinner
                                    create canonical school record
                                  rounds 1–6: updateWinner doc + slot winner into nextGame +
                                    update both teams' record/points docs (parallel)
-                             → updateTotalPointsJustYear(year): updatePossiblePoints (FULL-year recalc
-                               of every entry) + clearAllCache()
-POST /undoGame             mirror image via gameService.undoTeamRecords + same full recalc
+                             → updatePointsForAffectedEntries(year, [winner, loser]): targeted recalc
+                               of only the entries holding either team (#369)
+POST /undoGame             mirror image via gameService.undoTeamRecords + same targeted recalc
 POST /admin/trigger-espn-poll   dry-run ONLY (runEspnPoll {dryRun:true}) — preview, never writes
 ```
 
@@ -153,7 +153,6 @@ sequenceDiagram
     participant GS as gameService
     participant GR as GameRepository
     participant TR as TeamRepository
-    participant PC as pointsController
     participant PS as pointsService
     participant ER as EntryRepository
 
@@ -163,11 +162,10 @@ sequenceDiagram
     GS->>GR: updateNextGameTeam(nextGameID, spot, winner, year)
     Note over GR: Firestore transaction — looks up winner's name/seed and<br/>advances them into the next game; busts game + gameViewData_ caches
     GS->>TR: updateTeamRecord(winner …) and updateTeamRecord(loser …)
-    GC->>PC: updateTotalPointsJustYear(year)
-    PC->>PS: updatePossiblePoints(year)
-    Note over PS: Recalculates ALL entries for the year (chunked batches)
+    GC->>PS: updatePointsForAffectedEntries(year, [winner, loser])
+    Note over PS: Recalculates only the entries holding either team (#369)
     PS->>ER: updateMultipleEntryPoints(chunks)
-    PC->>PC: clearAllCache()
+    Note over ER: Busts standings caches (groupTeams_, entriesForGroup_, gameViewData_, …)
     GC-->>Admin: 200 OK
 ```
 
@@ -284,19 +282,19 @@ follow-up, not silently changed.
    `requireAdminSession`, which was renamed to `requireSiteAdmin` in the
    group-admin prep (2026-05-14). *Fixed in this pass.* Historical plans under
    `docs/plans/` intentionally keep the old name.
-2. **Two points-recalc strategies for the same operation** — manual
-   `/updateWinner` & `/undoGame` run `updateTotalPointsJustYear` (full-year
-   recalc of every entry + `clearAllCache`), while the poll job runs the
-   targeted `updatePointsForAffectedEntries`. Functionally both converge, but
-   the manual path pays the full Firestore read/write cost per click. Candidate
-   cleanup: point the manual path at the targeted recalc too.
-3. **Input validation drift between admin controllers** —
-   `tourneyController` validates with `parseYear`/`parsePositiveInt`, but
-   `gameController.updateWinner`/`undoGame` use bare `Number(req.body[...])`:
-   a missing/garbage `year` becomes `NaN` and flows into repository writes, and
-   a `winnerID` matching neither `team1ID` nor `team2ID` silently records
-   `team1ID` as the loser. Admin-only blast radius, but it's the one mutating
-   endpoint family without the shared parse helpers.
+2. **Two points-recalc strategies for the same operation** — *resolved (#369)*:
+   manual `/updateWinner` & `/undoGame` now run the same targeted
+   `updatePointsForAffectedEntries` the poll job uses (a recalc failure still
+   rejects so the route returns a 500 rather than a false success). The
+   full-year recalc survives only as the explicit `POST /updateTotalPoints`
+   repair action.
+3. **Input validation drift between admin controllers** — *resolved (#425)*:
+   `gameController.updateWinner`/`undoGame` now validate every field through
+   a shared `parseGameResultPayload` helper (`parsePositiveInt`/`parseYear`
+   plus winner-must-be-a-participant, round-in-`TOURNAMENT_ROUNDS`, and
+   nextGameSpot-1-or-2 checks) and 400 before any service call. Round 0
+   (First Four) and the championship game's empty `nextGameID` remain
+   accepted; the services and poll pipeline are unchanged.
 4. **Duplicate route → same controller** — `POST /tournamentGames` and
    `POST /editTournament` both map to `tourneyController.viewTournament`.
    One is legacy; pick one and retire the other.

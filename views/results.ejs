@@ -4,16 +4,16 @@
 <head>
     <%- include('partials/header') %>
         <!-- sorting -->
-        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/src/tablesort.min.js"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"
+            integrity="sha384-vhcBfNt762rNlbnxZsIJQSPWX7b+8NzToPmcW6J5cJzXSnOjZKS2LQ/O2uqLlHcX" crossorigin="anonymous"></script>
         <!-- <script nonce="<%= cspNonce %>" src='tablesort.number.js'></script> -->
-        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"></script>
+        <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/sorts/tablesort.number.min.js"
+            integrity="sha384-yt4K6HL9dLK27YW0wB3TsVyPTrtPn6Nk/l6dsN6bA7UPj+dnl1qMC+Ia2udCYEz1" crossorigin="anonymous"></script>
         <link rel="stylesheet" href="/table-styles.css">
 </head>
 
 <body>
-    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
-        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
-        crossorigin="anonymous"></script>
+    <!-- Popper.js is included in Bootstrap bundle, no need to load separately -->
     <!-- <div class="container mt-4 mb-5" style="max-width: 1400px; padding: 0 1rem;"> -->
 
     <%# Signed-in participant's own entry IDs (matched server-side; no emails here). %>
@@ -423,10 +423,10 @@
         <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
     </div>
 
-    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="groupDataJson"><%- JSON.stringify(groupData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- safeJson(gameData || {}) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- safeJson(regions || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- safeJson(teamData || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json" id="groupDataJson"><%- safeJson(groupData || []) %></script>
 
     <script nonce="<%= cspNonce %>">
         function esc(str) {
@@ -1419,7 +1419,8 @@
         });
 
     </script>
-    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"></script>
+    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/confetti-js@0.0.18/dist/index.min.js"
+        integrity="sha384-6hNzO4CSFdKToFM9OMNvmMuRuaR0eVeAFQVjuP1P+TbmMYmU7aG2i30kNjWxprKq" crossorigin="anonymous"></script>
 
 </body>
 

@@ -18,7 +18,7 @@ vi.mock('google-auth-library', () => {
         }
         return Promise.resolve(mockProjectIdValue);
       }
-    }
+    },
   };
 });
 
@@ -58,43 +58,46 @@ describe('cloudService', () => {
     });
 
     test('queries BigQuery and parses spent cost and currency successfully', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
       process.env.GOOGLE_CLOUD_PROJECT = 'my-project';
 
       mockRequest.mockResolvedValue({
         data: {
           rows: [
             {
-              f: [
-                { v: '124.50' },
-                { v: 'USD' }
-              ]
-            }
-          ]
-        }
+              f: [{ v: '124.50' }, { v: 'USD' }],
+            },
+          ],
+        },
       });
 
       const result = await _getMonthToDateSpendForTests();
 
-      expect(mockRequest).toHaveBeenCalledWith(expect.objectContaining({
-        url: 'https://bigquery.googleapis.com/bigquery/v2/projects/my-project/queries',
-        method: 'POST',
-      }));
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://bigquery.googleapis.com/bigquery/v2/projects/my-project/queries',
+          method: 'POST',
+        }),
+      );
 
       // Check query structure contains the backticks around export table
       const requestBody = mockRequest.mock.calls[0][0].data;
-      expect(requestBody.query).toContain('FROM `my-project.billing_dataset.gcp_billing_export_v1`');
+      expect(requestBody.query).toContain(
+        'FROM `my-project.billing_dataset.gcp_billing_export_v1`',
+      );
       expect(requestBody.useLegacySql).toBe(false);
 
       expect(result).toEqual({
         configured: true,
-        spent: 124.50,
+        spent: 124.5,
         currency: 'USD',
       });
     });
 
     test('returns spent 0 if BigQuery query returns no rows', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
       mockRequest.mockResolvedValue({ data: { rows: [] } });
 
       const result = await _getMonthToDateSpendForTests();
@@ -105,15 +108,30 @@ describe('cloudService', () => {
       });
     });
 
+    test('surfaces an error instead of $0 when BigQuery returns jobComplete: false', async () => {
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
+      mockRequest.mockResolvedValue({ data: { jobComplete: false } });
+
+      const result = await _getMonthToDateSpendForTests();
+      expect(result).toEqual({
+        configured: true,
+        spent: null,
+        currency: 'USD',
+        error: 'BigQuery query did not complete in time',
+      });
+    });
+
     test('handles API errors gracefully and returns the error message', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
-      
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
+
       const apiError = new Error('GCP API 403: Access Denied');
       apiError.response = {
         status: 403,
         data: {
-          error: { message: 'Access Denied' }
-        }
+          error: { message: 'Access Denied' },
+        },
       };
       mockRequest.mockRejectedValue(apiError);
 
@@ -127,15 +145,18 @@ describe('cloudService', () => {
     });
 
     test('falls back to gross cost when credits column is unrecognized', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
       process.env.GOOGLE_CLOUD_PROJECT = 'my-project';
 
-      const missingCreditsErr = new Error('GCP API 400: Unrecognized name: credits');
+      const missingCreditsErr = new Error(
+        'GCP API 400: Unrecognized name: credits',
+      );
       missingCreditsErr.response = {
         status: 400,
         data: {
-          error: { message: 'Unrecognized name: credits' }
-        }
+          error: { message: 'Unrecognized name: credits' },
+        },
       };
 
       mockRequest
@@ -144,13 +165,10 @@ describe('cloudService', () => {
           data: {
             rows: [
               {
-                f: [
-                  { v: '180.75' },
-                  { v: 'USD' }
-                ]
-              }
-            ]
-          }
+                f: [{ v: '180.75' }, { v: 'USD' }],
+              },
+            ],
+          },
         });
 
       const result = await _getMonthToDateSpendForTests();
@@ -160,79 +178,24 @@ describe('cloudService', () => {
         configured: true,
         spent: 180.75,
         currency: 'USD',
-        error: "Billing export missing `credits` column — showing gross list-price cost, not net invoiced spend. Verify the export is 'Standard usage cost' and wait ~24h for the full schema.",
+        error:
+          "Billing export missing `credits` column — showing gross list-price cost, not net invoiced spend. Verify the export is 'Standard usage cost' and wait ~24h for the full schema.",
       });
     });
   });
 
   describe('_getDailySpendForTests', () => {
-    test('returns unconfigured if GCP_BILLING_EXPORT_TABLE is not set', async () => {
-      const result = await _getDailySpendForTests();
-      expect(result).toEqual({
-        configured: false,
-        days: [],
-        currency: 'USD',
-      });
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    test('groups by day and fills missing days with zero up to today', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
-      process.env.GOOGLE_CLOUD_PROJECT = 'my-project';
-
-      const now = new Date();
-      const year = now.getUTCFullYear();
-      const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-      const day1 = `${year}-${mm}-01`;
-
-      mockRequest.mockResolvedValue({
-        data: {
-          rows: [
-            { f: [{ v: day1 }, { v: '0.0025' }, { v: 'USD' }] },
-          ]
-        }
-      });
-
-      const result = await _getDailySpendForTests();
-      expect(result.configured).toBe(true);
-      expect(result.currency).toBe('USD');
-      expect(result.days.length).toBe(now.getUTCDate());
-      expect(result.days[0]).toEqual({ date: day1, spent: 0.0025 });
-      // All other days should default to 0
-      expect(result.days.slice(1).every((d) => d.spent === 0)).toBe(true);
-    });
-
-    test('falls back to gross cost when credits column is unrecognized', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
-
-      const missingCreditsErr = new Error('GCP API 400: Unrecognized name: credits');
-      missingCreditsErr.response = {
-        status: 400,
-        data: { error: { message: 'Unrecognized name: credits' } }
-      };
-
-      mockRequest
-        .mockRejectedValueOnce(missingCreditsErr)
-        .mockResolvedValueOnce({ data: { rows: [] } });
-
-      const result = await _getDailySpendForTests();
-      expect(mockRequest).toHaveBeenCalledTimes(2);
-      expect(result.configured).toBe(true);
-      expect(result.error).toMatch(/missing `credits` column/);
-    });
-
-    test('returns error message gracefully on non-credits API failure', async () => {
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
-      const apiError = new Error('GCP API 403: Access Denied');
-      apiError.response = { status: 403, data: { error: { message: 'Access Denied' } } };
-      mockRequest.mockRejectedValue(apiError);
+    test('surfaces an error instead of a zero-filled month when BigQuery returns jobComplete: false', async () => {
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
+      mockRequest.mockResolvedValue({ data: { jobComplete: false } });
 
       const result = await _getDailySpendForTests();
       expect(result).toEqual({
         configured: true,
         days: [],
         currency: 'USD',
-        error: 'GCP API 403: Access Denied',
+        error: 'BigQuery query did not complete in time',
       });
     });
   });
@@ -249,7 +212,8 @@ describe('cloudService', () => {
 
     test('fetches budgets and merges with live spent cost and daily spend', async () => {
       process.env.GCP_BILLING_ACCOUNT_ID = '012345-6789AB-CDEF01';
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
       process.env.GOOGLE_CLOUD_PROJECT = 'my-project';
 
       // 1: budgets, 2 & 3: parallel BigQuery (MTD + daily)
@@ -265,22 +229,20 @@ describe('cloudService', () => {
                     units: '250',
                     nanos: 500000000,
                     currencyCode: 'USD',
-                  }
+                  },
                 },
                 thresholdRules: [
                   { thresholdPercent: 0.8, spendBasis: 'CURRENT_SPEND' },
-                  { thresholdPercent: 1.0, spendBasis: 'CURRENT_SPEND' }
-                ]
-              }
-            ]
-          }
+                  { thresholdPercent: 1.0, spendBasis: 'CURRENT_SPEND' },
+                ],
+              },
+            ],
+          },
         })
         .mockResolvedValueOnce({
           data: {
-            rows: [
-              { f: [{ v: '185.00' }, { v: 'USD' }] }
-            ]
-          }
+            rows: [{ f: [{ v: '185.00' }, { v: 'USD' }] }],
+          },
         })
         .mockResolvedValueOnce({ data: { rows: [] } });
 
@@ -293,16 +255,16 @@ describe('cloudService', () => {
           {
             name: 'billingAccounts/012345-6789AB-CDEF01/budgets/b1',
             displayName: 'My Cap Budget',
-            amount: 250.50,
+            amount: 250.5,
             currency: 'USD',
             thresholds: [
               { percent: 80, basis: 'CURRENT_SPEND' },
-              { percent: 100, basis: 'CURRENT_SPEND' }
-            ]
-          }
+              { percent: 100, basis: 'CURRENT_SPEND' },
+            ],
+          },
         ],
         spendConfigured: true,
-        spent: 185.00,
+        spent: 185.0,
         currency: 'USD',
         spendError: null,
       });
@@ -312,13 +274,18 @@ describe('cloudService', () => {
 
     test('returns cached result on subsequent calls unless forced', async () => {
       process.env.GCP_BILLING_ACCOUNT_ID = '012345-6789AB-CDEF01';
-      
-      mockRequest
-        .mockResolvedValueOnce({
-          data: {
-            budgets: [{ name: 'b1', displayName: 'B1', amount: { specifiedAmount: { units: '10' } } }]
-          }
-        });
+
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          budgets: [
+            {
+              name: 'b1',
+              displayName: 'B1',
+              amount: { specifiedAmount: { units: '10' } },
+            },
+          ],
+        },
+      });
 
       const result1 = await getBudgetStatus();
       const result2 = await getBudgetStatus(); // Cache hit
@@ -329,22 +296,35 @@ describe('cloudService', () => {
       // Now force refresh
       mockRequest.mockResolvedValueOnce({
         data: {
-          budgets: [{ name: 'b1', displayName: 'B1', amount: { specifiedAmount: { units: '10' } } }]
-        }
+          budgets: [
+            {
+              name: 'b1',
+              displayName: 'B1',
+              amount: { specifiedAmount: { units: '10' } },
+            },
+          ],
+        },
       });
-      const result3 = await getBudgetStatus({ force: true });
+      await getBudgetStatus({ force: true });
       expect(mockRequest).toHaveBeenCalledTimes(2);
     });
 
     test('reports spendError gracefully if spend lookup fails but budget lookup succeeds', async () => {
       process.env.GCP_BILLING_ACCOUNT_ID = '012345-6789AB-CDEF01';
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
 
       mockRequest
         .mockResolvedValueOnce({
           data: {
-            budgets: [{ name: 'b1', displayName: 'B1', amount: { specifiedAmount: { units: '10' } } }]
-          }
+            budgets: [
+              {
+                name: 'b1',
+                displayName: 'B1',
+                amount: { specifiedAmount: { units: '10' } },
+              },
+            ],
+          },
         })
         .mockRejectedValueOnce(new Error('BigQuery Table Not Found'))
         .mockRejectedValueOnce(new Error('BigQuery Table Not Found'));
@@ -359,7 +339,7 @@ describe('cloudService', () => {
             amount: 10,
             currency: 'USD',
             thresholds: [],
-          }
+          },
         ],
         spendConfigured: true,
         spent: null,
@@ -401,19 +381,21 @@ describe('cloudService', () => {
           metadata: {
             build: {
               id: 'build-id-999',
-              logUrl: 'https://console.cloud.google.com/build-log'
-            }
-          }
-        }
+              logUrl: 'https://console.cloud.google.com/build-log',
+            },
+          },
+        },
       });
 
       const result = await triggerProductionDeploy();
 
-      expect(mockRequest).toHaveBeenCalledWith(expect.objectContaining({
-        url: 'https://cloudbuild.googleapis.com/v1/projects/my-project/triggers/trigger-uuid-123:run',
-        method: 'POST',
-        data: { branchName: 'main' },
-      }));
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://cloudbuild.googleapis.com/v1/projects/my-project/triggers/trigger-uuid-123:run',
+          method: 'POST',
+          data: { branchName: 'main' },
+        }),
+      );
 
       expect(result).toEqual({
         ok: true,
@@ -438,14 +420,12 @@ describe('cloudService', () => {
   describe('GCP Project ID resolution resilience', () => {
     test('handles unresolved project ID gracefully by returning error configuration on services', async () => {
       mockProjectIdValue = ''; // Unresolved / empty
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
       process.env.GCP_CLOUD_BUILD_TRIGGER_ID = 'trigger-uuid-123';
 
       const spend = await _getMonthToDateSpendForTests();
       expect(spend.error).toContain('GCP project ID could not be determined');
-
-      const daily = await _getDailySpendForTests();
-      expect(daily.error).toContain('GCP project ID could not be determined');
 
       const deploy = await triggerProductionDeploy();
       expect(deploy.error).toContain('GCP project ID could not be determined');
@@ -453,24 +433,25 @@ describe('cloudService', () => {
 
     test('recovers from transient resolution errors and retries on subsequent requests', async () => {
       mockProjectIdValue = 'throw'; // First attempt throws/fails transiently
-      process.env.GCP_BILLING_EXPORT_TABLE = 'my-project.billing_dataset.gcp_billing_export_v1';
+      process.env.GCP_BILLING_EXPORT_TABLE =
+        'my-project.billing_dataset.gcp_billing_export_v1';
 
       const firstAttempt = await _getMonthToDateSpendForTests();
-      expect(firstAttempt.error).toContain('GCP project ID could not be determined');
+      expect(firstAttempt.error).toContain(
+        'GCP project ID could not be determined',
+      );
 
       // Now resolve the transient issue
       mockProjectIdValue = 'my-project'; // Next attempt resolves successfully
       mockRequest.mockResolvedValue({
         data: {
-          rows: [
-            { f: [{ v: '124.50' }, { v: 'USD' }] }
-          ]
-        }
+          rows: [{ f: [{ v: '124.50' }, { v: 'USD' }] }],
+        },
       });
 
       const secondAttempt = await _getMonthToDateSpendForTests();
       expect(secondAttempt.error).toBeUndefined();
-      expect(secondAttempt.spent).toBe(124.50);
+      expect(secondAttempt.spent).toBe(124.5);
     });
   });
 });

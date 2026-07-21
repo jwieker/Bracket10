@@ -6,11 +6,13 @@ WORKDIR /usr/src/app
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies (including dev dependencies for potential build steps)
-RUN npm ci --omit=dev && npm cache clean --force
+# Install dependencies (ignoring scripts like husky pre-commit hooks)
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
-# Production stage using distroless image (much smaller than Alpine)
-FROM gcr.io/distroless/nodejs24-debian12:latest AS production
+# Production stage using distroless image (much smaller than Alpine).
+# Pinned by digest so the runtime layer can't drift; Dependabot's docker
+# ecosystem will bump the digest. Tag at time of pinning: latest (nodejs24).
+FROM gcr.io/distroless/nodejs24-debian12:latest@sha256:61f4f4341db81820c24ce771b83d202eb6452076f58628cd536cc7d94a10978b AS production
 
 WORKDIR /usr/src/app
 

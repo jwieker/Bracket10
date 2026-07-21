@@ -4,13 +4,19 @@ import {
   getEntriesForUser,
   calculateMaxPossiblePoints,
   normalizeAndValidateEntryPicks,
-} from "../services/index.js";
-import { APP_CONFIG, thisYear, isRegistrationOpen } from "../config/app.js";
-import { gameRepository } from "../repositories/index.js";
-import { controllerWrapper, saveSession, regenerateSession } from "../utils/controllerUtils.js";
-import { ValidationError } from "../utils/errors.js";
-import { registerFailedAttempt } from "../middleware/rateLimit.js";
-import { extractPicks } from "../utils/entryPicksUtils.js";
+  resolveConfirmedPickNames,
+} from '../services/index.js';
+import { APP_CONFIG, thisYear, isRegistrationOpen } from '../config/app.js';
+import { gameRepository } from '../repositories/index.js';
+import {
+  controllerWrapper,
+  saveSession,
+  regenerateSession,
+  validateEntryId,
+} from '../utils/controllerUtils.js';
+import { ValidationError } from '../utils/errors.js';
+import { registerFailedAttempt } from '../middleware/rateLimit.js';
+import { extractPicks } from '../utils/entryPicksUtils.js';
 
 // Brute-force guard for /my-entry/verify. Counted per entryId (so it holds even
 // when an attacker rotates IPs to defeat the per-IP publicLimiter), but only on
@@ -29,7 +35,10 @@ const VERIFY_FAIL_MAX = 5;
 // Used on the /my-entry/verify path so the endpoint can't be turned into a
 // timing oracle while email remains the (interim) ownership factor (#166).
 function emailsMatchConstantTime(a, b) {
-  const normalize = (v) => String(v ?? '').trim().toLowerCase();
+  const normalize = (v) =>
+    String(v ?? '')
+      .trim()
+      .toLowerCase();
   const da = createHash('sha256').update(normalize(a)).digest();
   const db = createHash('sha256').update(normalize(b)).digest();
   return timingSafeEqual(da, db);
@@ -40,7 +49,12 @@ const myEntryLookup = controllerWrapper(async (req, res) => {
     return res.status(403).render('myEntryClosed');
   }
   const { error, entryId = null, year = null } = req.query;
-  res.render('myEntryLookup', { currentYear: thisYear, error: error || null, entryId, year });
+  res.render('myEntryLookup', {
+    currentYear: thisYear,
+    error: error || null,
+    entryId,
+    year,
+  });
 }, 'myEntryLookup');
 
 const myEntryVerify = controllerWrapper(async (req, res) => {
@@ -53,6 +67,7 @@ const myEntryVerify = controllerWrapper(async (req, res) => {
   if (!entryId || !year || !email) {
     throw new ValidationError('Entry ID, year, and email are required.');
   }
+  validateEntryId(entryId);
 
   const entryData = await gameRepository.getEntryById(entryId, year);
   // Constant-time comparison. Run the hash compare unconditionally (it normalizes
@@ -64,17 +79,20 @@ const myEntryVerify = controllerWrapper(async (req, res) => {
   // entry whose stored email is empty/null. Requiring a non-empty *stored* email
   // closes that, and — because the short-circuit depends only on stored state,
   // not on attacker input — both failure branches stay byte-identical, so the
-  // endpoint is not an existence oracle (#166).
+  // endpoint is not an existence oracle (#166). A soft-deleted entry (deletedAt
+  // set) is treated the same as a stored-email mismatch, so a deleted entry
+  // can't be verified back into edit access.
   const emailComparison = emailsMatchConstantTime(entryData?.email, email);
-  const emailMatches = emailComparison && !!entryData?.email;
+  const emailMatches =
+    emailComparison && !!entryData?.email && !entryData?.deletedAt;
 
   if (!emailMatches) {
     // Count this failure toward the per-entryId window; block once exhausted.
-    const blocked = await registerFailedAttempt(
-      `verify:${entryId}`,
-      VERIFY_FAIL_WINDOW_MS,
-      VERIFY_FAIL_MAX
-    );
+    const blocked = await registerFailedAttempt({
+      key: `verify:${entryId}`,
+      windowMs: VERIFY_FAIL_WINDOW_MS,
+      max: VERIFY_FAIL_MAX,
+    });
     if (blocked) {
       // Keep the 429 + Retry-After semantics, but render the styled lookup page
       // (like the other verify branches) instead of plain text for consistency.
@@ -111,8 +129,13 @@ async function renderEntryEditor(res, entryData, year, updateAction) {
     entryData.groups = entryData.group ? [entryData.group] : [];
   }
 
-  const lookupGroup = APP_CONFIG.tournament.paymentCollectorGroup || APP_CONFIG.tournament.defaultGroup;
-  const registrationData = await getGroupRegistrationData(lookupGroup, Number(year));
+  const lookupGroup =
+    APP_CONFIG.tournament.paymentCollectorGroup ||
+    APP_CONFIG.tournament.defaultGroup;
+  const registrationData = await getGroupRegistrationData(
+    lookupGroup,
+    Number(year),
+  );
   const regions = registrationData.regions?.map((r) => r.regionName) ?? [];
 
   res.render('myEditEntry', {
@@ -134,12 +157,25 @@ async function applyEntryUpdate(req, res, storedEntry, year) {
     ? storedEntry.groups
     : [storedEntry.group].filter(Boolean);
 
+  const validationGroup = storedGroups[0] || APP_CONFIG.tournament.defaultGroup;
+
   // Normalize FF picks, enforce 10 unique picks, and validate team membership
   // against the stored entry's group (service layer; throws ValidationError).
   const normalizedPicksIds = await normalizeAndValidateEntryPicks(
     picksIds,
     year,
-    storedGroups[0] || APP_CONFIG.tournament.defaultGroup
+    validationGroup,
+  );
+
+  // #375: normalization may have swapped a First Four pick's sID; the
+  // confirmation page must show the name of the pick actually persisted,
+  // not the one submitted from a possibly-stale form.
+  const confirmedPicksNames = await resolveConfirmedPickNames(
+    picksIds,
+    normalizedPicksIds,
+    picksNames,
+    year,
+    validationGroup,
   );
 
   // #159: recompute possPoints server-side from the validated picks; the
@@ -164,13 +200,14 @@ async function applyEntryUpdate(req, res, storedEntry, year) {
   await gameRepository.updateEntry(entryPayload);
 
   const collectorGroup = APP_CONFIG.tournament.paymentCollectorGroup;
-  const isPaymentCollectorGroup = !!collectorGroup && entryPayload.groups.includes(collectorGroup);
+  const isPaymentCollectorGroup =
+    !!collectorGroup && entryPayload.groups.includes(collectorGroup);
 
   res.render('confirm', {
     name: entryPayload.person,
     team: entryPayload.teamName,
     groupName: entryPayload.groups.join(', '),
-    picksNames,
+    picksNames: confirmedPicksNames,
     isPaymentCollectorGroup,
     paymentCollectorGroup: collectorGroup,
     paymentCollector: APP_CONFIG.payments,
@@ -178,14 +215,15 @@ async function applyEntryUpdate(req, res, storedEntry, year) {
 }
 
 const myEntryView = controllerWrapper(async (req, res) => {
-  if (!isRegistrationOpen()) {
-    return res.status(403).render('myEntryClosed');
-  }
-
   const { entryId, year } = req.query;
 
   if (!entryId || !year) {
     throw new ValidationError('Entry ID and year are required.');
+  }
+  validateEntryId(entryId);
+
+  if (!canEditYear(year)) {
+    return res.status(403).render('myEntryClosed');
   }
 
   if (!req.session?.verifiedEntries?.[`${year}:${entryId}`]) {
@@ -195,7 +233,7 @@ const myEntryView = controllerWrapper(async (req, res) => {
 
   const entryData = await gameRepository.getEntryById(entryId, year);
 
-  if (!entryData) {
+  if (!entryData || entryData.deletedAt) {
     return res.redirect(`/my-entry?error=notfound`);
   }
 
@@ -203,12 +241,14 @@ const myEntryView = controllerWrapper(async (req, res) => {
 }, 'myEntryView');
 
 const myEntryUpdate = controllerWrapper(async (req, res) => {
-  if (!isRegistrationOpen()) {
+  const entryId = req.body['entryId'];
+  const year = req.body['year'];
+  validateEntryId(entryId);
+
+  if (!canEditYear(year)) {
     return res.status(403).render('myEntryClosed');
   }
 
-  const entryId = req.body['entryId'];
-  const year = req.body['year'];
   const sessionKey = `${year}:${entryId}`;
 
   if (!req.session?.verifiedEntries?.[sessionKey]) {
@@ -216,7 +256,7 @@ const myEntryUpdate = controllerWrapper(async (req, res) => {
   }
 
   const storedEntry = await gameRepository.getEntryById(entryId, year);
-  if (!storedEntry) {
+  if (!storedEntry || storedEntry.deletedAt) {
     return res.redirect('/my-entry?error=notfound');
   }
 
@@ -253,13 +293,14 @@ const userEntryView = controllerWrapper(async (req, res) => {
   if (!entryId || !year) {
     throw new ValidationError('Entry ID and year are required.');
   }
+  validateEntryId(entryId);
 
   if (!canEditYear(year)) {
     return res.status(403).render('myEntryClosed');
   }
 
   const entryData = await gameRepository.getEntryById(entryId, year);
-  if (!entryData) {
+  if (!entryData || entryData.deletedAt) {
     return res.redirect('/my-brackets');
   }
 
@@ -274,13 +315,14 @@ const userEntryView = controllerWrapper(async (req, res) => {
 const userEntryUpdate = controllerWrapper(async (req, res) => {
   const entryId = req.body['entryId'];
   const year = req.body['year'];
+  validateEntryId(entryId);
 
   if (!canEditYear(year)) {
     return res.status(403).render('myEntryClosed');
   }
 
   const storedEntry = await gameRepository.getEntryById(entryId, year);
-  if (!storedEntry) {
+  if (!storedEntry || storedEntry.deletedAt) {
     return res.redirect('/my-brackets');
   }
 

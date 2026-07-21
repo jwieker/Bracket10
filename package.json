@@ -7,6 +7,10 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --watch --env-file-if-exists=.env server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:live-e2e-v3": "LIVE_E2E=true vitest run tests/e2e-v3.live.test.js",
@@ -15,7 +19,17 @@
     "test:e2e-v4": "EMAIL_GROUP=E2E-V4 FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-localhost:8085} GCP_PROJECT_ID=${GCP_PROJECT_ID:-local-dev} vitest run tests/e2e-v4.live.test.js",
     "test:targeted-updates": "LIVE_E2E=true vitest run tests/targeted-updates.live.test.js",
     "preview-public": "git archive HEAD | tar -t --exclude=docs/private --exclude=scripts/private --exclude=ai_private --exclude=docs/plans --exclude=product-backlog --exclude=.claude --exclude=.skills --exclude=scripts/sync-public.sh | sort",
-    "preview-public-branch": "bash scripts/private/preview-public-branch.sh"
+    "preview-public-branch": "bash scripts/private/preview-public-branch.sh",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "repository": {
     "type": "git",
@@ -36,7 +50,18 @@
   "author": "Jeff Wieker",
   "license": "ISC",
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.9",
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.64.0",
+    "@typescript-eslint/parser": "^8.64.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.6.0",
+    "eslint-plugin-n": "^18.2.1",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "globals": "^17.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "17.0.8",
+    "prettier": "^3.9.5",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },
   "dependencies": {
@@ -46,12 +71,16 @@
     "express": "^5.1.0",
     "express-session": "^1.19.0",
     "google-auth-library": "^10.7.0",
+    "ipaddr.js": "^2.4.0",
     "p-limit": "^7.3.0"
   },
   "overrides": {
     "minimatch": "^10.2.1",
     "glob": "^11.0.2",
     "@tootallnate/once": "3.0.1",
-    "ip-address": "^10.2.0"
+    "ip-address": "^10.2.0",
+    "enhanced-resolve": "5.24.2",
+    "lightningcss": "1.32.0",
+    "postcss": "8.5.19"
   }
 }

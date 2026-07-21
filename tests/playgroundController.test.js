@@ -1,6 +1,5 @@
 import { getPlayground } from '../src/controllers/playgroundController.js';
 
-
 vi.mock('../src/services/playgroundService.js', () => ({
   buildPlaygroundData: vi.fn(),
 }));
@@ -29,7 +28,9 @@ describe('getPlayground', () => {
     const res = mockRes();
     await getPlayground(mockReq({}), res);
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Validation Error' }));
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Validation Error' }),
+    );
   });
 
   test('returns 400 when year is non-numeric', async () => {
@@ -52,21 +53,31 @@ describe('getPlayground', () => {
     const res = mockRes();
     await getPlayground(mockReq({ group: 'Family', year: '2024' }), res);
     expect(buildPlaygroundData).toHaveBeenCalledWith('Family', 2024);
-    expect(res.render).toHaveBeenCalledWith('playground', expect.objectContaining({
-      groupName: 'Family',
-      gameYear: 2024,
-    }));
+    expect(res.render).toHaveBeenCalledWith(
+      'playground',
+      expect.objectContaining({
+        groupName: 'Family',
+        gameYear: 2024,
+      }),
+    );
   });
 
   test('uses thisYear when year query param is not provided', async () => {
     const playgroundData = {
-      entries: [], schoolRecords: [], pendingGames: [],
-      allGamesForClient: [], roundPoints: [], roundNames: [],
+      entries: [],
+      schoolRecords: [],
+      pendingGames: [],
+      allGamesForClient: [],
+      roundPoints: [],
+      roundNames: [],
     };
     buildPlaygroundData.mockResolvedValue(playgroundData);
 
     const res = mockRes();
     await getPlayground(mockReq({ group: 'TestGroup' }), res);
-    expect(buildPlaygroundData).toHaveBeenCalledWith('TestGroup', expect.any(Number));
+    expect(buildPlaygroundData).toHaveBeenCalledWith(
+      'TestGroup',
+      expect.any(Number),
+    );
   });
 });

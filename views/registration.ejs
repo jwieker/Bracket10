@@ -34,9 +34,7 @@
 
 
 <body>
-    <script nonce="<%= cspNonce %>" src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
-        integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
-        crossorigin="anonymous"></script>
+    <!-- Popper.js is included in Bootstrap bundle, no need to load separately -->
     <div class="container-lg pt-3" id="regcont">
         <div class="row" id="row1">
             <div class="col-sm-10 offset-sm-1 col-md-8 offset-md-2 col-lg-8 offset-lg-2 col-xl-6 offset-xl-3 pl-1 pr-1 border border-dark border-2 align-self-center"
@@ -46,89 +44,97 @@
                     Group: <%= name %>
                 </div>
                 <form action="/entryVerify" method="post" class="needs-validation" novalidate>
-                    <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
-                    <div class="alert alert-danger mx-3" role="alert">
-                        <%= errorMessage %>
-                    </div>
-                    <% } %>
-                    <div class="container pb-3">
-                        <label for="inputName">Your Name</label>
-                        <input type="text" name="name" class="form-control" data-clear-placeholder
-                            id="inputName" placeholder="John Doe" required
-                            value="<%= typeof formValues !== 'undefined' ? formValues.name : '' %>">
-                        <div class="invalid-feedback">
-                            Name cannot be blank.
-                        </div>
-                    </div>
-                    <div class="container pb-3">
-                        <label for="inputTeam">Team Name</label>
-                        <input type="text" name="team" class="form-control" maxlength="25"
-                            data-clear-placeholder id="inputTeam" placeholder="Winning team!" required
-                            value="<%= typeof formValues !== 'undefined' ? formValues.team : '' %>">
-                        <div class="invalid-feedback">
-                            Team name cannot be blank.
-                        </div>
-                    </div>
-                    <div class="container pb-3 ms-2">
-                        <small class="text-secondary">How your name will show up on the results page:</small> <br>
-                        <div id="namePreview" class="btn btn-link p-0 text-start text-decoration-none fw-bold"
-                            style="cursor: default;">Your Name - Team Name</div>
-                    </div>
-                    <input type="hidden" name="groupName" value="<%= name %>" />
-                    <input type="hidden" name="year" value="<%= year %>" />
-                    <input type="hidden" name="maxPoints" id="maxPointsHidden" value="0" />
-
-                    <div class="container pb-3" id="innercont">
-                        <label for="exampleInputEmail1">Email address</label>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                            class="bi bi-info-circle" viewBox=" 0 0 16 16" data-bs-toggle="tooltip"
-                            title="Emails will not be displayed and are used for record keeping and for your fees.">
-                            <path d=" M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
-                            <path
-                                d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
-                        </svg>
-                        <input type="email" class="form-control" name="email" data-clear-placeholder
-                            id="exampleInputEmail1" aria-describedby="emailHelp" placeholder="john.doe@gmail.com"
-                            required value="<%= typeof formValues !== 'undefined' ? formValues.email : '' %>">
-                        <div class="invalid-feedback">
-                            Please enter a valid email address.
-                        </div>
-                    </div>
-
-
-
-
-                    <!-- Populates Dropdowns -->
-                    <h3 class=" text-center pb-1">
-                        Pick your teams
-                    </h3>
-
-                    <!-- set teams here -->
-                    <% for (let i=1; i <=10; i++) { %>
-                        <div class="container pb-3">
-                            <label for="teamSelect<%= i %>">#<%= i %> Pick</label>
-                            <select class="form-selector form-select" required id="teamSelect<%= i %>" name="teamSelect<%= i %>">
-                                <option value="" disabled selected hidden>Choose Your #<%= i %> Team
-                                </option>
-                                <% teamData.forEach(team=> { %>
-                                    <% if (team.seed>= i) { %>
-                                        <option
-                                            value="<%= team.sID %>, <%= team.nameNick %> <%= team.mascot %> (<%= team.regionName %>) "
-                                            data-seed="<%= team.seed %>" data-region="<%= team.regionName %>"
-                                            data-conference="<%= team.conferenceName %>">
-                                            <%= team.seed %>. <%= team.nameNick %>
-                                                    <%= team.mascot %> (<%= team.regionName %>)
-                                                            <!-- sID: <%= team.sID %> -->
-                                        </option>
-                                        <% } %>
-                                            <% }); %>
-                            </select>
+                    <% if (typeof errorMessage !=='undefined' && errorMessage) { %>
+                        <div class="alert alert-danger mx-3" role="alert">
+                            <%= errorMessage %>
                         </div>
                         <% } %>
-
-                            <div class="container pb-5" id="innercont">
-                                <button type="submit" class="btn btn-primary">Register Team</button>
+                            <div class="container pb-3">
+                                <label for="inputName">Your Name</label>
+                                <input type="text" name="name" class="form-control" data-clear-placeholder
+                                    id="inputName" placeholder="John Doe" required
+                                    value="<%= typeof formValues !== 'undefined' ? formValues.name : '' %>">
+                                <div class="invalid-feedback">
+                                    Name cannot be blank.
+                                </div>
                             </div>
+                            <div class="container pb-3">
+                                <label for="inputTeam">Team Name</label>
+                                <input type="text" name="team" class="form-control" maxlength="25"
+                                    data-clear-placeholder id="inputTeam" placeholder="Winning team!" required
+                                    value="<%= typeof formValues !== 'undefined' ? formValues.team : '' %>">
+                                <div class="invalid-feedback">
+                                    Team name cannot be blank.
+                                </div>
+                            </div>
+                            <div class="container pb-3 ms-2">
+                                <small class="text-secondary">How your name will show up on the results page:</small>
+                                <br>
+                                <div id="namePreview" class="btn btn-link p-0 text-start text-decoration-none fw-bold"
+                                    style="cursor: default;">Your Name - Team Name</div>
+                            </div>
+                            <input type="hidden" name="groupName" value="<%= name %>" />
+                            <input type="hidden" name="year" value="<%= year %>" />
+                            <input type="hidden" name="maxPoints" id="maxPointsHidden" value="0" />
+
+                            <div class="container pb-3" id="innercont">
+                                <label for="exampleInputEmail1">Email address</label>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                                    class="bi bi-info-circle" viewBox=" 0 0 16 16" data-bs-toggle="tooltip"
+                                    title="Your email is never shown publicly. We only use it to send your bracket edit link and for record keeping.">
+                                    <path d=" M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
+                                    <path
+                                        d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+                                </svg>
+                                <input type="email" class="form-control" name="email" data-clear-placeholder
+                                    id="exampleInputEmail1" aria-describedby="emailHelp"
+                                    placeholder="john.doe@gmail.com" required
+                                    value="<%= typeof formValues !== 'undefined' ? formValues.email : '' %>">
+                                <div class="invalid-feedback">
+                                    Please enter a valid email address.
+                                </div>
+                                <div id="emailHelp" class="form-text text-muted">
+                                    Once you submit, we'll email you a private link to edit this bracket.
+                                    Using a Gmail address? Sign in with Google to view and manage all your entries in
+                                    one place.
+                                </div>
+                            </div>
+
+
+
+
+                            <!-- Populates Dropdowns -->
+                            <h3 class=" text-center pb-1">
+                                Pick your teams
+                            </h3>
+
+                            <!-- set teams here -->
+                            <% for (let i=1; i <=10; i++) { %>
+                                <div class="container pb-3">
+                                    <label for="teamSelect<%= i %>">#<%= i %> Pick</label>
+                                    <select class="form-selector form-select" required id="teamSelect<%= i %>"
+                                        name="teamSelect<%= i %>">
+                                        <option value="" disabled selected hidden>Choose Your #<%= i %> Team
+                                        </option>
+                                        <% teamData.forEach(team=> { %>
+                                            <% if (team.seed>= i) { %>
+                                                <option
+                                                    value="<%= team.sID %>, <%= team.nameNick %> <%= team.mascot %> (<%= team.regionName %>) "
+                                                    data-seed="<%= team.seed %>" data-region="<%= team.regionName %>"
+                                                    data-conference="<%= team.conferenceName %>">
+                                                    <%= team.seed %>. <%= team.nameNick %>
+                                                            <%= team.mascot %> (<%= team.regionName %>)
+                                                                    <!-- sID: <%= team.sID %> -->
+                                                </option>
+                                                <% } %>
+                                                    <% }); %>
+                                    </select>
+                                </div>
+                                <% } %>
+
+                                    <div class="container pb-5" id="innercont">
+                                        <button type="submit" class="btn btn-primary">Register Team</button>
+                                    </div>
                 </form>
 
                 <h4 class=" text-center pb-1">
@@ -165,10 +171,14 @@
 
 
 
-    <script nonce="<%= cspNonce %>" type="application/json" id="gameDataJson"><%- JSON.stringify(gameData || {}).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="regionDataJson"><%- JSON.stringify(regions || []).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="conferenceStatsDataJson"><%- JSON.stringify(conferenceStats || {}).replace(/</g, '\\u003c') %></script>
-    <script nonce="<%= cspNonce %>" type="application/json" id="teamDataJson"><%- JSON.stringify(teamData || []).replace(/</g, '\\u003c') %></script>
+    <script nonce="<%= cspNonce %>" type="application/json"
+        id="gameDataJson"><%- safeJson(gameData || {}) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json"
+        id="regionDataJson"><%- safeJson(regions || []) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json"
+        id="conferenceStatsDataJson"><%- safeJson(conferenceStats || {}) %></script>
+    <script nonce="<%= cspNonce %>" type="application/json"
+        id="teamDataJson"><%- safeJson(teamData || []) %></script>
     <script nonce="<%= cspNonce %>">
         const gameData = JSON.parse(document.getElementById('gameDataJson').textContent);
         const regionData = JSON.parse(document.getElementById('regionDataJson').textContent);
@@ -186,4 +196,3 @@
 </body>
 
 </html>
-

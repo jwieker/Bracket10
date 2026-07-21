@@ -2,29 +2,34 @@ import {
   getHighestPlace,
   minPoints,
   getFuturePoints,
-} from "../utils/pointsUtils.js";
-import { TOURNAMENT_ROUNDS, APP_CONFIG, thisYear } from "../config/app.js";
-import { gameRepository as _gameRepository, entryRepository as _entryRepository, tourneyRepository as _tourneyRepository } from "../repositories/index.js";
+} from '../utils/pointsUtils.js';
+import { APP_CONFIG, thisYear } from '../config/app.js';
+import {
+  gameRepository as _gameRepository,
+  entryRepository as _entryRepository,
+  tourneyRepository as _tourneyRepository,
+} from '../repositories/index.js';
 
 let gameRepository = _gameRepository;
 let entryRepository = _entryRepository;
 let tourneyRepository = _tourneyRepository;
 
 // For testing purposes
-export function setRepositories(newGameRepository, newEntryRepository, newTourneyRepository) {
+export function setRepositories(
+  newGameRepository,
+  newEntryRepository,
+  newTourneyRepository,
+) {
   gameRepository = newGameRepository;
   entryRepository = newEntryRepository;
   tourneyRepository = newTourneyRepository;
 }
-import Logger from "../utils/logger.js";
-import { withErrorHandling } from "../utils/errors.js";
-import pLimit from "p-limit";
-
+import Logger from '../utils/logger.js';
+import pLimit from 'p-limit';
 
 // Firestore caps a single batch at 500 write operations. updateMultipleEntryPoints
 // emits exactly one write per entry, so we can chunk by entry count up to 500.
 const MAX_BATCH_SIZE = 500;
-
 
 async function getTournamentData(year) {
   const yearNum = Number(year);
@@ -52,12 +57,14 @@ async function getTournamentData(year) {
  * Callers processing many entries should build once and pass via prebuiltMaps.
  */
 function buildLookupMaps(allTeams, activeGames) {
-  const teamMap = new Map(allTeams.map(t => [t.sID, t]));
-  const gameById = new Map(activeGames.map(g => [g.gameID, g]));
+  const teamMap = new Map(allTeams.map((t) => [t.sID, t]));
+  const gameById = new Map(activeGames.map((g) => [g.gameID, g]));
   const gameByTeam = new Map();
-  // Sort by round ASC so that higher round games (current/next) overwrite 
+  // Sort by round ASC so that higher round games (current/next) overwrite
   // lower round games (historical) for the same team.
-  const sortedGames = [...activeGames].sort((a, b) => (a.round || 0) - (b.round || 0));
+  const sortedGames = [...activeGames].sort(
+    (a, b) => (a.round || 0) - (b.round || 0),
+  );
   for (const g of sortedGames) {
     if (g.team1ID != null) gameByTeam.set(g.team1ID, g);
     if (g.team2ID != null) gameByTeam.set(g.team2ID, g);
@@ -66,16 +73,21 @@ function buildLookupMaps(allTeams, activeGames) {
 }
 
 function mapEntryToPointsData(entry, allTeams, activeGames, maps) {
-  const { currentPoints, maxPoints, futureGamePaths } =
-    calculateEntryPointsAndPaths(entry.picks, allTeams, activeGames, maps);
+  const { currentPoints, maxPoints } = calculateEntryPointsAndPaths(
+    entry.picks,
+    allTeams,
+    activeGames,
+    maps,
+  );
 
+  // updateMultipleEntryPoints only consumes entryID/points/possPoints. The
+  // former futureGames/name/groupName fields were never read downstream (and
+  // entry.group was always undefined — entries carry a `groups` array), so they
+  // are omitted rather than shipped as dead payload.
   return {
     entryID: Number(entry.id),
     points: Number(currentPoints),
     possPoints: Number(maxPoints),
-    futureGames: futureGamePaths,
-    name: entry.teamName,
-    groupName: entry.group,
   };
 }
 
@@ -88,8 +100,14 @@ function mapEntryToPointsData(entry, allTeams, activeGames, maps) {
  *   calling in a loop over many entries so the maps are built once rather than per-entry.
  * @returns {object} An object { currentPoints: number, maxPoints: number, futureGamePaths: Array<Array<number|string>> }
  */
-function calculateEntryPointsAndPaths(picks, allTeams, activeGames, prebuiltMaps = null) {
-  const { teamMap, gameByTeam, gameById } = prebuiltMaps ?? buildLookupMaps(allTeams, activeGames);
+function calculateEntryPointsAndPaths(
+  picks,
+  allTeams,
+  activeGames,
+  prebuiltMaps = null,
+) {
+  const { teamMap, gameByTeam, gameById } =
+    prebuiltMaps ?? buildLookupMaps(allTeams, activeGames);
 
   // Belt-and-suspenders dedupe: a duplicated pick would double-count its
   // cumulative points below and fabricate a head-to-head "clash" in minPoints
@@ -103,7 +121,9 @@ function calculateEntryPointsAndPaths(picks, allTeams, activeGames, prebuiltMaps
   for (const pickId of uniquePicks) {
     const team = teamMap.get(pickId);
     if (!team) {
-      Logger.warn(`Team with sID ${pickId} not found in allTeams. Skipping pick.`);
+      Logger.warn(
+        `Team with sID ${pickId} not found in allTeams. Skipping pick.`,
+      );
       futureGamePaths.push([]);
       continue;
     }
@@ -112,11 +132,12 @@ function calculateEntryPointsAndPaths(picks, allTeams, activeGames, prebuiltMaps
 
     const isActive =
       !team.gameStatus?.length ||
-      team.gameStatus[team.gameStatus.length - 1] === "W";
+      team.gameStatus[team.gameStatus.length - 1] === 'W';
 
     if (isActive) {
       const nextGame = gameByTeam.get(team.sID);
-      let nextGameID = (nextGame && nextGame.winner === null) ? nextGame.gameID : -1;
+      let nextGameID =
+        nextGame && nextGame.winner === null ? nextGame.gameID : -1;
 
       // FF games (round 0) award zero points and must not appear in the scoring path.
       // Skip the FF game and start the path at the R1 game it feeds into.
@@ -126,7 +147,11 @@ function calculateEntryPointsAndPaths(picks, allTeams, activeGames, prebuiltMaps
 
       if (nextGameID !== -1) {
         const initialPath = [...(team.gameStatus || []), nextGameID];
-        const completeFuturePath = getNextFutureGame(initialPath, gameById, nextGameID);
+        const completeFuturePath = getNextFutureGame(
+          initialPath,
+          gameById,
+          nextGameID,
+        );
         futureGamePaths.push(completeFuturePath ?? []);
       } else {
         futureGamePaths.push([]);
@@ -140,7 +165,10 @@ function calculateEntryPointsAndPaths(picks, allTeams, activeGames, prebuiltMaps
   return { currentPoints, maxPoints, futureGamePaths };
 }
 
-async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tournament.defaultGroup) {
+async function updatePossiblePoints(year = thisYear) {
+  // Note: this always recomputes ALL entries for the year. There is intentionally
+  // no `group` filter — a prior `group` parameter was accepted but never used
+  // (getAllEntries is year-scoped), so it was removed to avoid implying otherwise.
   const [activeGames, allEntries, allTeams] = await Promise.all([
     gameRepository.getActiveAndFutureGames(year),
     gameRepository.getAllEntries(year),
@@ -150,7 +178,7 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
   const maps = buildLookupMaps(allTeams, activeGames);
 
   const pointsArray = allEntries.map((entry) =>
-    mapEntryToPointsData(entry, allTeams, activeGames, maps)
+    mapEntryToPointsData(entry, allTeams, activeGames, maps),
   );
 
   const chunkSize = MAX_BATCH_SIZE;
@@ -163,15 +191,17 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
 
   const limit = pLimit(5);
   await Promise.all(
-    chunks.map((chunk, index) => limit(async () => {
-      const startTime = Date.now();
-      Logger.info(
-        `Updating chunk number ${index} of total chunks ${chunks.length} for year ${year}`
-      );
-      await entryRepository.updateMultipleEntryPoints(chunk, year);
-      const duration = Date.now() - startTime;
-      Logger.performance(`Chunk update`, duration);
-    }))
+    chunks.map((chunk, index) =>
+      limit(async () => {
+        const startTime = Date.now();
+        Logger.info(
+          `Updating chunk number ${index} of total chunks ${chunks.length} for year ${year}`,
+        );
+        await entryRepository.updateMultipleEntryPoints(chunk, year);
+        const duration = Date.now() - startTime;
+        Logger.performance(`Chunk update`, duration);
+      }),
+    ),
   );
 
   const totalEndTime = Date.now();
@@ -189,11 +219,13 @@ async function updatePossiblePoints(year = thisYear, group = APP_CONFIG.tourname
 function enrichEntriesWithPotentialRankings(
   entriesToEnrich,
   allTeamsData,
-  activeGamesData
+  activeGamesData,
 ) {
   const maps = buildLookupMaps(allTeamsData, activeGamesData);
 
-  const sortedGames = [...activeGamesData].sort((a, b) => (a.round || 0) - (b.round || 0));
+  const sortedGames = [...activeGamesData].sort(
+    (a, b) => (a.round || 0) - (b.round || 0),
+  );
   const incomingGames = new Map();
   for (const g of activeGamesData) {
     if (g.nextGameID) {
@@ -223,14 +255,25 @@ function enrichEntriesWithPotentialRankings(
       maxPoints: Number(maxPoints),
       futureGames: futureGamePaths,
       pickSet: new Set(picks),
-      minPoints: minPoints(futureGamePaths, Number(currentPoints), sortedGames, incomingGames),
+      minPoints: minPoints(
+        futureGamePaths,
+        Number(currentPoints),
+        sortedGames,
+        incomingGames,
+      ),
     };
   });
 
   // Calculate highest possible place for each entry
   const otherMinCaches = new Map();
   for (const entry of enrichedEntries) {
-    const { highestPlace, ties } = getHighestPlace(entry, enrichedEntries, otherMinCaches, sortedGames, incomingGames);
+    const { highestPlace, ties } = getHighestPlace(
+      entry,
+      enrichedEntries,
+      otherMinCaches,
+      sortedGames,
+      incomingGames,
+    );
     entry.highestPlace = highestPlace;
     entry.ties = ties;
   }
@@ -238,7 +281,10 @@ function enrichEntriesWithPotentialRankings(
   return enrichedEntries;
 }
 
-async function possibleRanking(year = thisYear, group = APP_CONFIG.tournament.defaultGroup) {
+async function possibleRanking(
+  year = thisYear,
+  group = APP_CONFIG.tournament.defaultGroup,
+) {
   const [activeGames, entriesForGroup, allTeams] = await Promise.all([
     gameRepository.getActiveAndFutureGames(year),
     gameRepository.getEntriesForGroup(year, group),
@@ -247,7 +293,7 @@ async function possibleRanking(year = thisYear, group = APP_CONFIG.tournament.de
 
   if (entriesForGroup.length === 0) {
     Logger.info(
-      `No entries found for group "${group}" in year ${year} for possible ranking.`
+      `No entries found for group "${group}" in year ${year} for possible ranking.`,
     );
     return [];
   }
@@ -255,7 +301,7 @@ async function possibleRanking(year = thisYear, group = APP_CONFIG.tournament.de
   const enrichedAndRankedEntries = await enrichEntriesWithPotentialRankings(
     entriesForGroup,
     allTeams,
-    activeGames
+    activeGames,
   );
 
   return enrichedAndRankedEntries.sort((a, b) => {
@@ -266,16 +312,21 @@ async function possibleRanking(year = thisYear, group = APP_CONFIG.tournament.de
   });
 }
 
-
 /**
  * Calculates the minimum guaranteed points for an entry.
  */
 
-function findNextGameId(teamId, activeGames) {
-  const game = activeGames.find(
+function findNextGameId(teamId, activeGamesOrMap) {
+  // Accepts either an array (legacy/test) or a Map (internal optimised path)
+  if (activeGamesOrMap instanceof Map) {
+    const game = activeGamesOrMap.get(teamId);
+    return game && game.winner === null ? game.gameID : -1;
+  }
+
+  const game = activeGamesOrMap.find(
     (game) =>
       (game.team1ID === teamId || game.team2ID === teamId) &&
-      game.winner === null
+      game.winner === null,
   );
   return game ? game.gameID : -1;
 }
@@ -286,13 +337,7 @@ function findNextGameId(teamId, activeGames) {
 // all points calculation via stack overflow / infinite recursion.
 const MAX_FUTURE_GAME_DEPTH = 10;
 
-function getNextFutureGame(futureGames, activeGamesOrMap, nextGameID) {
-  // Accepts either an array (legacy/test) or a Map (internal optimised path)
-  const lookup = (id) =>
-    activeGamesOrMap instanceof Map
-      ? activeGamesOrMap.get(id)
-      : activeGamesOrMap?.find((g) => g.gameID === id);
-
+function getNextFutureGame(futureGames, activeGamesMap, nextGameID) {
   const collected = [...futureGames];
   const visited = new Set();
   let currentId = nextGameID;
@@ -300,14 +345,20 @@ function getNextFutureGame(futureGames, activeGamesOrMap, nextGameID) {
   for (let depth = 0; depth < MAX_FUTURE_GAME_DEPTH; depth++) {
     if (visited.has(currentId)) {
       Logger.error(
-        `getNextFutureGame: cycle detected at gameID ${currentId} (visited: ${[...visited].join(",")})`
+        `getNextFutureGame: cycle detected at gameID ${currentId} (visited: ${[...visited].join(',')})`,
       );
       return collected;
     }
     visited.add(currentId);
 
-    const game = lookup(currentId);
-    if (!game) return null;
+    const game = activeGamesMap && activeGamesMap.get(currentId);
+
+    // Round-2+ slots aren't filled until earlier rounds resolve, so a
+    // still-empty slot's gameID won't be in the lookup yet. Return the chain
+    // collected so far instead of discarding it — the caller's `?? []`
+    // fallback would otherwise wipe out `nextGameID`, understating maxPoints
+    // for every entry holding this team during early rounds.
+    if (!game) return collected;
 
     const nextUp = game.nextGameID;
     if (nextUp === 0) return collected;
@@ -317,11 +368,10 @@ function getNextFutureGame(futureGames, activeGamesOrMap, nextGameID) {
   }
 
   Logger.error(
-    `getNextFutureGame: exceeded max depth ${MAX_FUTURE_GAME_DEPTH} starting from gameID ${nextGameID}`
+    `getNextFutureGame: exceeded max depth ${MAX_FUTURE_GAME_DEPTH} starting from gameID ${nextGameID}`,
   );
   return collected;
 }
-
 
 async function updatePointsForAffectedEntries(year, affectedSIDs) {
   const [activeGames, affectedEntries, allTeams] = await Promise.all([
@@ -335,7 +385,7 @@ async function updatePointsForAffectedEntries(year, affectedSIDs) {
   const maps = buildLookupMaps(allTeams, activeGames);
 
   const pointsArray = affectedEntries.map((entry) =>
-    mapEntryToPointsData(entry, allTeams, activeGames, maps)
+    mapEntryToPointsData(entry, allTeams, activeGames, maps),
   );
 
   const chunkSize = MAX_BATCH_SIZE;
@@ -346,7 +396,9 @@ async function updatePointsForAffectedEntries(year, affectedSIDs) {
 
   const limit = pLimit(5);
   await Promise.all(
-    chunks.map((chunk) => limit(() => entryRepository.updateMultipleEntryPoints(chunk, year)))
+    chunks.map((chunk) =>
+      limit(() => entryRepository.updateMultipleEntryPoints(chunk, year)),
+    ),
   );
 }
 

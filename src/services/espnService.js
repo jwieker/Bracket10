@@ -1,16 +1,37 @@
-import { createRequire } from "module";
-import Logger from "../utils/logger.js";
+import { createRequire } from 'module';
+import Logger from '../utils/logger.js';
+import { ValidationError } from '../utils/errors.js';
 
 const require = createRequire(import.meta.url);
 
-const ESPN_SCOREBOARD_URL =
-  "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard";
+/**
+ * ESPN's scoreboard API takes an 8-digit `YYYYMMDD` date. The value reaches an
+ * outbound URL, and on the scheduled-poll path it originates from an admin
+ * request, so reject anything that isn't exactly 8 digits before interpolating.
+ * The host is a fixed constant (not open SSRF), but this closes the hygiene gap.
+ */
+function assertValidDateStr(dateStr) {
+  if (!/^\d{8}$/.test(dateStr)) {
+    // Don't echo the raw (untrusted) value back in the error message — state the
+    // expected format instead, so the text is safe even if a ValidationError is
+    // ever rendered into an HTML context downstream. The rejected value is still
+    // recorded at debug level for troubleshooting.
+    Logger.debug(
+      `assertValidDateStr: rejected dateStr ${JSON.stringify(dateStr)}`,
+    );
+    throw new ValidationError('Invalid ESPN date format (expected YYYYMMDD)');
+  }
+  return dateStr;
+}
 
-const NY_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
+const ESPN_SCOREBOARD_URL =
+  'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard';
+
+const NY_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
 });
 
 /**
@@ -19,9 +40,11 @@ const NY_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
  */
 export function loadTeamMap() {
   try {
-    return require("../config/espnTeamMap.json");
+    return require('../config/espnTeamMap.json');
   } catch {
-    Logger.warn("ESPN poll: espnTeamMap.json not found or invalid — no games will be matched");
+    Logger.warn(
+      'ESPN poll: espnTeamMap.json not found or invalid — no games will be matched',
+    );
     return {};
   }
 }
@@ -32,7 +55,7 @@ export function loadTeamMap() {
  * @returns {Promise<Array<{espnEventId, team1DisplayName, team2DisplayName, winnerDisplayName}>>}
  */
 export async function fetchCompletedTournamentGames(dateStr = null) {
-  const date = dateStr ?? getTodayDateStr();
+  const date = assertValidDateStr(dateStr ?? getTodayDateStr());
   const url = `${ESPN_SCOREBOARD_URL}?limit=200&dates=${date}`;
 
   Logger.info(`ESPN poll: fetching scoreboard for date ${date}`);
@@ -48,7 +71,7 @@ export async function fetchCompletedTournamentGames(dateStr = null) {
     }
     data = await response.json();
   } catch (err) {
-    Logger.error("ESPN poll: failed to fetch scoreboard", err);
+    Logger.error('ESPN poll: failed to fetch scoreboard', err);
     throw err;
   } finally {
     clearTimeout(timeout);
@@ -79,7 +102,9 @@ export async function fetchCompletedTournamentGames(dateStr = null) {
     });
   }
 
-  Logger.info(`ESPN poll: found ${completedGames.length} completed game(s) on ${date}`);
+  Logger.info(
+    `ESPN poll: found ${completedGames.length} completed game(s) on ${date}`,
+  );
   return completedGames;
 }
 
@@ -90,6 +115,7 @@ export async function fetchCompletedTournamentGames(dateStr = null) {
  * @returns {Promise<Array<{espnEventId, team1DisplayName, team2DisplayName, team1Seed, team2Seed, completed, winnerDisplayName, regionName}>>}
  */
 export async function fetchScheduledTournamentGames(dateStr) {
+  assertValidDateStr(dateStr);
   const url = `${ESPN_SCOREBOARD_URL}?limit=200&dates=${dateStr}`;
 
   Logger.info(`ESPN scheduled: fetching scoreboard for date ${dateStr}`);
@@ -105,7 +131,7 @@ export async function fetchScheduledTournamentGames(dateStr) {
     }
     data = await response.json();
   } catch (err) {
-    Logger.error("ESPN scheduled: failed to fetch scoreboard", err);
+    Logger.error('ESPN scheduled: failed to fetch scoreboard', err);
     throw err;
   } finally {
     clearTimeout(timeout);
@@ -152,7 +178,10 @@ export async function fetchScheduledTournamentGames(dateStr) {
 function getTodayDateStr() {
   // Use America/New_York timezone to match scheduler and game times (Cloud Run runs in UTC)
   const parts = Object.fromEntries(
-    NY_DATE_FORMATTER.formatToParts(new Date()).map(({ type, value }) => [type, value])
+    NY_DATE_FORMATTER.formatToParts(new Date()).map(({ type, value }) => [
+      type,
+      value,
+    ]),
   );
   return `${parts.year}${parts.month}${parts.day}`;
 }
@@ -165,7 +194,7 @@ export function getDateStrDaysAgo(daysAgo) {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
   const parts = Object.fromEntries(
-    NY_DATE_FORMATTER.formatToParts(d).map(({ type, value }) => [type, value])
+    NY_DATE_FORMATTER.formatToParts(d).map(({ type, value }) => [type, value]),
   );
   return `${parts.year}${parts.month}${parts.day}`;
 }

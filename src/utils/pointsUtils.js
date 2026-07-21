@@ -1,12 +1,104 @@
-import { TOURNAMENT_ROUNDS } from "../config/app.js";
-import Logger from "./logger.js";
+import { TOURNAMENT_ROUNDS } from '../config/app.js';
+import Logger from './logger.js';
 
 // Tolerance for tie detection in `possibleRanking`. Point increments are integers
 // (min 1), so any window below 1 cannot collapse genuinely distinct totals while
 // safely absorbing float-accumulation drift from upstream Firestore values.
 const POINTS_EPSILON = 1e-9;
 
-function getHighestPlace(entry, allBobEntries, otherMinCaches = null, sortedGames = null, incomingGames = null) {
+function computeUniqueMask(picksLen, picks, otherPickSet) {
+  let mask = 0;
+  for (let i = 0; i < picksLen; i++) {
+    if (!otherPickSet.has(picks[i])) {
+      mask |= 1 << i;
+    }
+  }
+  return mask;
+}
+
+function getPathsFromMask(mask, picksLen, futureGames) {
+  const paths = [];
+  for (let i = 0; i < picksLen; i++) {
+    if (mask & (1 << i)) {
+      paths.push(futureGames[i]);
+    }
+  }
+  return paths;
+}
+
+function getCachedPotential(
+  entry,
+  otherPickSet,
+  picksLen,
+  uniquePotentialCache,
+) {
+  const uniqueMask = computeUniqueMask(picksLen, entry.picks, otherPickSet);
+  let potentialFromUniquePicks = uniquePotentialCache.get(uniqueMask);
+
+  if (potentialFromUniquePicks === undefined) {
+    const uniqueToEntryPaths = getPathsFromMask(
+      uniqueMask,
+      picksLen,
+      entry.futureGames,
+    );
+    potentialFromUniquePicks = getFuturePoints(
+      uniqueToEntryPaths,
+      entry.points,
+    );
+    uniquePotentialCache.set(uniqueMask, potentialFromUniquePicks);
+  }
+  return potentialFromUniquePicks;
+}
+
+function getCachedRelativeMin(
+  otherEntry,
+  entryPickSet,
+  otherMinCaches,
+  sortedGames,
+  incomingGames,
+) {
+  const otherPicksLen = otherEntry.picks.length;
+  const otherUniqueMask = computeUniqueMask(
+    otherPicksLen,
+    otherEntry.picks,
+    entryPickSet,
+  );
+
+  let otherRelativeMin;
+  let otherCacheForEntry = otherMinCaches?.get(otherEntry.entryID);
+  if (otherCacheForEntry) {
+    otherRelativeMin = otherCacheForEntry.get(otherUniqueMask);
+  } else if (otherMinCaches) {
+    otherCacheForEntry = new Map();
+    otherMinCaches.set(otherEntry.entryID, otherCacheForEntry);
+  }
+
+  if (otherRelativeMin === undefined) {
+    const otherUniquePaths = getPathsFromMask(
+      otherUniqueMask,
+      otherPicksLen,
+      otherEntry.futureGames,
+    );
+    otherRelativeMin = minPoints(
+      otherUniquePaths,
+      otherEntry.points,
+      sortedGames,
+      incomingGames,
+    );
+    if (otherCacheForEntry) {
+      otherCacheForEntry.set(otherUniqueMask, otherRelativeMin);
+    }
+  }
+  return otherRelativeMin;
+}
+
+function getHighestPlace(
+  entry,
+  allBobEntries,
+  otherMinCaches = null,
+  sortedGames = null,
+  incomingGames = null,
+) {
   let highestPlace = 1;
   let ties = 0;
 
@@ -19,7 +111,10 @@ function getHighestPlace(entry, allBobEntries, otherMinCaches = null, sortedGame
   // subset, so the cache turns the hot O(N²) inner work into O(distinct-masks).
   // maxPicksPerEntry is 10, so a 32-bit signed int is plenty (bit 30 max).
   const picksLen = entry.picks.length;
-  console.assert(picksLen < 32, `getHighestPlace: picks.length=${picksLen} exceeds 32-bit mask`);
+  if (picksLen >= 32)
+    Logger.warn(
+      `getHighestPlace: picks.length=${picksLen} exceeds 32-bit mask`,
+    );
   const uniquePotentialCache = new Map();
 
   for (const otherEntry of allBobEntries) {
@@ -43,61 +138,21 @@ function getHighestPlace(entry, allBobEntries, otherMinCaches = null, sortedGame
     const otherPickSet = otherEntry.pickSet ?? new Set(otherEntry.picks);
 
     // A's ceiling: unique future potential only (picks not shared with B).
-    // Build a mask of which entry picks are unique vs. this otherEntry, then
-    // look up (or compute and cache) the resulting future points.
-    let uniqueMask = 0;
-    for (let i = 0; i < picksLen; i++) {
-      if (!otherPickSet.has(entry.picks[i])) {
-        uniqueMask |= (1 << i);
-      }
-    }
-
-    let potentialFromUniquePicks = uniquePotentialCache.get(uniqueMask);
-    if (potentialFromUniquePicks === undefined) {
-      const uniqueToEntryPaths = [];
-      for (let i = 0; i < picksLen; i++) {
-        if (uniqueMask & (1 << i)) {
-          uniqueToEntryPaths.push(entry.futureGames[i]);
-        }
-      }
-      potentialFromUniquePicks = getFuturePoints(uniqueToEntryPaths, entry.points);
-      uniquePotentialCache.set(uniqueMask, potentialFromUniquePicks);
-    }
+    const potentialFromUniquePicks = getCachedPotential(
+      entry,
+      otherPickSet,
+      picksLen,
+      uniquePotentialCache,
+    );
 
     // B's relative floor: only clashes among B's UNIQUE picks (shared picks excluded).
-    // We bitmask the unique-picks subset of B (otherEntry) and use it as a cache
-    // key (per otherEntry) for otherRelativeMin. Across the O(N²) outer pairing,
-    // most (otherEntry, mask) pairs recur, so the cache turns repeat minPoints
-    // calls into O(1) lookups.
-    const otherPicksLen = otherEntry.picks.length;
-    let otherUniqueMask = 0;
-    for (let i = 0; i < otherPicksLen; i++) {
-      if (!entryPickSet.has(otherEntry.picks[i])) {
-        otherUniqueMask |= (1 << i);
-      }
-    }
-
-    let otherRelativeMin;
-    let otherCacheForEntry = otherMinCaches?.get(otherEntry.entryID);
-    if (otherCacheForEntry) {
-      otherRelativeMin = otherCacheForEntry.get(otherUniqueMask);
-    } else if (otherMinCaches) {
-      otherCacheForEntry = new Map();
-      otherMinCaches.set(otherEntry.entryID, otherCacheForEntry);
-    }
-
-    if (otherRelativeMin === undefined) {
-      const otherUniquePaths = [];
-      for (let i = 0; i < otherPicksLen; i++) {
-        if (otherUniqueMask & (1 << i)) {
-          otherUniquePaths.push(otherEntry.futureGames[i]);
-        }
-      }
-      otherRelativeMin = minPoints(otherUniquePaths, otherEntry.points, sortedGames, incomingGames);
-      if (otherCacheForEntry) {
-        otherCacheForEntry.set(otherUniqueMask, otherRelativeMin);
-      }
-    }
+    const otherRelativeMin = getCachedRelativeMin(
+      otherEntry,
+      entryPickSet,
+      otherMinCaches,
+      sortedGames,
+      incomingGames,
+    );
 
     // Use epsilon-tolerant equality for the tie branch. Point values are
     // integers today, but `points` reads from Firestore which has no integer
@@ -107,7 +162,9 @@ function getHighestPlace(entry, allBobEntries, otherMinCaches = null, sortedGame
     // collapse genuinely distinct totals.
     if (potentialFromUniquePicks < otherRelativeMin - POINTS_EPSILON) {
       highestPlace++;
-    } else if (Math.abs(potentialFromUniquePicks - otherRelativeMin) < POINTS_EPSILON) {
+    } else if (
+      Math.abs(potentialFromUniquePicks - otherRelativeMin) < POINTS_EPSILON
+    ) {
       ties++;
     }
   }
@@ -115,14 +172,19 @@ function getHighestPlace(entry, allBobEntries, otherMinCaches = null, sortedGame
   return { highestPlace, ties };
 }
 
-function minPoints(futureGames, currentPoints = 0, sortedGames = null, incomingGames = null) {
+function minPoints(
+  futureGames,
+  currentPoints = 0,
+  sortedGames = null,
+  incomingGames = null,
+) {
   if (!sortedGames || !incomingGames) {
     let guaranteedRoundPointsFromClashes = 0;
     const slotCounts = new Map();
 
     for (const pickPath of futureGames) {
       for (let roundIndex = 0; roundIndex < pickPath.length; roundIndex++) {
-        if (pickPath[roundIndex] !== "W") {
+        if (pickPath[roundIndex] !== 'W') {
           const gameId = pickPath[roundIndex];
           const prev = slotCounts.get(gameId) || 0;
           if (prev === 1) {
@@ -144,9 +206,12 @@ function minPoints(futureGames, currentPoints = 0, sortedGames = null, incomingG
   const activePicksByStartGame = new Map();
   for (const path of futureGames) {
     for (let roundIndex = 0; roundIndex < path.length; roundIndex++) {
-      if (path[roundIndex] !== "W") {
+      if (path[roundIndex] !== 'W') {
         const gameId = path[roundIndex];
-        activePicksByStartGame.set(gameId, (activePicksByStartGame.get(gameId) || 0) + 1);
+        activePicksByStartGame.set(
+          gameId,
+          (activePicksByStartGame.get(gameId) || 0) + 1,
+        );
         break;
       }
     }
@@ -194,7 +259,7 @@ function getFuturePoints(futureGames, currentPoints) {
     for (const path of futureGames) {
       for (let i = 0; i < path.length; i++) {
         const game = path[i];
-        if (game === "W") continue;
+        if (game === 'W') continue;
         if (seenGames.has(game)) break;
         seenGames.add(game);
         const roundConfig = TOURNAMENT_ROUNDS[i + 1];
@@ -205,7 +270,7 @@ function getFuturePoints(futureGames, currentPoints) {
     }
     return totalPoints;
   } catch (error) {
-    Logger.error("getFuturePoints failed", {
+    Logger.error('getFuturePoints failed', {
       message: error?.message,
       currentPoints,
       futureGamesLength: Array.isArray(futureGames) ? futureGames.length : null,
@@ -214,8 +279,4 @@ function getFuturePoints(futureGames, currentPoints) {
   }
 }
 
-export {
-  getHighestPlace,
-  minPoints,
-  getFuturePoints,
-};
+export { getHighestPlace, minPoints, getFuturePoints };

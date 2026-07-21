@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bracket 10 — How the System Works</title>
+<style>
+  :root{
+    --navy:#102a43;
+    --blue:#1d4e89;
+    --blue-2:#2d6cb5;
+    --sky:#e8f0fb;
+    --sky-line:#bcd3f0;
+    --orange:#ff6b35;
+    --orange-soft:#ffe3d6;
+    --green:#2e9e6b;
+    --green-soft:#dcf3e8;
+    --amber:#d9a206;
+    --amber-soft:#fbf0cf;
+    --purple:#6f4bb3;
+    --purple-soft:#ece3fb;
+    --ink:#243b53;
+    --ink-soft:#52677d;
+    --line:#d7e0ea;
+    --bg:#f5f8fc;
+    --card:#ffffff;
+    --shadow:0 1px 3px rgba(16,42,67,.08),0 8px 24px rgba(16,42,67,.06);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  code,pre,.mono{font-family:"SF Mono", "JetBrains Mono",Menlo,Consolas,monospace;}
+
+  /* ---------- Header ---------- */
+  header.hero{
+    background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 60%,var(--blue-2) 100%);
+    color:#fff;
+    padding:48px 24px 120px;
+    position:relative;
+    overflow:hidden;
+  }
+  header.hero::after{
+    content:"";position:absolute;right:-80px;top:-80px;width:340px;height:340px;
+    background:radial-gradient(circle at center,rgba(255,107,53,.35),transparent 65%);
+  }
+  .hero-inner{max-width:1080px;margin:0 auto;position:relative;z-index:1}
+  .hero .badge{
+    display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.25);padding:6px 14px;border-radius:999px;
+    font-size:13px;letter-spacing:.04em;text-transform:uppercase;font-weight:600;margin-bottom:18px;
+  }
+  .hero h1{margin:0 0 10px;font-size:42px;line-height:1.1;font-weight:800;letter-spacing:-.02em}
+  .hero p{margin:0;font-size:18px;max-width:680px;color:#dce9f7}
+  .hero .stack{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px}
+  .hero .chip{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+    padding:5px 12px;border-radius:8px;font-size:13px;font-weight:500}
+
+  /* ---------- Layout ---------- */
+  .wrap{max-width:1080px;margin:-80px auto 80px;padding:0 24px;position:relative;z-index:2}
+
+  /* ---------- Tabs ---------- */
+  .tabs{
+    display:flex;flex-wrap:wrap;gap:6px;background:var(--card);padding:8px;
+    border-radius:var(--radius);box-shadow:var(--shadow);position:sticky;top:12px;z-index:20;
+    border:1px solid var(--line);
+  }
+  .tab-btn{
+    appearance:none;border:0;background:transparent;color:var(--ink-soft);
+    font-size:14px;font-weight:600;padding:10px 15px;border-radius:9px;cursor:pointer;
+    transition:all .15s ease;white-space:nowrap;font-family:inherit;display:flex;align-items:center;gap:7px;
+  }
+  .tab-btn:hover{background:var(--sky);color:var(--blue)}
+  .tab-btn.active{background:var(--blue);color:#fff;box-shadow:0 4px 12px rgba(29,78,137,.3)}
+  .tab-btn .dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.5}
+
+  .panel{display:none;animation:fade .25s ease}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* ---------- Cards / content ---------- */
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:28px 30px;margin:22px 0;
+  }
+  .card h2{margin:0 0 4px;font-size:26px;font-weight:800;letter-spacing:-.01em;color:var(--navy)}
+  .card h3{margin:30px 0 12px;font-size:19px;font-weight:700;color:var(--blue)}
+  .card h2 + .lead{margin:0 0 8px;color:var(--ink-soft);font-size:16px}
+  .card p{margin:12px 0}
+  .card ul{margin:12px 0;padding-left:22px}
+  .card li{margin:6px 0}
+  .card a{color:var(--blue);font-weight:600;text-decoration:none}
+  .card a:hover{text-decoration:underline}
+
+  .kicker{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--orange);margin-bottom:6px}
+
+  .grid{display:grid;gap:16px}
+  .grid.cols-2{grid-template-columns:repeat(2,1fr)}
+  .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:760px){.grid.cols-2,.grid.cols-3{grid-template-columns:1fr}}
+
+  .mini{
+    border:1px solid var(--line);border-radius:12px;padding:18px;background:#fbfdff;
+  }
+  .mini .ic{font-size:22px}
+  .mini h4{margin:8px 0 6px;font-size:16px;color:var(--navy)}
+  .mini p{margin:0;font-size:14px;color:var(--ink-soft)}
+
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--sky);color:var(--navy);font-weight:700;font-size:13px;letter-spacing:.02em}
+  tr:last-child td{border-bottom:0}
+  td code,td .mono{font-size:12.5px;background:#eef3f9;padding:1px 6px;border-radius:5px;color:var(--blue)}
+
+  .note{
+    border-left:4px solid var(--orange);background:var(--orange-soft);
+    padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;font-size:14.5px;
+  }
+  .note.blue{border-color:var(--blue);background:var(--sky)}
+  .note.green{border-color:var(--green);background:var(--green-soft)}
+  .note strong{color:var(--navy)}
+
+  pre{background:var(--navy);color:#e6eefb;padding:16px 18px;border-radius:10px;
+    overflow-x:auto;font-size:13px;line-height:1.5;margin:16px 0}
+  pre .c{color:#7fa8d6}
+  pre .k{color:#ff9e6d}
+  pre .s{color:#a4e6c0}
+  p code,li code{background:#eef3f9;padding:1px 6px;border-radius:5px;font-size:13px;color:var(--blue)}
+
+  .diagram{
+    background:#fbfdff;border:1px solid var(--line);border-radius:12px;
+    padding:22px;margin:20px 0;text-align:center;overflow-x:auto;
+  }
+  .diagram svg{max-width:100%;height:auto}
+  .diagram .cap{margin-top:12px;font-size:13px;color:var(--ink-soft);font-style:italic}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:6px;font-size:12.5px}
+  .legend span{display:inline-flex;align-items:center;gap:6px;color:var(--ink-soft)}
+  .legend i{width:13px;height:13px;border-radius:3px;display:inline-block}
+
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
+  .pill.public{background:var(--sky);color:var(--blue)}
+  .pill.owner{background:var(--green-soft);color:var(--green)}
+  .pill.user{background:var(--purple-soft);color:var(--purple)}
+  .pill.admin{background:var(--orange-soft);color:#c4421a}
+  .pill.job{background:#e7edf3;color:var(--navy)}
+
+  footer{max-width:1080px;margin:0 auto;padding:30px 24px 60px;color:var(--ink-soft);font-size:13px;text-align:center}
+  .src-list{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
+  .src-list code{background:#eef3f9;padding:3px 8px;border-radius:6px;font-size:12px;color:var(--blue)}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <span class="badge">🏀 System Documentation</span>
+    <h1>Bracket 10 — How It Works</h1>
+    <p>A self-hostable March basketball bracket pool. This guide walks through how the system is built and how data flows through it — from a fan submitting picks to ESPN scores landing on the leaderboard automatically.</p>
+    <div class="stack">
+      <span class="chip">Node.js + Express</span>
+      <span class="chip">Google Cloud Firestore</span>
+      <span class="chip">Cloud Run</span>
+      <span class="chip">EJS / PWA</span>
+      <span class="chip">Cloud Scheduler</span>
+      <span class="chip">~$0/month off-season</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs" role="tablist">
+    <button class="tab-btn active" data-tab="overview"><span class="dot"></span>Overview</button>
+    <button class="tab-btn" data-tab="architecture"><span class="dot"></span>Architecture</button>
+    <button class="tab-btn" data-tab="flows"><span class="dot"></span>Data Flows</button>
+    <button class="tab-btn" data-tab="database"><span class="dot"></span>Database</button>
+    <button class="tab-btn" data-tab="polling"><span class="dot"></span>ESPN Polling</button>
+    <button class="tab-btn" data-tab="caching"><span class="dot"></span>Caching</button>
+    <button class="tab-btn" data-tab="security"><span class="dot"></span>Security</button>
+    <button class="tab-btn" data-tab="deploy"><span class="dot"></span>Deployment</button>
+  </nav>
+
+  <!-- ============================ OVERVIEW ============================ -->
+  <section class="panel active" id="overview">
+    <div class="card">
+      <span class="kicker">The Big Picture</span>
+      <h2>What this system is</h2>
+      <p class="lead">Run a March bracket pool with your friends — without a spreadsheet.</p>
+      <p>
+        Bracket 10 is a web application that lets a group of people pick which teams they think will go
+        furthest in a single-elimination basketball tournament, then automatically tracks scores and ranks
+        everyone on a live leaderboard. It's designed to be <strong>self-hosted</strong>: one person deploys
+        their own copy for their friend group, and Google Cloud's free tier covers most pools at roughly
+        <strong>$0/month outside of tournament weekends</strong>.
+      </p>
+      <p>
+        Unlike a traditional 63-pick bracket, each participant picks exactly <strong>10 teams</strong>. Points
+        accrue every time one of your teams wins a game, weighted so that later-round wins are worth
+        dramatically more. The whole experience is delivered as a Progressive Web App (PWA) so it installs and
+        caches like a native app on phones.
+      </p>
+
+      <h3>The four things it does</h3>
+      <div class="grid cols-2">
+        <div class="mini">
+          <div class="ic">📝</div>
+          <h4>Public entry & self-service edits</h4>
+          <p>Anyone with a link picks 10 teams, gets a confirmation, and can edit during the registration window — either via Entry ID + email or by signing in with Google.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">🛠️</div>
+          <h4>Admin dashboard</h4>
+          <p>A Google-authenticated admin sets up the tournament bracket, manages entries/teams/groups, records results manually, and watches cloud spend.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">📡</div>
+          <h4>Live ESPN score polling</h4>
+          <p>During the tournament a scheduled job pulls completed-game scores from ESPN every 15 minutes and updates winners + points with no human in the loop.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">🏆</div>
+          <h4>Leaderboard & projections</h4>
+          <p>A live standings grid shows current points and <em>maximum possible</em> points so participants can see who's still mathematically in it.</p>
+        </div>
+      </div>
+
+      <h3>How it's built (the shape of the code)</h3>
+      <p>
+        The codebase follows a strict <strong>MVC layering</strong>. A request always flows
+        <em>down</em> the stack, and only the bottom layer is allowed to touch the database. This makes the
+        business logic reusable: the same services power both the website and the automated polling job.
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+          <defs>
+            <marker id="ovArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#1d4e89"/>
+            </marker>
+          </defs>
+          <!-- stacked layers -->
+          <g font-size="14" font-weight="700" text-anchor="middle">
+            <rect x="40" y="20" width="680" height="34" rx="8" fill="#e8f0fb" stroke="#bcd3f0"/>
+            <text x="380" y="42" fill="#102a43">Routes — map a URL to its guard + one controller method</text>
+
+            <rect x="40" y="64" width="680" height="34" rx="8" fill="#dcf3e8" stroke="#9fd9be"/>
+            <text x="380" y="86" fill="#1c5c3f">Controllers — validate input, render views or return JSON</text>
+
+            <rect x="40" y="108" width="680" height="34" rx="8" fill="#fbf0cf" stroke="#e6cd72"/>
+            <text x="380" y="130" fill="#6b5306">Services — business logic, workflows, transactions (shared core)</text>
+
+            <rect x="40" y="152" width="680" height="34" rx="8" fill="#ece3fb" stroke="#cbb6ee"/>
+            <text x="380" y="174" fill="#4a2f87">Repositories — all Firestore reads/writes + cache invalidation</text>
+
+            <rect x="240" y="200" width="280" height="34" rx="8" fill="#102a43"/>
+            <text x="380" y="222" fill="#fff">🔥 Google Cloud Firestore</text>
+          </g>
+          <g stroke="#1d4e89" stroke-width="2" marker-end="url(#ovArrow)">
+            <line x1="380" y1="54" x2="380" y2="62"/>
+            <line x1="380" y1="98" x2="380" y2="106"/>
+            <line x1="380" y1="142" x2="380" y2="150"/>
+            <line x1="380" y1="186" x2="380" y2="198"/>
+          </g>
+        </svg>
+        <div class="cap">Requests flow strictly downward; only repositories talk to Firestore.</div>
+      </div>
+
+      <div class="note blue">
+        <strong>Two entry points, one shared core.</strong> The <code>server.js</code> Express app handles all
+        human traffic, while <code>jobs/espn-poll.js</code> runs as a scheduled Cloud Run Job that
+        <em>bypasses Express entirely</em>. Both call the same services and repositories and write to the same
+        Firestore — so game results have two writers that share the same core logic.
+      </div>
+
+      <h3>The technology stack</h3>
+      <table>
+        <tr><th>Concern</th><th>Choice</th><th>Why</th></tr>
+        <tr><td>Server & rendering</td><td><code>express</code>, <code>ejs</code>, <code>compression</code></td><td>Server-rendered HTML, small and boring dependency tree</td></tr>
+        <tr><td>Database</td><td><code>@google-cloud/firestore</code></td><td>Serverless NoSQL, generous free tier, no server to manage</td></tr>
+        <tr><td>Hosting</td><td>Cloud Run + Cloud Build</td><td>Scales to zero — you pay nothing when idle</td></tr>
+        <tr><td>Scheduled work</td><td>Cloud Scheduler → Cloud Run Jobs</td><td>Cron-driven ESPN polling during game windows</td></tr>
+        <tr><td>Admin auth</td><td><code>google-auth-library</code> (OAuth)</td><td>No password storage; allowlist by email</td></tr>
+        <tr><td>Caching / rate limiting</td><td>Hand-rolled, in-repo</td><td>Removed <code>node-cache</code> &amp; <code>express-rate-limit</code> to stay lean</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================ ARCHITECTURE ============================ -->
+  <section class="panel" id="architecture">
+    <div class="card">
+      <span class="kicker">Component Map</span>
+      <h2>System architecture</h2>
+      <p class="lead">What talks to what — the layers, the cross-cutting modules, and the external systems.</p>
+      <p>
+        The system has two runtime processes that share one code core. The <strong>web app</strong> is a Cloud
+        Run service; the <strong>poll job</strong> is a separate Cloud Run Job. Both depend on the same
+        <code>services</code> and <code>repositories</code>, and both read and write the same Firestore
+        database. Three external systems sit at the edges: Google OAuth (admin/participant sign-in), the ESPN
+        scoreboard API (scores), and Cloud Scheduler (the cron that fires the poll job).
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 860 470" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+          <defs>
+            <marker id="aArrow" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+              <path d="M0,0 L8,3.2 L0,6.4 Z" fill="#33506b"/>
+            </marker>
+            <marker id="aArrowO" markerWidth="10" markerHeight="10" refX="8" refY="3.2" orient="auto">
+              <path d="M0,0 L8,3.2 L0,6.4 Z" fill="#ff6b35"/>
+            </marker>
+          </defs>
+
+          <!-- external systems -->
+          <g font-size="12.5" text-anchor="middle">
+            <rect x="30" y="30" width="120" height="46" rx="9" fill="#fff" stroke="#bcd3f0" stroke-width="1.5"/>
+            <text x="90" y="52" font-weight="700" fill="#102a43">Browser / PWA</text>
+            <text x="90" y="68" fill="#52677d" font-size="11">views + public/js</text>
+
+            <rect x="30" y="180" width="120" height="40" rx="9" fill="#fff" stroke="#cbb6ee" stroke-width="1.5"/>
+            <text x="90" y="205" font-weight="700" fill="#4a2f87">Google OAuth</text>
+
+            <rect x="710" y="180" width="120" height="40" rx="9" fill="#fff" stroke="#9fd9be" stroke-width="1.5"/>
+            <text x="770" y="205" font-weight="700" fill="#1c5c3f">ESPN API</text>
+
+            <rect x="710" y="350" width="120" height="40" rx="9" fill="#fff" stroke="#e6cd72" stroke-width="1.5"/>
+            <text x="770" y="375" font-weight="700" fill="#6b5306">Cloud Scheduler</text>
+          </g>
+
+          <!-- Web app box -->
+          <rect x="200" y="24" width="430" height="240" rx="14" fill="#f3f8ff" stroke="#1d4e89" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="215" y="44" font-size="12" font-weight="800" fill="#1d4e89">WEB APP — Cloud Run service (server.js)</text>
+          <g font-size="12" text-anchor="middle">
+            <rect x="225" y="58" width="380" height="40" rx="8" fill="#102a43"/>
+            <text x="415" y="74" fill="#fff" font-weight="700" font-size="11.5">Middleware chain</text>
+            <text x="415" y="89" fill="#cdddef" font-size="9.5">securityHeaders · session · csrf · rateLimit · adminMiddleware · errors</text>
+
+            <rect x="225" y="108" width="380" height="32" rx="8" fill="#e8f0fb" stroke="#bcd3f0"/>
+            <text x="415" y="128" fill="#102a43" font-weight="700">routes/*</text>
+
+            <rect x="225" y="150" width="380" height="32" rx="8" fill="#dcf3e8" stroke="#9fd9be"/>
+            <text x="415" y="170" fill="#1c5c3f" font-weight="700">controllers/*</text>
+
+            <rect x="225" y="192" width="380" height="32" rx="8" fill="#fbf0cf" stroke="#e6cd72"/>
+            <text x="415" y="212" fill="#6b5306" font-weight="700">services/* (index.js barrel)</text>
+          </g>
+
+          <!-- Poll job box -->
+          <rect x="640" y="270" width="190" height="60" rx="12" fill="#eef2f7" stroke="#33506b" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="735" y="290" font-size="11" font-weight="800" fill="#33506b" text-anchor="middle">POLL JOB — Cloud Run Job</text>
+          <rect x="655" y="298" width="160" height="26" rx="7" fill="#fff" stroke="#c2ccd6"/>
+          <text x="735" y="315" font-size="11.5" font-weight="700" fill="#243b53" text-anchor="middle">jobs/espn-poll.js</text>
+
+          <!-- repositories -->
+          <rect x="280" y="300" width="270" height="46" rx="10" fill="#ece3fb" stroke="#cbb6ee" stroke-width="1.5"/>
+          <text x="415" y="320" font-size="12.5" font-weight="700" fill="#4a2f87" text-anchor="middle">repositories/*</text>
+          <text x="415" y="336" font-size="10" fill="#6f4bb3" text-anchor="middle">RepositoryManager → hierarchicalRepository</text>
+
+          <!-- cross-cutting -->
+          <rect x="30" y="300" width="210" height="46" rx="10" fill="#fff7ef" stroke="#ffb98f" stroke-width="1.5"/>
+          <text x="135" y="320" font-size="12" font-weight="700" fill="#c4421a" text-anchor="middle">config/* · utils/*</text>
+          <text x="135" y="336" font-size="9.5" fill="#a35a3a" text-anchor="middle">firestore · auth · logger · errors · cacheUtils</text>
+
+          <!-- Firestore -->
+          <rect x="300" y="392" width="230" height="50" rx="12" fill="#102a43"/>
+          <text x="415" y="416" font-size="15" font-weight="800" fill="#fff" text-anchor="middle">🔥 Firestore</text>
+          <text x="415" y="432" font-size="10" fill="#9fb8d4" text-anchor="middle">the single source of truth</text>
+
+          <!-- arrows -->
+          <g stroke="#33506b" stroke-width="1.8" fill="none" marker-end="url(#aArrow)">
+            <line x1="150" y1="53" x2="222" y2="74"/>            <!-- browser -> mw -->
+            <line x1="415" y1="98" x2="415" y2="106"/>           <!-- mw->routes -->
+            <line x1="415" y1="140" x2="415" y2="148"/>          <!-- routes->ctrl -->
+            <line x1="415" y1="182" x2="415" y2="190"/>          <!-- ctrl->svc -->
+            <line x1="415" y1="224" x2="415" y2="298"/>          <!-- svc->repo -->
+            <line x1="415" y1="346" x2="415" y2="390"/>          <!-- repo->FS -->
+            <line x1="150" y1="200" x2="222" y2="150"/>          <!-- oauth->ctrl -->
+            <line x1="710" y1="370" x2="788" y2="332" stroke="#6b5306"/> <!-- scheduler->job (curve approx) -->
+          </g>
+          <!-- scheduler -> job -->
+          <path d="M735,350 L735,332" stroke="#6b5306" stroke-width="1.8" fill="none" marker-end="url(#aArrow)"/>
+          <!-- job -> services -->
+          <path d="M655,310 C600,300 560,250 605,222" stroke="#33506b" stroke-width="1.8" fill="none" marker-end="url(#aArrow)"/>
+          <!-- services -> ESPN -->
+          <path d="M605,205 C660,196 690,200 708,200" stroke="#ff6b35" stroke-width="1.8" fill="none" marker-end="url(#aArrowO)"/>
+          <text x="660" y="192" font-size="9.5" fill="#c4421a" text-anchor="middle">fetch scores</text>
+          <!-- job -> repos -->
+          <path d="M640,318 C590,330 580,326 552,324" stroke="#33506b" stroke-width="1.8" fill="none" marker-end="url(#aArrow)"/>
+
+          <!-- render dashed back to browser -->
+          <path d="M225,128 C175,128 165,90 152,70" stroke="#52677d" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#aArrow)"/>
+          <text x="178" y="108" font-size="9" fill="#52677d" text-anchor="middle">render HTML</text>
+        </svg>
+        <div class="legend">
+          <span><i style="background:#e8f0fb"></i>Routes</span>
+          <span><i style="background:#dcf3e8"></i>Controllers</span>
+          <span><i style="background:#fbf0cf"></i>Services</span>
+          <span><i style="background:#ece3fb"></i>Repositories</span>
+          <span><i style="background:#fff7ef"></i>Cross-cutting</span>
+          <span><i style="background:#102a43"></i>Firestore</span>
+        </div>
+      </div>
+
+      <h3>The layers, precisely</h3>
+      <table>
+        <tr><th>Layer</th><th>Responsibility</th><th>Lives in</th></tr>
+        <tr><td><strong>Routes</strong></td><td>Map a URL to its guard middleware and exactly one controller method. Thin.</td><td><code>src/routes/*.js</code></td></tr>
+        <tr><td><strong>Controllers</strong></td><td>Parse/validate input via <code>controllerUtils</code>, wrap in <code>controllerWrapper</code>, render views or return JSON.</td><td><code>src/controllers/*.js</code></td></tr>
+        <tr><td><strong>Services</strong></td><td>Business logic, workflows, transaction orchestration. Reused by both the web app and the poll job.</td><td><code>src/services/*.js</code></td></tr>
+        <tr><td><strong>Repositories</strong></td><td>All Firestore reads/writes and atomic queries; owns cache invalidation on writes.</td><td><code>src/repositories/*.js</code></td></tr>
+        <tr><td><strong>Views</strong></td><td>Server-rendered HTML; static assets + PWA served alongside.</td><td><code>views/*.ejs</code>, <code>public/*</code></td></tr>
+      </table>
+
+      <h3>Cross-cutting modules</h3>
+      <div class="grid cols-3">
+        <div class="mini">
+          <h4>Middleware</h4>
+          <p><code>securityHeaders</code> (CSP/HSTS), Firestore-backed session store, <code>csrf</code>, <code>rateLimit</code>, <code>adminMiddleware</code> auth guards, and <code>errorMiddleware</code> (always last).</p>
+        </div>
+        <div class="mini">
+          <h4>Config</h4>
+          <p><code>firestore</code> client singleton, <code>auth</code> (OAuth + admin allowlist), and <code>app</code>/<code>const</code> (tournament dates, scoring constants).</p>
+        </div>
+        <div class="mini">
+          <h4>Utils</h4>
+          <p><code>logger</code> (structured JSON), <code>errors</code>, <code>cacheUtils</code> (TTL caches + invalidation), <code>controllerUtils</code>, <code>pointsUtils</code>.</p>
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>Why two writers matter.</strong> Both the admin manual path and the ESPN poll call
+        <code>gameService.updateTeamRecords</code>, but they use different points-recalculation strategies: the
+        admin click does a <em>full-year</em> recalc of every entry, while the poll does a <em>targeted</em>
+        recalc of only entries that picked an affected team. They converge to the same answer; the poll is just
+        cheaper. See the <strong>Data Flows</strong> tab for both traces.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ DATA FLOWS ============================ -->
+  <section class="panel" id="flows">
+    <div class="card">
+      <span class="kicker">Request Traces</span>
+      <h2>Data flows</h2>
+      <p class="lead">Who can trigger what, and how each request moves through the layers.</p>
+      <p>Access is organized into five tiers. They are deliberately independent — a participant session grants <em>zero</em> admin access, and vice versa.</p>
+
+      <table>
+        <tr><th>Tier</th><th>Session field</th><th>Guard</th><th>Set by</th></tr>
+        <tr><td><span class="pill public">Public</span></td><td>—</td><td>rate limits only</td><td>—</td></tr>
+        <tr><td><span class="pill owner">Entry owner</span></td><td><code>verifiedEntries["year:id"]</code></td><td>inline in <code>/my-entry/*</code></td><td>Entry ID + email match</td></tr>
+        <tr><td><span class="pill user">Participant</span></td><td><code>userEmail</code></td><td><code>requireUser</code></td><td>Google OAuth (user branch)</td></tr>
+        <tr><td><span class="pill admin">Site admin</span></td><td><code>siteAdmin</code></td><td><code>requireSiteAdmin</code></td><td>Google OAuth + <code>ADMIN_EMAILS</code></td></tr>
+        <tr><td><span class="pill job">Poll job</span></td><td>— (no HTTP)</td><td>Cloud Run Jobs IAM</td><td>Cloud Scheduler</td></tr>
+      </table>
+
+      <h3>Flow 1 — A fan creates an entry <span class="pill public">Public</span></h3>
+      <p>
+        The public registration flow. Note the ordering safeguard: the confirmation token is staged in the
+        session <em>before</em> the database write, so a save failure can never produce a duplicate entry on
+        retry. No picks or PII ever travel through query parameters.
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 820 340" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="12">
+          <defs>
+            <marker id="sq1" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#1d4e89"/></marker>
+            <marker id="sq1b" markerWidth="9" markerHeight="9" refX="1.5" refY="3" orient="auto"><path d="M7,0 L0,3 L7,6 Z" fill="#2e9e6b"/></marker>
+          </defs>
+          <!-- lifelines -->
+          <g text-anchor="middle" font-weight="700">
+            <rect x="20"  y="14" width="110" height="34" rx="8" fill="#e8f0fb" stroke="#bcd3f0"/><text x="75"  y="35" fill="#102a43">User</text>
+            <rect x="200" y="14" width="150" height="34" rx="8" fill="#dcf3e8" stroke="#9fd9be"/><text x="275" y="35" fill="#1c5c3f" font-size="11">registrationController</text>
+            <rect x="420" y="14" width="120" height="34" rx="8" fill="#fbf0cf" stroke="#e6cd72"/><text x="480" y="35" fill="#6b5306">viewService</text>
+            <rect x="610" y="14" width="150" height="34" rx="8" fill="#ece3fb" stroke="#cbb6ee"/><text x="685" y="35" fill="#4a2f87">EntryRepository</text>
+          </g>
+          <g stroke="#cbd6e2" stroke-width="1.5" stroke-dasharray="3 4">
+            <line x1="75"  y1="48" x2="75"  y2="330"/>
+            <line x1="275" y1="48" x2="275" y2="330"/>
+            <line x1="480" y1="48" x2="480" y2="330"/>
+            <line x1="685" y1="48" x2="685" y2="330"/>
+          </g>
+          <!-- messages -->
+          <g stroke="#1d4e89" stroke-width="1.8" marker-end="url(#sq1)">
+            <line x1="75" y1="72" x2="273" y2="72"/>
+            <line x1="275" y1="150" x2="478" y2="150"/>
+            <line x1="480" y1="216" x2="683" y2="216"/>
+          </g>
+          <g font-size="11" fill="#243b53">
+            <text x="175" y="66" text-anchor="middle">POST /entryVerify (profile + 10 picks)</text>
+            <text x="378" y="144" text-anchor="middle">createNewEntry(...)</text>
+            <text x="583" y="210" text-anchor="middle">createEntry → entries/{id}</text>
+          </g>
+          <!-- self notes -->
+          <rect x="200" y="84" width="180" height="44" rx="6" fill="#fff" stroke="#e6cd72"/>
+          <text x="290" y="100" font-size="9.5" fill="#6b5306" text-anchor="middle">normalizeFirstFourPicks vs live</text>
+          <text x="290" y="112" font-size="9.5" fill="#6b5306" text-anchor="middle">round-0 state; validate exactly</text>
+          <text x="290" y="124" font-size="9.5" fill="#6b5306" text-anchor="middle">10 unique "id, name" picks</text>
+
+          <rect x="210" y="160" width="180" height="30" rx="6" fill="#fff" stroke="#9fd9be"/>
+          <text x="300" y="172" font-size="9.5" fill="#1c5c3f" text-anchor="middle">Stage session token BEFORE</text>
+          <text x="300" y="184" font-size="9.5" fill="#1c5c3f" text-anchor="middle">the DB write (ordering safeguard)</text>
+
+          <rect x="560" y="228" width="200" height="30" rx="6" fill="#fff" stroke="#cbb6ee"/>
+          <text x="660" y="240" font-size="9.3" fill="#4a2f87" text-anchor="middle">Busts groupTeams_, entriesForGroup_,</text>
+          <text x="660" y="251" font-size="9.3" fill="#4a2f87" text-anchor="middle">gameViewData_, allEntries_ caches</text>
+
+          <!-- return -->
+          <line x1="275" y1="290" x2="77" y2="290" stroke="#2e9e6b" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#sq1b)"/>
+          <text x="176" y="284" font-size="11" fill="#1c5c3f" text-anchor="middle">302 Redirect /entryConfirm?token=…</text>
+          <text x="176" y="312" font-size="10" fill="#52677d" text-anchor="middle">token = single-use, 10-min TTL</text>
+        </svg>
+        <div class="cap">Entry creation — validation, ordering safeguard, and automatic cache invalidation.</div>
+      </div>
+
+      <p><strong>Self-service edits</strong> come in two flavors, both funneling into one shared <code>applyEntryUpdate</code> helper so the write logic can't drift:</p>
+      <ul>
+        <li><span class="pill owner">Path A</span> <code>/my-entry</code> — verify with <strong>Entry ID + email</strong>; a Firestore-backed limiter (10/10 min, keyed by entry ID) blocks email brute-force even across rotating IPs.</li>
+        <li><span class="pill user">Path B</span> <code>/my-brackets</code> — sign in with <strong>Google</strong>; see all your entries across every year, edit the current one. Ownership is re-checked against the stored entry on every write (IDOR-proof).</li>
+      </ul>
+      <p>In both paths, server-owned fields (email, groups, payment, email-sent metadata) are always taken from the <em>stored</em> entry, never from form input.</p>
+
+      <h3>Flow 2 — Admin records a result manually <span class="pill admin">Admin</span></h3>
+      <p>The manual scoring path. Recording a winner advances them into the next game (inside a Firestore transaction), updates both teams' record docs, then does a <strong>full-year</strong> points recalc and clears all caches.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="11.5">
+          <defs>
+            <marker id="sq2" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#c4421a"/></marker>
+            <marker id="sq2b" markerWidth="9" markerHeight="9" refX="1.5" refY="3" orient="auto"><path d="M7,0 L0,3 L7,6 Z" fill="#2e9e6b"/></marker>
+          </defs>
+          <g text-anchor="middle" font-weight="700" font-size="11">
+            <rect x="20"  y="14" width="90"  height="32" rx="8" fill="#ffe3d6" stroke="#ffb98f"/><text x="65"  y="34" fill="#c4421a">Admin</text>
+            <rect x="150" y="14" width="120" height="32" rx="8" fill="#dcf3e8" stroke="#9fd9be"/><text x="210" y="34" fill="#1c5c3f">gameService</text>
+            <rect x="310" y="14" width="130" height="32" rx="8" fill="#ece3fb" stroke="#cbb6ee"/><text x="375" y="34" fill="#4a2f87">GameRepository</text>
+            <rect x="480" y="14" width="130" height="32" rx="8" fill="#ece3fb" stroke="#cbb6ee"/><text x="545" y="34" fill="#4a2f87">TeamRepository</text>
+            <rect x="650" y="14" width="140" height="32" rx="8" fill="#fbf0cf" stroke="#e6cd72"/><text x="720" y="34" fill="#6b5306">pointsService</text>
+          </g>
+          <g stroke="#cbd6e2" stroke-width="1.5" stroke-dasharray="3 4">
+            <line x1="65"  y1="46" x2="65"  y2="312"/>
+            <line x1="210" y1="46" x2="210" y2="312"/>
+            <line x1="375" y1="46" x2="375" y2="312"/>
+            <line x1="545" y1="46" x2="545" y2="312"/>
+            <line x1="720" y1="46" x2="720" y2="312"/>
+          </g>
+          <g stroke="#c4421a" stroke-width="1.8" marker-end="url(#sq2)">
+            <line x1="65"  y1="70"  x2="208" y2="70"/>
+            <line x1="210" y1="104" x2="373" y2="104"/>
+            <line x1="210" y1="150" x2="373" y2="150"/>
+            <line x1="210" y1="196" x2="543" y2="196"/>
+            <line x1="65"  y1="240" x2="718" y2="240"/>
+          </g>
+          <g font-size="10.5" fill="#243b53">
+            <text x="135" y="64" text-anchor="middle">POST /updateWinner</text>
+            <text x="292" y="98" text-anchor="middle">updateWinner(gameID,…)</text>
+            <text x="292" y="144" text-anchor="middle">updateNextGameTeam(…)</text>
+            <text x="375" y="190" text-anchor="middle">updateTeamRecord(winner &amp; loser)</text>
+            <text x="392" y="234" text-anchor="middle">updatePointsForAffectedEntries(year, [winner, loser])</text>
+          </g>
+          <rect x="300" y="156" width="170" height="30" rx="6" fill="#fff" stroke="#cbb6ee"/>
+          <text x="385" y="168" font-size="9" fill="#4a2f87" text-anchor="middle">Firestore transaction advances</text>
+          <text x="385" y="179" font-size="9" fill="#4a2f87" text-anchor="middle">winner; busts game caches</text>
+
+          <rect x="610" y="250" width="180" height="32" rx="6" fill="#fff" stroke="#e6cd72"/>
+          <text x="700" y="262" font-size="9" fill="#6b5306" text-anchor="middle">Recalc only entries holding</text>
+          <text x="700" y="273" font-size="9" fill="#6b5306" text-anchor="middle">either team (targeted)</text>
+
+          <line x1="210" y1="300" x2="67" y2="300" stroke="#2e9e6b" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#sq2b)"/>
+          <text x="135" y="294" font-size="10.5" fill="#1c5c3f" text-anchor="middle">200 OK</text>
+        </svg>
+        <div class="cap">Manual scoring — transactional advancement + full-year recalc. <code>/undoGame</code> is the mirror image.</div>
+      </div>
+
+      <h3>Flow 3 — Automated ESPN polling <span class="pill job">Poll job</span></h3>
+      <p>
+        The production score-update path does <strong>not</strong> go through Express at all. Cloud Scheduler
+        triggers a Cloud Run Job via IAM/OAuth — there's no shared secret and no web endpoint. The job matches
+        ESPN's completed games against unresolved DB games, applies winners in parallel, then runs a
+        <strong>targeted</strong> recalc touching only affected entries.
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 840 350" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="11.5">
+          <defs>
+            <marker id="sq3" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#33506b"/></marker>
+            <marker id="sq3o" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#ff6b35"/></marker>
+          </defs>
+          <g text-anchor="middle" font-weight="700" font-size="10.5">
+            <rect x="14"  y="14" width="120" height="32" rx="8" fill="#fbf0cf" stroke="#e6cd72"/><text x="74"  y="34" fill="#6b5306">Cloud Scheduler</text>
+            <rect x="160" y="14" width="120" height="32" rx="8" fill="#e7edf3" stroke="#c2ccd6"/><text x="220" y="34" fill="#33506b">Cloud Run Job</text>
+            <rect x="306" y="14" width="110" height="32" rx="8" fill="#fbf0cf" stroke="#e6cd72"/><text x="361" y="34" fill="#6b5306">pollService</text>
+            <rect x="442" y="14" width="110" height="32" rx="8" fill="#dcf3e8" stroke="#9fd9be"/><text x="497" y="34" fill="#1c5c3f">espnService</text>
+            <rect x="578" y="14" width="110" height="32" rx="8" fill="#dcf3e8" stroke="#9fd9be"/><text x="633" y="34" fill="#1c5c3f">gameService</text>
+            <rect x="714" y="14" width="110" height="32" rx="8" fill="#fbf0cf" stroke="#e6cd72"/><text x="769" y="34" fill="#6b5306">pointsService</text>
+          </g>
+          <g stroke="#cbd6e2" stroke-width="1.5" stroke-dasharray="3 4">
+            <line x1="74"  y1="46" x2="74"  y2="342"/>
+            <line x1="220" y1="46" x2="220" y2="342"/>
+            <line x1="361" y1="46" x2="361" y2="342"/>
+            <line x1="497" y1="46" x2="497" y2="342"/>
+            <line x1="633" y1="46" x2="633" y2="342"/>
+            <line x1="769" y1="46" x2="769" y2="342"/>
+          </g>
+          <g stroke="#33506b" stroke-width="1.8" marker-end="url(#sq3)">
+            <line x1="74"  y1="70"  x2="218" y2="70"/>
+            <line x1="220" y1="104" x2="359" y2="104"/>
+            <line x1="361" y1="262" x2="631" y2="262"/>
+            <line x1="361" y1="306" x2="767" y2="306"/>
+          </g>
+          <line x1="361" y1="148" x2="495" y2="148" stroke="#ff6b35" stroke-width="1.8" marker-end="url(#sq3o)"/>
+          <g font-size="10" fill="#243b53">
+            <text x="147" y="64"  text-anchor="middle">execute (IAM — no secret)</text>
+            <text x="290" y="98"  text-anchor="middle">runEspnPoll(year)</text>
+            <text x="428" y="142" text-anchor="middle" fill="#c4421a">fetchCompletedTournamentGames()</text>
+            <text x="496" y="256" text-anchor="middle">updateTeamRecords(…) ×N</text>
+            <text x="565" y="300" text-anchor="middle">updatePointsForAffectedEntries</text>
+          </g>
+          <rect x="300" y="160" width="200" height="40" rx="6" fill="#fff" stroke="#9fd9be"/>
+          <text x="400" y="174" font-size="9" fill="#1c5c3f" text-anchor="middle">today + yesterday feed, deduped;</text>
+          <text x="400" y="185" font-size="9" fill="#1c5c3f" text-anchor="middle">espnTeamMap.json displayName → sID;</text>
+          <text x="400" y="196" font-size="9" fill="#1c5c3f" text-anchor="middle">match unresolved games "minSID-maxSID"</text>
+
+          <rect x="540" y="216" width="240" height="28" rx="6" fill="#fff" stroke="#9fd9be"/>
+          <text x="660" y="234" font-size="9" fill="#1c5c3f" text-anchor="middle">loop each new winner — parallel, allSettled</text>
+
+          <rect x="600" y="318" width="220" height="26" rx="6" fill="#fff" stroke="#e6cd72"/>
+          <text x="710" y="335" font-size="9" fill="#6b5306" text-anchor="middle">array-contains-any: only entries with affected teams</text>
+        </svg>
+        <div class="cap">ESPN polling — IAM-authenticated, parallel resolution, targeted recalc. No Express, no shared secret.</div>
+      </div>
+
+      <div class="note green">
+        <strong>Idempotency by design.</strong> On resolution the <code>winner</code> field is written
+        <em>last</em> — it's the commit marker. A mid-resolution failure leaves the game unresolved, and the
+        next poll cycle simply retries every step. On undo it's cleared last, so a mid-undo failure leaves the
+        game resolved and the admin can retry safely.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ DATABASE ============================ -->
+  <section class="panel" id="database">
+    <div class="card">
+      <span class="kicker">Firestore Schema</span>
+      <h2>Database</h2>
+      <p class="lead">Google Cloud Firestore — a serverless NoSQL document store, used as the single source of truth.</p>
+      <p>
+        Data is organized in a <strong>hierarchical structure</strong> (the current default): everything
+        tournament-specific lives under a <code>tournaments/{year}</code> document, with games, entries,
+        regions, and school records as subcollections. Reference data that spans all years — schools,
+        conferences, groups — lives in top-level collections. A legacy <em>flat</em> structure (year-as-a-field
+        in top-level collections) is still supported behind a config flag.
+      </p>
+
+      <div class="note blue">
+        <strong>Why hierarchical?</strong> No <code>where('year','==',…)</code> filters are ever needed,
+        <code>getTournamentTeams</code> becomes a single subcollection read instead of a 3-way join, and the
+        game-view render needs no joins at all — school records are <em>fully denormalized</em> at setup time.
+      </div>
+
+      <h3>Collection tree (hierarchical)</h3>
+      <div class="diagram">
+        <svg viewBox="0 0 720 430" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="12.5">
+          <!-- helper styles via attributes -->
+          <!-- tournaments root doc -->
+          <rect x="30" y="20" width="250" height="40" rx="9" fill="#102a43"/>
+          <text x="46" y="38" fill="#fff" font-weight="800" font-size="13">tournaments/{year}</text>
+          <text x="46" y="52" fill="#9fb8d4" font-size="9.5">hasFirstFour · firstFourGameCount</text>
+
+          <!-- connector spine -->
+          <line x1="55" y1="60" x2="55" y2="380" stroke="#bcd3f0" stroke-width="2"/>
+
+          <!-- subcollections -->
+          <g font-size="12">
+            <!-- regions -->
+            <line x1="55" y1="95" x2="90" y2="95" stroke="#bcd3f0" stroke-width="2"/>
+            <rect x="90" y="78" width="270" height="36" rx="8" fill="#e8f0fb" stroke="#bcd3f0"/>
+            <text x="104" y="95" font-weight="700" fill="#1d4e89">regions/{regionID}</text>
+            <text x="104" y="108" font-size="9.5" fill="#52677d">regionID · regionName</text>
+
+            <!-- games -->
+            <line x1="55" y1="150" x2="90" y2="150" stroke="#bcd3f0" stroke-width="2"/>
+            <rect x="90" y="133" width="270" height="36" rx="8" fill="#dcf3e8" stroke="#9fd9be"/>
+            <text x="104" y="150" font-weight="700" fill="#1c5c3f">games/{gameID}</text>
+            <text x="104" y="163" font-size="9.5" fill="#3a6e54">team1ID · team2ID · winner · round · nextGameID · manualHold</text>
+
+            <!-- entries -->
+            <line x1="55" y1="205" x2="90" y2="205" stroke="#bcd3f0" stroke-width="2"/>
+            <rect x="90" y="188" width="270" height="36" rx="8" fill="#ece3fb" stroke="#cbb6ee"/>
+            <text x="104" y="205" font-weight="700" fill="#4a2f87">entries/{entryId}</text>
+            <text x="104" y="218" font-size="9.5" fill="#6f4bb3">picks[10] · groups · points · possPoints · email</text>
+
+            <!-- school records -->
+            <line x1="55" y1="260" x2="90" y2="260" stroke="#bcd3f0" stroke-width="2"/>
+            <rect x="90" y="243" width="270" height="40" rx="8" fill="#fbf0cf" stroke="#e6cd72"/>
+            <text x="104" y="260" font-weight="700" fill="#6b5306">schoolRecords/{docID}</text>
+            <text x="104" y="273" font-size="9.5" fill="#8a6c10">fully denormalized · doc id = {regionID}_{seed} or ff_{gameID}_{slot}</text>
+          </g>
+
+          <!-- top-level reference collections -->
+          <rect x="400" y="20" width="290" height="26" rx="0" fill="none"/>
+          <text x="400" y="38" font-weight="800" font-size="12" fill="#33506b">TOP-LEVEL (span all years)</text>
+          <g font-size="12">
+            <rect x="400" y="56"  width="290" height="44" rx="8" fill="#fff" stroke="#d7e0ea"/>
+            <text x="414" y="74" font-weight="700" fill="#102a43">school/{sid}</text>
+            <text x="414" y="89" font-size="9.5" fill="#52677d">name · mascot · nameNick · confID · espn{…}</text>
+
+            <rect x="400" y="110" width="290" height="40" rx="8" fill="#fff" stroke="#d7e0ea"/>
+            <text x="414" y="128" font-weight="700" fill="#102a43">conferences/{conferenceId}</text>
+            <text x="414" y="142" font-size="9.5" fill="#52677d">name · shortName · active · slug</text>
+
+            <rect x="400" y="160" width="290" height="40" rx="8" fill="#fff" stroke="#d7e0ea"/>
+            <text x="414" y="178" font-weight="700" fill="#102a43">groups/{groupName}</text>
+            <text x="414" y="192" font-size="9.5" fill="#52677d">user-created competition groups</text>
+
+            <rect x="400" y="210" width="290" height="40" rx="8" fill="#fff" stroke="#d7e0ea"/>
+            <text x="414" y="228" font-weight="700" fill="#102a43">express-sessions/{sid}</text>
+            <text x="414" y="242" font-size="9.5" fill="#52677d">serialized session · expireAt (TTL reaped)</text>
+
+            <rect x="400" y="260" width="290" height="40" rx="8" fill="#fff" stroke="#d7e0ea"/>
+            <text x="414" y="278" font-weight="700" fill="#102a43">rateLimits/{key}</text>
+            <text x="414" y="292" font-size="9.5" fill="#52677d">fixed-window counters · expireAt (TTL reaped)</text>
+          </g>
+
+          <!-- denormalization arrows -->
+          <path d="M400,78 C375,150 372,230 362,258" stroke="#ff6b35" stroke-width="1.6" fill="none" stroke-dasharray="4 3"/>
+          <text x="500" y="330" font-size="10.5" fill="#c4421a" text-anchor="middle">school + conference + region fields are denormalized</text>
+          <text x="500" y="345" font-size="10.5" fill="#c4421a" text-anchor="middle">into schoolRecords at tournament setup time →</text>
+        </svg>
+        <div class="cap">Year-scoped subcollections under <code>tournaments/{year}</code>; reference data top-level. Orange = denormalization at setup.</div>
+      </div>
+
+      <h3>The six core collections</h3>
+      <table>
+        <tr><th>Collection</th><th>Purpose</th><th>Doc ID</th></tr>
+        <tr><td><code>tournaments/{year}/entries</code></td><td>A participant's pick of exactly 10 teams, plus running points</td><td><code>{entryId}</code></td></tr>
+        <tr><td><code>tournaments/{year}/games</code></td><td>One matchup; tracks teams, winner, round, where the winner advances</td><td><code>{gameID}</code></td></tr>
+        <tr><td><code>tournaments/{year}/schoolRecords</code></td><td>A team's dynamic state in this tournament (points, W/L) — denormalized</td><td><code>{regionID}_{seed}</code> / <code>ff_{gameID}_{slot}</code></td></tr>
+        <tr><td><code>school</code></td><td>Static team reference data, including the ESPN branding map</td><td><code>{sid}</code></td></tr>
+        <tr><td><code>conferences</code></td><td>Conference reference data and active status</td><td><code>{conferenceId}</code></td></tr>
+        <tr><td><code>groups</code></td><td>Competition groups (span all years)</td><td><code>{groupName}</code></td></tr>
+      </table>
+
+      <h3>The <code>schoolRecords</code> document — denormalized at setup</h3>
+      <p>
+        This is the key performance decision in the schema. At tournament setup, <code>insertMultipleSchoolRecords</code>
+        reads schools, regions, and conferences <em>in parallel</em> (through the shared 24-hour reference
+        caches) and writes everything the render path needs into each record. The game-view render therefore
+        needs <strong>zero joins</strong>.
+      </p>
+      <table>
+        <tr><th>Field</th><th>Source</th><th>Notes</th></tr>
+        <tr><td><code>sID</code> / <code>seed</code> / <code>regionID</code></td><td>setup input</td><td>identity of the slot</td></tr>
+        <tr><td><code>points</code></td><td>game scoring</td><td><code>null</code> until first win</td></tr>
+        <tr><td><code>gameStatus</code></td><td>game scoring</td><td>array of <code>'W'</code>/<code>'L'</code></td></tr>
+        <tr><td><code>schoolName</code> / <code>nameNick</code> / <code>mascot</code></td><td>school.*</td><td>denormalized</td></tr>
+        <tr><td><code>regionName</code></td><td>regions/{id}</td><td>denormalized</td></tr>
+        <tr><td><code>espnID</code> / <code>logoUrl</code> / <code>primaryColor</code></td><td>school.espn.*</td><td>for logos &amp; team colors</td></tr>
+        <tr><td><code>conferenceName</code></td><td>conferences shortName</td><td>denormalized</td></tr>
+      </table>
+
+      <h3>Three query-optimization patterns</h3>
+      <p>The repository layer enforces three patterns to keep DB cost low and avoid race conditions under heavy load:</p>
+      <div class="grid cols-3">
+        <div class="mini">
+          <div class="ic">♻️</div>
+          <h4>Cached reference reads</h4>
+          <p>Bulk/setup methods never call <code>collection('school').get()</code> directly — they go through <code>_getCached*</code> helpers sharing 24h cache keys, so a warmed cache means zero DB reads.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">🔒</div>
+          <h4>Atomic transactions</h4>
+          <p>Any read-then-write (advancing a winner, updating points) uses <code>db.runTransaction</code> so concurrent poll resolutions can't race. Cache invalidation is gated on whether the write actually happened.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">✂️</div>
+          <h4>array-contains-any chunking</h4>
+          <p>Firestore caps <code>array-contains-any</code> at 30 disjuncts. Queries over an unbounded team-ID list chunk into batches of 30, fire in parallel, then dedupe by entry ID.</p>
+        </div>
+      </div>
+
+      <h3>The points system</h3>
+      <p>Points are cumulative and awarded for <strong>winning</strong> a game (advancing), not for reaching a round. The weighting roughly doubles each round, so the championship game alone is worth more than the entire first round.</p>
+      <table>
+        <tr><th>Round</th><th>Teams</th><th>Points for a win</th><th><code>round</code> int</th></tr>
+        <tr><td>First Four</td><td>68 → 64</td><td>0</td><td>0</td></tr>
+        <tr><td>Round of 64</td><td>64 → 32</td><td>2</td><td>1</td></tr>
+        <tr><td>Round of 32</td><td>32 → 16</td><td>3</td><td>2</td></tr>
+        <tr><td>Sweet 16</td><td>16 → 8</td><td>5</td><td>3</td></tr>
+        <tr><td>Elite Eight</td><td>8 → 4</td><td>9</td><td>4</td></tr>
+        <tr><td>Final Four</td><td>4 → 2</td><td>17</td><td>5</td></tr>
+        <tr><td>Championship</td><td>2 → 1</td><td>33</td><td>6</td></tr>
+      </table>
+      <div class="note">
+        <strong>First Four lifecycle.</strong> A First Four matchup is picked as <em>one</em> combined option
+        ("Team A / Team B"), worth 0 points. When the play-in game resolves, every entry holding that slot is
+        auto-swapped to the winner. Picks are normalized against live game state at write time, so a user always
+        ends up holding whoever actually advanced.
+      </div>
+
+      <h3>Backups &amp; seeding</h3>
+      <ul>
+        <li><strong>Backup:</strong> <code>node scripts/backup-db.mjs</code> exports every collection to timestamped NDJSON in <code>/databasebackup/</code>. Email fields are blanked in all exports.</li>
+        <li><strong>Restore:</strong> <code>node scripts/restore-db.mjs</code> (supports <code>--dry-run</code>, <code>--only=&lt;collection&gt;</code>).</li>
+        <li><strong>Local seed:</strong> <code>node scripts/seed-emulator.mjs</code> loads ~360+ D-I schools, conferences, mock groups, PII-free mock entries, and the 2022 bracket into the Firestore emulator.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================ POLLING ============================ -->
+  <section class="panel" id="polling">
+    <div class="card">
+      <span class="kicker">Automated Scores</span>
+      <h2>ESPN score polling</h2>
+      <p class="lead">Game results update themselves via ESPN's free, unauthenticated scoreboard API.</p>
+      <p>
+        During the tournament, two Cloud Scheduler jobs fire <code>every 15 minutes</code> within active game
+        windows. Each fires a Cloud Run Job (authenticated by IAM, no shared secret) that runs
+        <code>jobs/espn-poll.js</code> — a process completely separate from the web app, but reusing the same
+        services and repositories.
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="12">
+          <defs>
+            <marker id="pArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#1d4e89"/></marker>
+          </defs>
+          <g text-anchor="middle" font-weight="700">
+            <rect x="20"  y="30" width="150" height="50" rx="10" fill="#fbf0cf" stroke="#e6cd72"/>
+            <text x="95" y="52" fill="#6b5306" font-size="12.5">Cloud Scheduler</text>
+            <text x="95" y="68" fill="#8a6c10" font-size="10">every 15 min · windows</text>
+
+            <rect x="215" y="30" width="160" height="50" rx="10" fill="#e7edf3" stroke="#c2ccd6"/>
+            <text x="295" y="52" fill="#33506b" font-size="12.5">Cloud Run Job</text>
+            <text x="295" y="68" fill="#5a6b7d" font-size="10">jobs/espn-poll.js</text>
+
+            <rect x="420" y="30" width="160" height="50" rx="10" fill="#fbf0cf" stroke="#e6cd72"/>
+            <text x="500" y="52" fill="#6b5306" font-size="12.5">pollService</text>
+            <text x="500" y="68" fill="#8a6c10" font-size="10">runEspnPoll(year)</text>
+
+            <rect x="615" y="30" width="130" height="50" rx="10" fill="#dcf3e8" stroke="#9fd9be"/>
+            <text x="680" y="52" fill="#1c5c3f" font-size="12.5">ESPN API</text>
+            <text x="680" y="68" fill="#3a6e54" font-size="10">scoreboard</text>
+          </g>
+          <g stroke="#1d4e89" stroke-width="1.8" marker-end="url(#pArrow)">
+            <line x1="170" y1="55" x2="213" y2="55"/>
+            <line x1="375" y1="55" x2="418" y2="55"/>
+            <line x1="580" y1="55" x2="613" y2="55"/>
+          </g>
+          <text x="192" y="46" font-size="9" fill="#52677d" text-anchor="middle">IAM/OAuth</text>
+
+          <!-- second row -->
+          <g text-anchor="middle" font-size="11.5">
+            <rect x="80"  y="135" width="180" height="44" rx="9" fill="#dcf3e8" stroke="#9fd9be"/>
+            <text x="170" y="153" fill="#1c5c3f" font-weight="700">match displayName → sID</text>
+            <text x="170" y="168" fill="#3a6e54" font-size="9.5">via espnTeamMap.json</text>
+
+            <rect x="300" y="135" width="180" height="44" rx="9" fill="#dcf3e8" stroke="#9fd9be"/>
+            <text x="390" y="153" fill="#1c5c3f" font-weight="700">updateTeamRecords(…)</text>
+            <text x="390" y="168" fill="#3a6e54" font-size="9.5">per new winner, parallel</text>
+
+            <rect x="520" y="135" width="180" height="44" rx="9" fill="#fbf0cf" stroke="#e6cd72"/>
+            <text x="610" y="153" fill="#6b5306" font-weight="700">targeted recalc</text>
+            <text x="610" y="168" fill="#8a6c10" font-size="9.5">updatePointsForAffected…</text>
+          </g>
+          <g stroke="#1d4e89" stroke-width="1.8" marker-end="url(#pArrow)">
+            <line x1="260" y1="157" x2="298" y2="157"/>
+            <line x1="480" y1="157" x2="518" y2="157"/>
+          </g>
+          <path d="M500,80 C440,110 300,110 200,133" stroke="#1d4e89" stroke-width="1.6" fill="none" marker-end="url(#pArrow)" stroke-dasharray="4 3"/>
+          <rect x="80" y="205" width="620" height="30" rx="8" fill="#102a43"/>
+          <text x="390" y="224" fill="#fff" font-size="11.5" text-anchor="middle" font-weight="700">→ Firestore (same DB the web app writes)</text>
+          <line x1="390" y1="179" x2="390" y2="203" stroke="#1d4e89" stroke-width="1.8" marker-end="url(#pArrow)"/>
+        </svg>
+        <div class="cap">The poll pipeline — scheduler → job → match → write → targeted recalc → Firestore.</div>
+      </div>
+
+      <h3>The scheduler jobs</h3>
+      <table>
+        <tr><th>Job</th><th>Schedule (cron)</th><th>Window (ET)</th></tr>
+        <tr><td><code>espn-poll-day</code></td><td><code>*/15 17-23 * 3-4 0,4,5,6</code></td><td>Thu–Sun, 5 PM – midnight</td></tr>
+        <tr><td><code>espn-poll-night</code></td><td><code>*/15 0-1 * 3-4 0,1,5,6</code></td><td>Fri–Mon, midnight – 2 AM</td></tr>
+      </table>
+      <div class="note"><strong>Cost note:</strong> these jobs are a source of Cloud Run egress cost. They're scoped tightly to March–April game windows and should be disabled or slowed when the tournament isn't active.</div>
+
+      <h3>Manual hold — undo vs. the poll</h3>
+      <p>
+        ESPN's "today + yesterday" feed keeps listing a completed game for ~48 hours. So when an admin
+        <strong>undoes</strong> a result, the code sets <code>manualHold: true</code> in the same write that
+        clears the winner. The poll skips held games — otherwise it would simply re-resolve the undone game
+        within one cycle. The hold clears when a result is recorded, or via the <strong>Release Hold</strong>
+        button (<code>POST /releaseGameHold</code>).
+      </p>
+
+      <h3>Team-name mapping</h3>
+      <p>
+        ESPN identifies teams by <code>displayName</code> (e.g. <code>"Duke Blue Devils"</code> = nameNick +
+        mascot). A static <code>src/config/espnTeamMap.json</code> maps those strings to internal
+        <code>sID</code> values. <code>scripts/buildEspnMap.js</code> auto-matches against the DB; any
+        <code>null</code> entries must be resolved by hand before the tournament starts. Unmapped names at poll
+        time are reported and skipped rather than guessed.
+      </p>
+
+      <h3>The job artifact</h3>
+      <p>
+        The poll image is kept tiny via a two-stage Docker build (<code>Dockerfile.poll</code>): esbuild bundles
+        <code>jobs/espn-poll.js</code> plus the full <code>src/</code> import tree into a single
+        <code>dist/poll.mjs</code> (~4.3 MB), and the production stage copies <em>only</em> that file into a
+        distroless image — no <code>node_modules</code> at all.
+      </p>
+      <div class="note blue">
+        <strong>Dry-run for admins.</strong> <code>POST /admin/trigger-espn-poll</code> runs
+        <code>runEspnPoll(year, {dryRun:true})</code> — it previews what <em>would</em> change without writing
+        anything. It's a console convenience; the real scheduled job never authenticates through the web app.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CACHING ============================ -->
+  <section class="panel" id="caching">
+    <div class="card">
+      <span class="kicker">Performance</span>
+      <h2>Caching</h2>
+      <p class="lead">A tiny in-process TTL cache keeps Firestore reads — and therefore cost — low.</p>
+      <p>
+        <code>cacheUtils.js</code> is a hand-rolled <code>Map</code>-based cache (it used to depend on
+        <code>node-cache</code>) storing <code>{ value, expiresAt }</code>, lazily pruning expired keys and
+        tracking hit/miss stats. Default TTL is <strong>30 minutes</strong>; static reference data uses a
+        <strong>24-hour</strong> TTL.
+      </p>
+      <div class="note">
+        <strong>Instance-local.</strong> The cache lives in process memory, so it fragments if Cloud Run scales
+        to multiple instances. That's an accepted trade-off — correctness comes from repository-driven
+        invalidation, and each instance independently warms its own cache.
+      </div>
+
+      <h3>Read-through with automatic invalidation</h3>
+      <div class="diagram">
+        <svg viewBox="0 0 720 270" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="12">
+          <defs>
+            <marker id="cArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#1d4e89"/></marker>
+            <marker id="cArrowR" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#c4421a"/></marker>
+          </defs>
+          <!-- read path -->
+          <text x="20" y="28" font-weight="800" fill="#1d4e89" font-size="13">READ PATH</text>
+          <g text-anchor="middle" font-weight="700">
+            <rect x="20"  y="40" width="120" height="44" rx="9" fill="#dcf3e8" stroke="#9fd9be"/><text x="80" y="66" fill="#1c5c3f">Service / Repo</text>
+            <rect x="200" y="40" width="120" height="44" rx="9" fill="#e8f0fb" stroke="#bcd3f0"/><text x="260" y="60" fill="#1d4e89" font-size="11.5">cacheGet(key)</text><text x="260" y="74" fill="#52677d" font-size="9.5">TTL Map</text>
+            <rect x="540" y="40" width="150" height="44" rx="9" fill="#102a43"/><text x="615" y="66" fill="#fff">Firestore</text>
+          </g>
+          <line x1="140" y1="62" x2="198" y2="62" stroke="#1d4e89" stroke-width="1.8" marker-end="url(#cArrow)"/>
+          <path d="M320,55 C360,55 360,55 538,55" stroke="#1d4e89" stroke-width="1.8" fill="none" marker-end="url(#cArrow)"/>
+          <text x="430" y="46" font-size="10" fill="#52677d" text-anchor="middle">MISS → DB CALL</text>
+          <path d="M538,72 C360,72 360,72 322,72" stroke="#2e9e6b" stroke-width="1.8" fill="none" marker-end="url(#cArrow)" stroke-dasharray="5 3"/>
+          <text x="430" y="90" font-size="10" fill="#1c5c3f" text-anchor="middle">cacheSet(key, value, ttl)</text>
+          <path d="M200,78 C150,90 130,90 142,72" stroke="#2e9e6b" stroke-width="1.6" fill="none" marker-end="url(#cArrow)"/>
+          <text x="120" y="100" font-size="10" fill="#1c5c3f" text-anchor="middle">HIT → return cached</text>
+
+          <!-- write path -->
+          <line x1="20" y1="150" x2="700" y2="150" stroke="#eef1f5" stroke-width="2"/>
+          <text x="20" y="178" font-weight="800" fill="#c4421a" font-size="13">WRITE PATH</text>
+          <g text-anchor="middle" font-weight="700">
+            <rect x="20"  y="190" width="150" height="44" rx="9" fill="#ece3fb" stroke="#cbb6ee"/><text x="95" y="210" fill="#4a2f87" font-size="11.5">Repository write</text><text x="95" y="224" fill="#6f4bb3" font-size="9.5">create/update/delete</text>
+            <rect x="250" y="190" width="200" height="44" rx="9" fill="#fff7ef" stroke="#ffb98f"/><text x="350" y="210" fill="#c4421a" font-size="11.5">invalidateCache(prefix)</text><text x="350" y="224" fill="#a35a3a" font-size="9.5">automatic, gated on actual write</text>
+            <rect x="540" y="190" width="150" height="44" rx="9" fill="#e8f0fb" stroke="#bcd3f0"/><text x="615" y="216" fill="#1d4e89" font-size="11.5">stale keys gone</text>
+          </g>
+          <line x1="170" y1="212" x2="248" y2="212" stroke="#c4421a" stroke-width="1.8" marker-end="url(#cArrowR)"/>
+          <line x1="450" y1="212" x2="538" y2="212" stroke="#c4421a" stroke-width="1.8" marker-end="url(#cArrowR)"/>
+        </svg>
+        <div class="cap">Repositories own invalidation: writes bust the relevant cache keys automatically, so reads can't go stale.</div>
+      </div>
+
+      <h3>Cached methods reference</h3>
+      <table>
+        <tr><th>Method (layer)</th><th>Key pattern</th><th>TTL</th><th>Busted by</th></tr>
+        <tr><td><code>getActiveGames</code></td><td><code>activeGames_{year}</code></td><td>5 min</td><td>game write</td></tr>
+        <tr><td><code>getActiveAndFutureGames</code></td><td><code>activeFutureGames_{year}</code></td><td>5 min</td><td>game write</td></tr>
+        <tr><td><code>getAllTournamentDetails</code></td><td><code>tournamentDetails_{year}</code></td><td>5 min</td><td>game write</td></tr>
+        <tr><td><code>getTournamentTeams</code></td><td><code>allTeamNames_{year}</code></td><td>24 h</td><td>schoolRecord write</td></tr>
+        <tr><td><code>getAllEntries</code></td><td><code>allEntries_{year}</code></td><td>30 min</td><td>entry write</td></tr>
+        <tr><td><code>getGroupTeams</code></td><td><code>groupTeams_{group}_{year}</code></td><td>5 min</td><td>entry or points write</td></tr>
+        <tr><td><code>buildGameViewData</code> (service)</td><td><code>gameViewData_{year}_{group}</code></td><td>5 min</td><td>game/entry/points write</td></tr>
+        <tr><td><code>getAllSchools</code> / <code>getAllConferences</code></td><td><code>allSchools</code> / <code>allConferences</code></td><td>24 h</td><td>school/conf write</td></tr>
+      </table>
+
+      <h3>Invalidation rules</h3>
+      <ul>
+        <li><strong>After game writes</strong> — the repo auto-invalidates <code>activeGames_</code>, <code>activeFutureGames_</code>, <code>tournamentDetails_</code>, and <code>gameViewData_{year}_*</code>.</li>
+        <li><strong>After entry writes</strong> — the repo auto-invalidates <code>groupTeams_</code>, <code>entriesForGroup_</code>, <code>allEntries_</code>.</li>
+        <li><strong>After batch points writes</strong> (the poll path) — busts the standings caches too, which is what keeps the leaderboard fresh after auto-recorded scores <em>without</em> a full cache nuke.</li>
+        <li><strong><code>clearAllCache()</code></strong> is the broad nuke — used only after full point recalcs or a tournament reset. Never call it before reads.</li>
+      </ul>
+      <div class="note blue">
+        <strong>Cross-class cache sharing.</strong> The repository's private <code>_getCachedSchools</code> /
+        <code>_getCachedConferences</code> / <code>_getCachedRegions</code> helpers share the <em>same</em> cache
+        keys as the public <code>getAll*</code> methods — so an already-warmed cache is reused for free when
+        denormalizing school records, instead of re-fetching.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SECURITY ============================ -->
+  <section class="panel" id="security">
+    <div class="card">
+      <span class="kicker">Defense in Depth</span>
+      <h2>Security</h2>
+      <p class="lead">Layered protections, mostly hand-rolled and dependency-free, in the same spirit as the rest of the stack.</p>
+
+      <h3>Authentication — three independent identities</h3>
+      <div class="grid cols-3">
+        <div class="mini">
+          <div class="ic">🛡️</div>
+          <h4>Site admin</h4>
+          <p>Google OAuth + an <code>ADMIN_EMAILS</code> allowlist. ID token verified with an audience pin. Sets <code>siteAdmin</code>; guarded by <code>requireSiteAdmin</code>. 8-hour session (30 days with remember-me).</p>
+        </div>
+        <div class="mini">
+          <div class="ic">👤</div>
+          <h4>Participant</h4>
+          <p>Any verified Google email → "My Brackets". Sets <em>only</em> <code>userEmail</code> (never <code>siteAdmin</code>); guarded by <code>requireUser</code>. 14-day cookie. Strictly weaker than admin.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">🔑</div>
+          <h4>Entry owner</h4>
+          <p>Lightweight self-service: Entry ID + matching email sets a <code>year:entryId</code> session key. Anti-enumeration: identical error for bad ID vs bad email.</p>
+        </div>
+      </div>
+      <div class="note">
+        <strong>Session fixation defense.</strong> <code>req.session.regenerate()</code> is called at
+        <em>every</em> privilege transition — before setting any flag that grants access — so a pre-set victim
+        cookie can't be reused after they authenticate. Sessions persist in Firestore
+        (<code>express-sessions</code>), surviving Cloud Run restarts, and are TTL-reaped.
+      </div>
+
+      <h3>Content Security Policy — strict nonce</h3>
+      <p>
+        Helmet was removed in favor of a custom <code>securityHeaders</code> middleware. The enforcing
+        <code>script-src</code> is <code>'self' 'nonce-&lt;per-request&gt;' 'strict-dynamic' https:</code> — with
+        <strong>no <code>'unsafe-inline'</code></strong>. Every first-party <code>&lt;script&gt;</code> must carry
+        a per-request nonce or it's blocked. Inline <code>on*=</code> event-handler attributes are blocked
+        entirely (<code>script-src-attr</code> is dropped); listeners use a delegated dispatcher instead. A
+        mirrored report-only header feeds <code>POST /csp-report</code> as a regression early-warning channel.
+      </p>
+
+      <h3>Rate limiting — two backends</h3>
+      <table>
+        <tr><th>Limiter</th><th>Backend</th><th>Limit</th><th>Used on</th></tr>
+        <tr><td>Login</td><td>Firestore (global)</td><td>15 / 10 min per IP</td><td>OAuth start + callback</td></tr>
+        <tr><td>Verify</td><td>Firestore (global)</td><td>10 / 10 min per entry ID</td><td><code>/my-entry/verify</code></td></tr>
+        <tr><td>Public</td><td>In-memory (per instance)</td><td>30 / min per IP</td><td>public POST routes</td></tr>
+      </table>
+      <p>
+        Security-sensitive routes use the <strong>Firestore-backed</strong> limiter so the cap is global across
+        instances; high-volume public reads use the cheap in-memory one. Keying verify on <em>entry ID</em>
+        blocks email brute-force even when an attacker rotates IPs. The Firestore limiter <strong>fails open</strong>
+        on store errors (an outage must not lock people out of login) and bounds writes to stay inside the free tier.
+      </p>
+
+      <h3>Other hardening</h3>
+      <div class="grid cols-2">
+        <div class="mini">
+          <h4>CSRF on every admin POST</h4>
+          <p>A per-session synchronizer token guards every <code>requireSiteAdmin</code> POST route — minted only for admin sessions, so anonymous traffic stays write-free. A test fails if an admin POST is registered without the guard.</p>
+        </div>
+        <div class="mini">
+          <h4>CSV formula-injection defense</h4>
+          <p>The public CSV export prefixes any cell starting with <code>= + - @</code> etc. with a quote, neutralizing <code>=HYPERLINK(...)</code>-style spreadsheet formulas (OWASP defense), independent of RFC-4180 quoting.</p>
+        </div>
+        <div class="mini">
+          <h4>Safe DOM construction</h4>
+          <p>Client scripts build nodes with <code>createElement</code> + <code>textContent</code>, never by concatenating into <code>innerHTML</code> — closing the XSS sink where one missed escape re-opens the hole.</p>
+        </div>
+        <div class="mini">
+          <h4>Generic error responses</h4>
+          <p>In production, <code>DatabaseError</code> / <code>ServiceError</code> payloads are generic; full detail stays in server logs. PII fields are redacted in start-logs.</p>
+        </div>
+      </div>
+
+      <div class="note green">
+        <strong>Preserve these invariants.</strong> OAuth validates a session-backed <code>state</code> before
+        exchanging the code. Public entry edits are keyed by <code>year:entryId</code>, re-read the stored entry,
+        and preserve server-owned fields. These are the load-bearing security guarantees of the app.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ DEPLOYMENT ============================ -->
+  <section class="panel" id="deploy">
+    <div class="card">
+      <span class="kicker">Operations</span>
+      <h2>Deployment</h2>
+      <p class="lead">Push to <code>main</code> → Cloud Build → Cloud Run. Scales to zero when idle.</p>
+      <p>
+        The app runs on <strong>Google Cloud Run</strong>, deployed automatically when a commit lands on
+        <code>main</code> via Cloud Build. Because Cloud Run scales to zero, the app costs essentially nothing
+        when no one is using it — the whole architecture is designed around a <strong>$0/month off-season</strong>
+        cost contract.
+      </p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 760 180" xmlns="http://www.w3.org/2000/svg" font-family="inherit" font-size="12">
+          <defs>
+            <marker id="dArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#1d4e89"/></marker>
+          </defs>
+          <g text-anchor="middle" font-weight="700">
+            <rect x="14"  y="60" width="120" height="50" rx="10" fill="#e8f0fb" stroke="#bcd3f0"/><text x="74" y="82" fill="#1d4e89">git push</text><text x="74" y="98" fill="#52677d" font-size="10">to main</text>
+            <rect x="180" y="60" width="120" height="50" rx="10" fill="#fbf0cf" stroke="#e6cd72"/><text x="240" y="82" fill="#6b5306">Cloud Build</text><text x="240" y="98" fill="#8a6c10" font-size="10">cloudbuild.yaml</text>
+            <rect x="346" y="60" width="130" height="50" rx="10" fill="#dcf3e8" stroke="#9fd9be"/><text x="411" y="82" fill="#1c5c3f">Artifact Registry</text><text x="411" y="98" fill="#3a6e54" font-size="10">container image</text>
+            <rect x="522" y="60" width="120" height="50" rx="10" fill="#ece3fb" stroke="#cbb6ee"/><text x="582" y="82" fill="#4a2f87">Cloud Run</text><text x="582" y="98" fill="#6f4bb3" font-size="10">scales to zero</text>
+            <rect x="660" y="60" width="90" height="50" rx="10" fill="#102a43"/><text x="705" y="82" fill="#fff">Users</text><text x="705" y="98" fill="#9fb8d4" font-size="10">+ PWA</text>
+          </g>
+          <g stroke="#1d4e89" stroke-width="1.8" marker-end="url(#dArrow)">
+            <line x1="134" y1="85" x2="178" y2="85"/>
+            <line x1="300" y1="85" x2="344" y2="85"/>
+            <line x1="476" y1="85" x2="520" y2="85"/>
+            <line x1="642" y1="85" x2="658" y2="85"/>
+          </g>
+        </svg>
+        <div class="cap">CI/CD pipeline — a push to <code>main</code> rolls out automatically.</div>
+      </div>
+
+      <h3>Key environment variables</h3>
+      <table>
+        <tr><th>Variable</th><th>Purpose</th></tr>
+        <tr><td><code>SESSION_SECRET</code></td><td>Signs <code>express-session</code> — <strong>required or the server crashes on startup</strong></td></tr>
+        <tr><td><code>GOOGLE_CLIENT_ID</code> / <code>_SECRET</code></td><td>Google OAuth 2.0 for admin + participant sign-in</td></tr>
+        <tr><td><code>ADMIN_EMAILS</code></td><td>Comma-separated allowlist of admin Google accounts</td></tr>
+        <tr><td><code>APP_HOST</code></td><td>Production domain — drives the OAuth callback &amp; <code>www</code> redirect</td></tr>
+        <tr><td><code>GOOGLE_CLOUD_PROJECT</code></td><td>GCP project ID (auto-resolved on Cloud Run; set locally)</td></tr>
+        <tr><td><code>NODE_ENV</code></td><td><code>production</code> enables the <code>secure</code> (HTTPS-only) cookie flag</td></tr>
+      </table>
+      <div class="note">
+        <strong>⚠️ Never use <code>--set-env-vars</code></strong> on a running service — it overwrites and erases
+        all other variables, instantly crashing production when <code>SESSION_SECRET</code> disappears. Always use
+        <code>--update-env-vars</code>, which merges.
+      </div>
+
+      <h3>Firestore one-time setup</h3>
+      <p>Enable TTL policies on the <code>expireAt</code> field so abandoned docs are reaped for free:</p>
+      <pre><span class="c"># Reap expired sessions and rate-limit counters automatically</span>
+gcloud firestore fields ttls update expireAt \
+  --collection-group=express-sessions --enable-ttl
+
+gcloud firestore fields ttls update expireAt \
+  --collection-group=rateLimits --enable-ttl</pre>
+
+      <h3>Dual-PWA architecture</h3>
+      <p>
+        Two distinct Progressive Web Apps run on the same domain to isolate offline capabilities and caching, so
+        the admin and public surfaces never collide:
+      </p>
+      <div class="grid cols-2">
+        <div class="mini">
+          <div class="ic">📱</div>
+          <h4>Main user app (<code>/</code>)</h4>
+          <p>Manifest <code>public/manifest.json</code> (scope <code>/</code>), service worker <code>public/service-worker.js</code>.</p>
+        </div>
+        <div class="mini">
+          <div class="ic">🛠️</div>
+          <h4>Admin app (<code>/updates</code>, <code>/admin/*</code>)</h4>
+          <p>Manifest <code>public/admin-manifest.json</code> (scope <code>/updates</code>), separate worker with its own <code>CACHE_NAME</code>.</p>
+        </div>
+      </div>
+
+      <h3>Admin cloud dashboard</h3>
+      <p>
+        <code>/admin/cloud</code> surfaces live operational cost: it calls the Cloud Billing Budgets API for
+        configured caps, and queries the BigQuery billing export for live month-to-date spend (computed as
+        <code>cost + SUM(credits.amount)</code> to net out free-tier discounts), all cached one hour in-process.
+        A "Launch to Production" button triggers a Cloud Build run, guarded by <code>requireSiteAdmin</code> + CSRF.
+      </p>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div><strong>Bracket 10</strong> — generated system documentation, synthesized from the repository's Markdown docs.</div>
+  <div class="src-list">
+    <code>README.md</code>
+    <code>docs/architecture/overview.md</code>
+    <code>docs/architecture/request-flows.md</code>
+    <code>docs/architecture/database.md</code>
+    <code>docs/architecture/caching.md</code>
+    <code>docs/architecture/security.md</code>
+    <code>docs/architecture/deployment.md</code>
+    <code>docs/features/espn-polling.md</code>
+    <code>docs/domain.md</code>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var btns = document.querySelectorAll('.tab-btn');
+    var panels = document.querySelectorAll('.panel');
+    function activate(tab){
+      btns.forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
+      panels.forEach(function(p){ p.classList.toggle('active', p.id === tab); });
+      if (history.replaceState) history.replaceState(null, '', '#' + tab);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){ activate(b.dataset.tab); });
+    });
+    // deep-link support
+    var hash = (location.hash || '').replace('#','');
+    if (hash && document.getElementById(hash)) activate(hash);
+  })();
+</script>
+</body>
+</html>

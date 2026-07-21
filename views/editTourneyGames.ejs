@@ -24,7 +24,6 @@
                     Edit All the Games <%= year %>
                 </div>
             </div>
-            <!-- this is meant to fail -->
             <form action="/tournamentGamesUpdate" method="post">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="year" value="<%= year %>" />

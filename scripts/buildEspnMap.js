@@ -18,22 +18,22 @@
  * and fill in the correct sID values before using the poller.
  */
 
-import { db } from "../src/config/firestore.js";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { db } from '../src/config/firestore.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ESPN_URL =
-  "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard";
+  'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard';
 
 // ── Args ──────────────────────────────────────────────────────────────────────
 
 const yearArg = Number(process.argv[2] ?? 2026);
 
 // Both Round 1 days — together they cover all 64 first-round teams
-const TOURNAMENT_DATES = ["20260317", "20260318", "20260319", "20260320"];
+const TOURNAMENT_DATES = ['20260317', '20260318', '20260319', '20260320'];
 
 // ── Fetch ESPN names ──────────────────────────────────────────────────────────
 
@@ -58,15 +58,15 @@ async function fetchEspnTeamNames(dateStr) {
 // ── Fetch schools from Firestore ──────────────────────────────────────────────
 
 async function fetchSchools() {
-  console.log("Fetching global school collection...");
-  const snap = await db.collection("school").get();
+  console.log('Fetching global school collection...');
+  const snap = await db.collection('school').get();
   return snap.docs.map((doc) => {
     const d = doc.data();
     return {
       sID: d.sid,
-      nameNick: (d.nameNick ?? "").toLowerCase(),
-      schoolName: (d.name ?? "").toLowerCase(),
-      mascot: (d.mascot ?? "").toLowerCase(),
+      nameNick: (d.nameNick ?? '').toLowerCase(),
+      schoolName: (d.name ?? '').toLowerCase(),
+      mascot: (d.mascot ?? '').toLowerCase(),
     };
   });
 }
@@ -87,7 +87,7 @@ function tryMatch(espnDisplayName, teams) {
 
   // 1. nameNick + " " + mascot — the most reliable strategy
   let match = teams.find(
-    (t) => t.nameNick && t.mascot && lower === `${t.nameNick} ${t.mascot}`
+    (t) => t.nameNick && t.mascot && lower === `${t.nameNick} ${t.mascot}`,
   );
   if (match) return match.sID;
 
@@ -116,10 +116,12 @@ function tryMatch(espnDisplayName, teams) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-const outPath = path.join(__dirname, "../src/config/espnTeamMap.json");
+const outPath = path.join(__dirname, '../src/config/espnTeamMap.json');
 
 async function main() {
-  console.log(`Building ESPN team map for year=${yearArg}, dates=${TOURNAMENT_DATES.join(", ")}\n`);
+  console.log(
+    `Building ESPN team map for year=${yearArg}, dates=${TOURNAMENT_DATES.join(', ')}\n`,
+  );
 
   // Fetch both Round 1 days in parallel alongside DB teams
   const [nameArrays, teams] = await Promise.all([
@@ -130,14 +132,18 @@ async function main() {
   // Merge names from all dates into a single sorted unique set
   const espnNames = [...new Set(nameArrays.flat())].sort();
 
-  console.log(`ESPN names found: ${espnNames.length} (across ${TOURNAMENT_DATES.length} date(s))`);
+  console.log(
+    `ESPN names found: ${espnNames.length} (across ${TOURNAMENT_DATES.length} date(s))`,
+  );
   console.log(`Schools in DB: ${teams.length}`);
 
   // Load existing map to preserve manual corrections
   let existing = {};
   if (fs.existsSync(outPath)) {
-    existing = JSON.parse(fs.readFileSync(outPath, "utf8"));
-    console.log(`Loaded existing map with ${Object.keys(existing).length} entries`);
+    existing = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    console.log(
+      `Loaded existing map with ${Object.keys(existing).length} entries`,
+    );
   }
 
   // Only process ESPN names not already present in the file
@@ -168,10 +174,12 @@ async function main() {
 
   console.log(`\nWrote ${outPath}`);
   console.log(`  Matched:   ${Object.keys(matched).length}`);
-  console.log(`  Unmatched: ${unmatched.length} (set these to the correct sID manually)`);
+  console.log(
+    `  Unmatched: ${unmatched.length} (set these to the correct sID manually)`,
+  );
 
   if (unmatched.length > 0) {
-    console.log("\nUnmatched teams (edit espnTeamMap.json to fill these in):");
+    console.log('\nUnmatched teams (edit espnTeamMap.json to fill these in):');
     unmatched.forEach((n) => console.log(`  "${n}"`));
   }
 
@@ -179,6 +187,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  console.error('Fatal error:', err);
   process.exit(1);
 });

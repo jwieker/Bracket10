@@ -9,7 +9,6 @@
  * enrichEntriesWithPotentialRankings so no Firestore connection is needed.
  */
 
-
 import {
   addPickCount,
   addTeamProgressforGroup,
@@ -25,7 +24,7 @@ import { thisYear } from '../src/config/app.js';
 // Mock pointsService so buildFullGridData does not need real game data to compute
 // potential rankings. enrichEntriesWithPotentialRankings is configured per-test.
 vi.mock('../src/services/pointsService.js', () => ({
-  enrichEntriesWithPotentialRankings: vi.fn(async (entries) => entries),
+  enrichEntriesWithPotentialRankings: vi.fn((entries) => entries),
   calculateEntryPointsAndPaths: vi.fn(),
   findNextGameId: vi.fn(),
   getNextFutureGame: vi.fn(),
@@ -40,15 +39,24 @@ vi.mock('../src/utils/cacheUtils.js', () => ({
   cacheSet: vi.fn(),
 }));
 
-import { enrichEntriesWithPotentialRankings, calculateEntryPointsAndPaths } from '../src/services/pointsService.js';
-import { calculateMaxPossiblePoints, normalizeAndValidateEntryPicks, validateEntryPicks } from '../src/services/viewService.js';
+import {
+  enrichEntriesWithPotentialRankings,
+  calculateEntryPointsAndPaths,
+} from '../src/services/pointsService.js';
+import {
+  calculateMaxPossiblePoints,
+  normalizeAndValidateEntryPicks,
+  validateEntryPicks,
+  resolveConfirmedPickNames,
+} from '../src/services/viewService.js';
+import { cacheGet, cacheSet } from '../src/utils/cacheUtils.js';
 
 // ─── Shared test fixtures ────────────────────────────────────────────────────
 
 const TEAMS = [
-  { sID: 1, name: 'Duke',    seed: 1, gameStatus: null },
-  { sID: 2, name: 'Kansas',  seed: 2, gameStatus: null },
-  { sID: 3, name: 'UNC',     seed: 3, gameStatus: null },
+  { sID: 1, name: 'Duke', seed: 1, gameStatus: null },
+  { sID: 2, name: 'Kansas', seed: 2, gameStatus: null },
+  { sID: 3, name: 'UNC', seed: 3, gameStatus: null },
   { sID: 4, name: 'Gonzaga', seed: 4, gameStatus: null },
 ];
 
@@ -67,8 +75,25 @@ describe('getEntriesForUser', () => {
   it('normalizes legacy singular `group`, derives viewGroup, and marks only the current year editable', async () => {
     // isRegistrationOpen() is true in the test env, so editability turns on the year.
     mockGameRepo.getEntriesByEmail.mockResolvedValue([
-      { id: 'a', year: thisYear, email: 'u@g.com', person: 'P1', teamName: 'T1', groups: ['G1'], totalPoints: 5, possPoints: 50 },
-      { id: 'b', year: thisYear - 1, email: 'u@g.com', person: 'P2', teamName: 'T2', group: 'G2', totalPoints: 3 },
+      {
+        id: 'a',
+        year: thisYear,
+        email: 'u@g.com',
+        person: 'P1',
+        teamName: 'T1',
+        groups: ['G1'],
+        totalPoints: 5,
+        possPoints: 50,
+      },
+      {
+        id: 'b',
+        year: thisYear - 1,
+        email: 'u@g.com',
+        person: 'P2',
+        teamName: 'T2',
+        group: 'G2',
+        totalPoints: 3,
+      },
     ]);
 
     const result = await getEntriesForUser('u@g.com');
@@ -78,12 +103,22 @@ describe('getEntriesForUser', () => {
 
     // Current-year entry: editable, groups passed through, viewGroup from groups[0].
     expect(result[0]).toMatchObject({
-      id: 'a', year: thisYear, groups: ['G1'], viewGroup: 'G1', editable: true, totalPoints: 5, possPoints: 50,
+      id: 'a',
+      year: thisYear,
+      groups: ['G1'],
+      viewGroup: 'G1',
+      editable: true,
+      totalPoints: 5,
+      possPoints: 50,
     });
 
     // Past-year entry: NOT editable; legacy singular `group` normalized into an array.
     expect(result[1]).toMatchObject({
-      id: 'b', year: thisYear - 1, groups: ['G2'], viewGroup: 'G2', editable: false,
+      id: 'b',
+      year: thisYear - 1,
+      groups: ['G2'],
+      viewGroup: 'G2',
+      editable: false,
     });
     // possPoints defaults to 0 when absent.
     expect(result[1].possPoints).toBe(0);
@@ -109,16 +144,19 @@ describe('getEntryIdsForUserInGroup', () => {
 
   it('returns only the IDs matching the requested group AND year (as strings)', async () => {
     mockGameRepo.getEntriesByEmail.mockResolvedValue([
-      { id: 1, year: 2026, groups: ['Fam', 'Work'] },   // match
-      { id: 2, year: 2026, groups: ['Other'] },          // wrong group
-      { id: 3, year: 2025, groups: ['Fam'] },            // wrong year
-      { id: 4, year: 2026, group: 'Fam' },               // legacy singular group → match
+      { id: 1, year: 2026, groups: ['Fam', 'Work'] }, // match
+      { id: 2, year: 2026, groups: ['Other'] }, // wrong group
+      { id: 3, year: 2025, groups: ['Fam'] }, // wrong year
+      { id: 4, year: 2026, group: 'Fam' }, // legacy singular group → match
     ]);
 
     const ids = await getEntryIdsForUserInGroup('u@g.com', 'Fam', 2026);
 
     // Scoped to the requested year so it doesn't scan every tournament year.
-    expect(mockGameRepo.getEntriesByEmail).toHaveBeenCalledWith('u@g.com', 2026);
+    expect(mockGameRepo.getEntriesByEmail).toHaveBeenCalledWith(
+      'u@g.com',
+      2026,
+    );
     expect(ids).toEqual(['1', '4']);
   });
 
@@ -136,49 +174,60 @@ describe('getEntryIdsForUserInGroup', () => {
 describe('addPickCount', () => {
   it('counts how many entries picked each team', async () => {
     const teams = [{ sID: 1 }, { sID: 2 }, { sID: 3 }];
-    const entries = [
-      { picks: [1, 2] },
-      { picks: [1, 3] },
-      { picks: [2, 3] },
-    ];
-    await addPickCount(teams, entries);
-    expect(teams[0].pickCount).toBe(2); // sID 1: entries 0 & 1
-    expect(teams[1].pickCount).toBe(2); // sID 2: entries 0 & 2
-    expect(teams[2].pickCount).toBe(2); // sID 3: entries 1 & 2
+    const entries = [{ picks: [1, 2] }, { picks: [1, 3] }, { picks: [2, 3] }];
+    const result = await addPickCount(teams, entries);
+    expect(result[0].pickCount).toBe(2); // sID 1: entries 0 & 1
+    expect(result[1].pickCount).toBe(2); // sID 2: entries 0 & 2
+    expect(result[2].pickCount).toBe(2); // sID 3: entries 1 & 2
   });
 
   it('gives pickCount 0 for a team not picked by anyone', async () => {
     const teams = [{ sID: 1 }, { sID: 99 }];
-    await addPickCount(teams, [{ picks: [1] }]);
-    expect(teams[0].pickCount).toBe(1);
-    expect(teams[1].pickCount).toBe(0);
+    const result = await addPickCount(teams, [{ picks: [1] }]);
+    expect(result[0].pickCount).toBe(1);
+    expect(result[1].pickCount).toBe(0);
   });
 
   it('handles an empty entries array without error', async () => {
     const teams = [{ sID: 1 }, { sID: 2 }];
-    await addPickCount(teams, []);
-    expect(teams[0].pickCount).toBe(0);
-    expect(teams[1].pickCount).toBe(0);
+    const result = await addPickCount(teams, []);
+    expect(result[0].pickCount).toBe(0);
+    expect(result[1].pickCount).toBe(0);
   });
 
-  it('returns the same teams array reference (mutates in-place)', async () => {
+  it('does not mutate the input teams (shared-cache safety)', async () => {
     const teams = [{ sID: 1 }];
+    const result = await addPickCount(teams, [{ picks: [1] }]);
+    // Returned objects carry the count, but the shared cached input is untouched.
+    expect(result).not.toBe(teams);
+    expect(result[0]).not.toBe(teams[0]);
+    expect(result[0].pickCount).toBe(1);
+    expect(teams[0].pickCount).toBeUndefined();
+  });
+
+  it('preserves other team fields on the returned copies', async () => {
+    const teams = [{ sID: 1, name: 'Duke', seed: 1 }];
     const result = await addPickCount(teams, []);
-    expect(result).toBe(teams);
+    expect(result[0]).toMatchObject({
+      sID: 1,
+      name: 'Duke',
+      seed: 1,
+      pickCount: 0,
+    });
   });
 
   it('handles a single entry picking all teams', async () => {
     const teams = [{ sID: 1 }, { sID: 2 }, { sID: 3 }];
-    await addPickCount(teams, [{ picks: [1, 2, 3] }]);
-    expect(teams.every(t => t.pickCount === 1)).toBe(true);
+    const result = await addPickCount(teams, [{ picks: [1, 2, 3] }]);
+    expect(result.every((t) => t.pickCount === 1)).toBe(true);
   });
 
   it('handles multiple entries all picking the same team', async () => {
     const teams = [{ sID: 1 }, { sID: 2 }];
     const entries = [{ picks: [1] }, { picks: [1] }, { picks: [1] }];
-    await addPickCount(teams, entries);
-    expect(teams[0].pickCount).toBe(3);
-    expect(teams[1].pickCount).toBe(0);
+    const result = await addPickCount(teams, entries);
+    expect(result[0].pickCount).toBe(3);
+    expect(result[1].pickCount).toBe(0);
   });
 });
 
@@ -203,8 +252,8 @@ describe('addTeamProgressforGroup', () => {
     expect(result.picksProgress[0][2]).toBe(1); // pick 0 is toPlay
     expect(result.picksProgress[1][2]).toBe(1); // pick 1 is toPlay
     expect(result.picksProgress[0][0]).toBe(0);
-    expect(result.teamsRemaining).toBe(10);     // starts at 10, no losses
-    expect(result.teamsAdvanced).toBe(0);       // between rounds → no advanced count
+    expect(result.teamsRemaining).toBe(10); // starts at 10, no losses
+    expect(result.teamsAdvanced).toBe(0); // between rounds → no advanced count
   });
 
   it('records a round-1 win with correct points and advances pick to round 2', async () => {
@@ -260,12 +309,12 @@ describe('addTeamProgressforGroup', () => {
     // → globalRoundInProgress = true
     const allTournamentTeams = [
       { gameStatus: ['W'] }, // advanced in R1
-      { gameStatus: null },  // waiting for R1
+      { gameStatus: null }, // waiting for R1
     ];
     const entry = {
       pickNames: [
         { sID: 1, gameStatus: ['W'] }, // won in current round
-        { sID: 2, gameStatus: null },  // has not played
+        { sID: 2, gameStatus: null }, // has not played
       ],
     };
     const [result] = await addTeamProgressforGroup([entry], allTournamentTeams);
@@ -274,10 +323,7 @@ describe('addTeamProgressforGroup', () => {
 
   it('teamsAdvanced equals 0 when no round is in progress (between rounds)', async () => {
     // All alive teams have gameStatus length 1 → same round → no round in progress
-    const allTournamentTeams = [
-      { gameStatus: ['W'] },
-      { gameStatus: ['W'] },
-    ];
+    const allTournamentTeams = [{ gameStatus: ['W'] }, { gameStatus: ['W'] }];
     const entry = {
       pickNames: [
         { sID: 1, gameStatus: ['W'] },
@@ -290,10 +336,13 @@ describe('addTeamProgressforGroup', () => {
 
   it('builds a 6x4 picksProgress array for each entry', async () => {
     const allTeams = [{ gameStatus: null }];
-    const [result] = await addTeamProgressforGroup([makeEntry([null])], allTeams);
+    const [result] = await addTeamProgressforGroup(
+      [makeEntry([null])],
+      allTeams,
+    );
 
     expect(result.picksProgress).toHaveLength(6);
-    result.picksProgress.forEach(round => {
+    result.picksProgress.forEach((round) => {
       expect(round).toHaveLength(4);
     });
   });
@@ -309,7 +358,10 @@ describe('getGroupTeamDetails', () => {
 
   beforeEach(() => {
     mockViewRepo = { getGroupTeams: vi.fn() };
-    mockGameRepo = { getAllTournamentDetails: vi.fn(), getAllYearsForGroup: vi.fn() };
+    mockGameRepo = {
+      getAllTournamentDetails: vi.fn(),
+      getAllYearsForGroup: vi.fn(),
+    };
     setRepositories(mockViewRepo, mockGameRepo, {}, {});
   });
 
@@ -318,7 +370,11 @@ describe('getGroupTeamDetails', () => {
   });
 
   it('maps pick IDs to team objects in pickNames', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'Entry A', picks: [1, 3], person: 'Alice', groups: ['Test'] },
     ]);
@@ -333,9 +389,18 @@ describe('getGroupTeamDetails', () => {
   });
 
   it('filters out pick IDs that match no team (unknown sID)', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
-      { teamName: 'Entry A', picks: [1, 999], person: 'Alice', groups: ['Test'] },
+      {
+        teamName: 'Entry A',
+        picks: [1, 999],
+        person: 'Alice',
+        groups: ['Test'],
+      },
     ]);
 
     const [groupTeams] = await getGroupTeamDetails('Test', 2024);
@@ -345,10 +410,17 @@ describe('getGroupTeamDetails', () => {
   });
 
   it('returns empty groupTeams array when getGroupTeams returns null', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue(null);
 
-    const [groupTeams, resultsSoFar] = await getGroupTeamDetails('NonExistent', 2024);
+    const [groupTeams, resultsSoFar] = await getGroupTeamDetails(
+      'NonExistent',
+      2024,
+    );
 
     expect(groupTeams).toEqual([]);
     expect(resultsSoFar).toBe(TEAMS);
@@ -362,13 +434,26 @@ describe('getGroupTeamDetails', () => {
     const [groupTeams] = await getGroupTeamDetails('Test', 2024, TEAMS);
 
     expect(mockGameRepo.getAllTournamentDetails).not.toHaveBeenCalled();
-    expect(groupTeams[0].pickNames[0]).toMatchObject({ sID: 2, name: 'Kansas' });
+    expect(groupTeams[0].pickNames[0]).toMatchObject({
+      sID: 2,
+      name: 'Kansas',
+    });
   });
 
   it('preserves all entry fields beyond picks and pickNames', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
-      { teamName: 'My Team', picks: [2], person: 'Family', groups: ['Test'], email: 'bob@test.com' },
+      {
+        teamName: 'My Team',
+        picks: [2],
+        person: 'Family',
+        groups: ['Test'],
+        email: 'bob@test.com',
+      },
     ]);
 
     const [groupTeams] = await getGroupTeamDetails('Test', 2024);
@@ -381,14 +466,121 @@ describe('getGroupTeamDetails', () => {
   });
 
   it('maps picks in the same order they appear in the picks array', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
-      { teamName: 'Entry A', picks: [4, 2, 1], person: 'Alice', groups: ['Test'] },
+      {
+        teamName: 'Entry A',
+        picks: [4, 2, 1],
+        person: 'Alice',
+        groups: ['Test'],
+      },
     ]);
 
     const [groupTeams] = await getGroupTeamDetails('Test', 2024);
-    const names = groupTeams[0].pickNames.map(p => p.name);
+    const names = groupTeams[0].pickNames.map((p) => p.name);
     expect(names).toEqual(['Gonzaga', 'Kansas', 'Duke']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveConfirmedPickNames (#375)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('resolveConfirmedPickNames', () => {
+  let mockViewRepo;
+  let mockGameRepo;
+
+  const CONFIRM_TEAMS = [
+    {
+      sID: 101,
+      nameNick: 'Duke',
+      mascot: 'Blue Devils',
+      seed: 1,
+      regionName: 'East',
+      gameStatus: null,
+    },
+    {
+      sID: 999,
+      nameNick: 'Winners',
+      mascot: 'Wildcats',
+      seed: 16,
+      regionName: 'East',
+      gameStatus: null,
+    },
+  ];
+
+  beforeEach(() => {
+    mockViewRepo = { getGroupTeams: vi.fn().mockResolvedValue([]) };
+    mockGameRepo = {
+      getAllTournamentDetails: vi.fn().mockResolvedValue({
+        teams: CONFIRM_TEAMS,
+        allGames: [],
+        regions: [],
+      }),
+    };
+    setRepositories(mockViewRepo, mockGameRepo, {}, {});
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the submitted names as-is with no fetch when normalization changed nothing', async () => {
+    const names = ['Duke Blue Devils (East)', 'Winners Wildcats (East)'];
+    const result = await resolveConfirmedPickNames(
+      [101, 999],
+      [101, 999],
+      names,
+      2024,
+      'Test',
+    );
+    expect(result).toBe(names);
+    expect(mockGameRepo.getAllTournamentDetails).not.toHaveBeenCalled();
+  });
+
+  it('re-derives the display name for a pick whose sID was swapped by normalization', async () => {
+    // Submitted 101 was normalized to 999 (e.g. resolved First Four winner).
+    const result = await resolveConfirmedPickNames(
+      [101, 101], // submitted (second index unchanged)
+      [999, 101], // persisted
+      ['Duke Blue Devils (East)', 'Duke Blue Devils (East)'],
+      2024,
+      'Test',
+    );
+    expect(result).toEqual([
+      'Winners Wildcats (East)',
+      'Duke Blue Devils (East)',
+    ]);
+  });
+
+  it('tolerates string/number sID mismatches when detecting changes', async () => {
+    // extractPicks yields numbers but normalizeFirstFourPicks may return the
+    // original value untouched — a "101" vs 101 pair must not count as changed.
+    const names = ['Duke Blue Devils (East)'];
+    const result = await resolveConfirmedPickNames(
+      ['101'],
+      [101],
+      names,
+      2024,
+      'Test',
+    );
+    expect(result).toBe(names);
+    expect(mockGameRepo.getAllTournamentDetails).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the submitted name when the normalized sID is not in the team list', async () => {
+    const result = await resolveConfirmedPickNames(
+      [101],
+      [555],
+      ['Duke Blue Devils (East)'],
+      2024,
+      'Test',
+    );
+    expect(result).toEqual(['Duke Blue Devils (East)']);
   });
 });
 
@@ -402,18 +594,21 @@ describe('buildFullGridData', () => {
 
   beforeEach(() => {
     mockViewRepo = { getGroupTeams: vi.fn() };
-    mockGameRepo = { getAllTournamentDetails: vi.fn(), getAllYearsForGroup: vi.fn() };
+    mockGameRepo = {
+      getAllTournamentDetails: vi.fn(),
+      getAllYearsForGroup: vi.fn(),
+    };
     setRepositories(mockViewRepo, mockGameRepo, {}, {});
 
     // Default: pass entries through and add required ranking fields
-    enrichEntriesWithPotentialRankings.mockImplementation(async (entries) =>
-      entries.map(e => ({
+    enrichEntriesWithPotentialRankings.mockImplementation((entries) =>
+      entries.map((e) => ({
         ...e,
         totalPoints: e.totalPoints ?? 0,
         possPoints: e.possPoints ?? 0,
         highestPlace: 1,
         ties: 0,
-      }))
+      })),
     );
   });
 
@@ -422,7 +617,11 @@ describe('buildFullGridData', () => {
   });
 
   it('pickNames in groupData are correctly mapped from pick IDs', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'Entry A', picks: [1, 2], person: 'Alice', groups: ['Test'] },
     ]);
@@ -434,8 +633,46 @@ describe('buildFullGridData', () => {
     expect(groupData[0].pickNames[1]).toMatchObject({ sID: 2, name: 'Kansas' });
   });
 
+  // #399: buildFullGridData carries a service-level result cache, mirroring
+  // buildGameViewData, so repeated /getFullGrid + /playground hits within the
+  // TTL skip the O(entries × teams) recompute.
+  it('serves a warm hit from the fullGridData_ cache without touching the repositories (#399)', async () => {
+    const cachedResult = { groupData: [], allTeamsWithPickCounts: [] };
+    cacheGet.mockReturnValueOnce(cachedResult);
+
+    const result = await buildFullGridData('Test', 2024);
+
+    expect(cacheGet).toHaveBeenCalledWith('fullGridData_2024_Test');
+    expect(result).toBe(cachedResult);
+    expect(mockGameRepo.getAllTournamentDetails).not.toHaveBeenCalled();
+    expect(mockViewRepo.getGroupTeams).not.toHaveBeenCalled();
+  });
+
+  it('caches the built result under fullGridData_{year}_{group} with a 300s TTL (#399)', async () => {
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
+    mockViewRepo.getGroupTeams.mockResolvedValue([
+      { teamName: 'Entry A', picks: [1, 2], person: 'Alice', groups: ['Test'] },
+    ]);
+
+    const result = await buildFullGridData('Test', 2024);
+
+    expect(cacheSet).toHaveBeenCalledWith(
+      'fullGridData_2024_Test',
+      result,
+      300,
+    );
+  });
+
   it('pickIndexBySID maps each resolved pick sID to its 1-based position', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'Entry A', picks: [1, 2], person: 'Alice', groups: ['Test'] },
     ]);
@@ -451,37 +688,44 @@ describe('buildFullGridData', () => {
 
   it('allTeamsWithPickCounts has the correct pickCount for every team', async () => {
     mockGameRepo.getAllTournamentDetails.mockResolvedValue({
-      teams: [{ sID: 1, name: 'Duke' }, { sID: 2, name: 'Kansas' }],
+      teams: [
+        { sID: 1, name: 'Duke' },
+        { sID: 2, name: 'Kansas' },
+      ],
       allGames: [],
       regions: [],
     });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'Entry A', picks: [1, 2], person: 'Alice', groups: ['Test'] },
-      { teamName: 'Entry B', picks: [1],    person: 'Family',   groups: ['Test'] },
+      { teamName: 'Entry B', picks: [1], person: 'Family', groups: ['Test'] },
     ]);
 
     const { allTeamsWithPickCounts } = await buildFullGridData('Test', 2024);
 
-    const duke   = allTeamsWithPickCounts.find(t => t.sID === 1);
-    const kansas = allTeamsWithPickCounts.find(t => t.sID === 2);
+    const duke = allTeamsWithPickCounts.find((t) => t.sID === 1);
+    const kansas = allTeamsWithPickCounts.find((t) => t.sID === 2);
     expect(duke.pickCount).toBe(2);
     expect(kansas.pickCount).toBe(1);
   });
 
   it('sorts entries by totalPoints descending', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
-      { teamName: 'LowScore',  picks: [1], person: 'Alice', groups: ['Test'] },
-      { teamName: 'HighScore', picks: [2], person: 'Family',   groups: ['Test'] },
+      { teamName: 'LowScore', picks: [1], person: 'Alice', groups: ['Test'] },
+      { teamName: 'HighScore', picks: [2], person: 'Family', groups: ['Test'] },
     ]);
-    enrichEntriesWithPotentialRankings.mockImplementation(async (entries) =>
-      entries.map(e => ({
+    enrichEntriesWithPotentialRankings.mockImplementation((entries) =>
+      entries.map((e) => ({
         ...e,
         totalPoints: e.teamName === 'HighScore' ? 20 : 5,
         possPoints: 100,
         highestPlace: 1,
         ties: 0,
-      }))
+      })),
     );
 
     const { groupData } = await buildFullGridData('Test', 2024);
@@ -491,21 +735,25 @@ describe('buildFullGridData', () => {
   });
 
   it('assigns the same rank to tied entries and the next rank accounts for the tie', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'A', picks: [1], person: 'P1', groups: ['Test'] },
       { teamName: 'B', picks: [2], person: 'P2', groups: ['Test'] },
       { teamName: 'C', picks: [3], person: 'P3', groups: ['Test'] },
     ]);
     // A has 30 pts, B and C both have 20 pts → B and C tied for 2nd
-    enrichEntriesWithPotentialRankings.mockImplementation(async (entries) =>
-      entries.map(e => ({
+    enrichEntriesWithPotentialRankings.mockImplementation((entries) =>
+      entries.map((e) => ({
         ...e,
         totalPoints: e.teamName === 'A' ? 30 : 20,
         possPoints: 100,
         highestPlace: 1,
         ties: 0,
-      }))
+      })),
     );
 
     const { groupData } = await buildFullGridData('Test', 2024);
@@ -516,27 +764,33 @@ describe('buildFullGridData', () => {
   });
 
   it('rank skips correctly after a 2-way tie (1, 2, 2, 4 — not 1, 2, 2, 3)', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'A', picks: [1], person: 'P1', groups: ['Test'] },
       { teamName: 'B', picks: [2], person: 'P2', groups: ['Test'] },
       { teamName: 'C', picks: [3], person: 'P3', groups: ['Test'] },
       { teamName: 'D', picks: [4], person: 'P4', groups: ['Test'] },
     ]);
-    enrichEntriesWithPotentialRankings.mockImplementation(async (entries) =>
-      entries.map(e => ({
+    enrichEntriesWithPotentialRankings.mockImplementation((entries) =>
+      entries.map((e) => ({
         ...e,
         totalPoints: e.teamName === 'A' ? 30 : e.teamName === 'D' ? 5 : 20,
         possPoints: 100,
         highestPlace: 1,
         ties: 0,
-      }))
+      })),
     );
 
     const { groupData } = await buildFullGridData('Test', 2024);
 
     // A=30 → rank 1, B=20 → rank 2, C=20 → rank 2, D=5 → rank 4 (not 3)
-    const byName = Object.fromEntries(groupData.map(e => [e.teamName, e.rank]));
+    const byName = Object.fromEntries(
+      groupData.map((e) => [e.teamName, e.rank]),
+    );
     expect(byName['A']).toBe(1);
     expect(byName['B']).toBe(2);
     expect(byName['C']).toBe(2);
@@ -544,13 +798,23 @@ describe('buildFullGridData', () => {
   });
 
   it('all entries tied gives everyone rank 1', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'A', picks: [1], person: 'P1', groups: ['Test'] },
       { teamName: 'B', picks: [2], person: 'P2', groups: ['Test'] },
     ]);
-    enrichEntriesWithPotentialRankings.mockImplementation(async (entries) =>
-      entries.map(e => ({ ...e, totalPoints: 10, possPoints: 100, highestPlace: 1, ties: 0 }))
+    enrichEntriesWithPotentialRankings.mockImplementation((entries) =>
+      entries.map((e) => ({
+        ...e,
+        totalPoints: 10,
+        possPoints: 100,
+        highestPlace: 1,
+        ties: 0,
+      })),
     );
 
     const { groupData } = await buildFullGridData('Test', 2024);
@@ -560,13 +824,20 @@ describe('buildFullGridData', () => {
   });
 
   it('handles null groupTeams (no entries in group)', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: TEAMS, allGames: [], regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      teams: TEAMS,
+      allGames: [],
+      regions: [],
+    });
     mockViewRepo.getGroupTeams.mockResolvedValue(null);
 
-    const { groupData, allTeamsWithPickCounts } = await buildFullGridData('Empty', 2024);
+    const { groupData, allTeamsWithPickCounts } = await buildFullGridData(
+      'Empty',
+      2024,
+    );
 
     expect(groupData).toEqual([]);
-    expect(allTeamsWithPickCounts.every(t => t.pickCount === 0)).toBe(true);
+    expect(allTeamsWithPickCounts.every((t) => t.pickCount === 0)).toBe(true);
   });
 
   // ─── First Four (FF) column filtering ───────────────────────────────────────
@@ -584,31 +855,97 @@ describe('buildFullGridData', () => {
   //   - Picks for either sID of an unresolved FF team resolve to the combined object.
 
   describe('First Four (FF) grid column filtering', () => {
-    const ffUnresolvedGame = { gameID: 64, round: 0, team1ID: 100, team2ID: 200, winner: null,  nextGameID: 1 };
-    const ffResolvedGame   = { gameID: 65, round: 0, team1ID: 300, team2ID: 400, winner: 300,   nextGameID: 2 };
+    const ffUnresolvedGame = {
+      gameID: 64,
+      round: 0,
+      team1ID: 100,
+      team2ID: 200,
+      winner: null,
+      nextGameID: 1,
+    };
+    const ffResolvedGame = {
+      gameID: 65,
+      round: 0,
+      team1ID: 300,
+      team2ID: 400,
+      winner: 300,
+      nextGameID: 2,
+    };
 
     // ff_ docs for each team in unresolved game
-    const ffDoc100 = { sID: 100, seed: 11, regionName: 'East', nameNick: 'TeamA', mascot: 'Dragons', isFFDoc: true };
-    const ffDoc200 = { sID: 200, seed: 11, regionName: 'East', nameNick: 'TeamB', mascot: 'Lions',   isFFDoc: true };
+    const ffDoc100 = {
+      sID: 100,
+      seed: 11,
+      regionName: 'East',
+      nameNick: 'TeamA',
+      mascot: 'Dragons',
+      isFFDoc: true,
+    };
+    const ffDoc200 = {
+      sID: 200,
+      seed: 11,
+      regionName: 'East',
+      nameNick: 'TeamB',
+      mascot: 'Lions',
+      isFFDoc: true,
+    };
     // Resolved FF winner: ff_ doc + canonical doc
-    const ffDoc300     = { sID: 300, seed: 16, regionName: 'West', nameNick: 'TeamC', mascot: 'Bears',  isFFDoc: true  };
-    const canonDoc300  = { sID: 300, seed: 16, regionName: 'West', nameNick: 'TeamC', mascot: 'Bears',  isFFDoc: false };
+    const ffDoc300 = {
+      sID: 300,
+      seed: 16,
+      regionName: 'West',
+      nameNick: 'TeamC',
+      mascot: 'Bears',
+      isFFDoc: true,
+    };
+    const canonDoc300 = {
+      sID: 300,
+      seed: 16,
+      regionName: 'West',
+      nameNick: 'TeamC',
+      mascot: 'Bears',
+      isFFDoc: false,
+    };
     // Resolved FF loser: only ff_ doc
-    const ffDoc400     = { sID: 400, seed: 16, regionName: 'West', nameNick: 'TeamD', mascot: 'Eagles', isFFDoc: true  };
+    const ffDoc400 = {
+      sID: 400,
+      seed: 16,
+      regionName: 'West',
+      nameNick: 'TeamD',
+      mascot: 'Eagles',
+      isFFDoc: true,
+    };
     // A normal seeded team for comparison
-    const normalTeam   = { sID: 1,   seed: 1,  regionName: 'East', nameNick: 'TopSeed', isFFDoc: false };
+    const normalTeam = {
+      sID: 1,
+      seed: 1,
+      regionName: 'East',
+      nameNick: 'TopSeed',
+      isFFDoc: false,
+    };
 
-    const allTeamsRawFull = [normalTeam, canonDoc300, ffDoc100, ffDoc200, ffDoc300, ffDoc400];
+    const allTeamsRawFull = [
+      normalTeam,
+      canonDoc300,
+      ffDoc100,
+      ffDoc200,
+      ffDoc300,
+      ffDoc400,
+    ];
     const allGames = [ffUnresolvedGame, ffResolvedGame];
 
     beforeEach(() => {
-      mockGameRepo.getAllTournamentDetails.mockResolvedValue({ teams: allTeamsRawFull, allGames, regions: [] });
+      mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+        teams: allTeamsRawFull,
+        allGames,
+        regions: [],
+      });
       mockViewRepo.getGroupTeams.mockResolvedValue([]);
     });
 
     it('unresolved FF game produces a combined column in allTeamsWithPickCounts', async () => {
       const { allTeamsWithPickCounts } = await buildFullGridData('Test', 2024);
-      const combined = allTeamsWithPickCounts.find(t => t.sID === 100);
+      const combined = allTeamsWithPickCounts.find((t) => t.sID === 100);
       expect(combined).toBeDefined();
       expect(combined.nameNick).toBe('TeamA / TeamB');
       expect(combined.isFirstFour).toBe(true);
@@ -616,24 +953,29 @@ describe('buildFullGridData', () => {
 
     it('the FF partner sID (200) does not appear as a separate column', async () => {
       const { allTeamsWithPickCounts } = await buildFullGridData('Test', 2024);
-      expect(allTeamsWithPickCounts.find(t => t.sID === 200)).toBeUndefined();
+      expect(allTeamsWithPickCounts.find((t) => t.sID === 200)).toBeUndefined();
     });
 
     it('resolved FF loser (400) is excluded from grid columns', async () => {
       const { allTeamsWithPickCounts } = await buildFullGridData('Test', 2024);
-      expect(allTeamsWithPickCounts.find(t => t.sID === 400)).toBeUndefined();
+      expect(allTeamsWithPickCounts.find((t) => t.sID === 400)).toBeUndefined();
     });
 
     it("resolved FF winner's ff_ doc is excluded; canonical doc appears as the column", async () => {
       const { allTeamsWithPickCounts } = await buildFullGridData('Test', 2024);
-      const winnerEntries = allTeamsWithPickCounts.filter(t => t.sID === 300);
+      const winnerEntries = allTeamsWithPickCounts.filter((t) => t.sID === 300);
       expect(winnerEntries).toHaveLength(1);
       expect(winnerEntries[0].isFFDoc).toBe(false);
     });
 
     it('pick for team1ID of an unresolved FF resolves to combined object in pickNames', async () => {
       mockViewRepo.getGroupTeams.mockResolvedValue([
-        { teamName: 'Entry A', picks: [100], person: 'Alice', groups: ['Test'] },
+        {
+          teamName: 'Entry A',
+          picks: [100],
+          person: 'Alice',
+          groups: ['Test'],
+        },
       ]);
 
       const { groupData } = await buildFullGridData('Test', 2024);
@@ -644,7 +986,12 @@ describe('buildFullGridData', () => {
 
     it('pick for team2ID of an unresolved FF also resolves to the same combined object', async () => {
       mockViewRepo.getGroupTeams.mockResolvedValue([
-        { teamName: 'Entry B', picks: [200], person: 'Family', groups: ['Test'] },
+        {
+          teamName: 'Entry B',
+          picks: [200],
+          person: 'Family',
+          groups: ['Test'],
+        },
       ]);
 
       const { groupData } = await buildFullGridData('Test', 2024);
@@ -656,7 +1003,7 @@ describe('buildFullGridData', () => {
     it('columns are sorted by seed ascending with the combined FF entry in its correct position', async () => {
       // normalTeam seed=1, combined FF seed=11, resolved winner seed=16
       const { allTeamsWithPickCounts } = await buildFullGridData('Test', 2024);
-      const seeds = allTeamsWithPickCounts.map(t => t.seed);
+      const seeds = allTeamsWithPickCounts.map((t) => t.seed);
       expect(seeds).toEqual([...seeds].sort((a, b) => a - b));
     });
   });
@@ -685,7 +1032,9 @@ describe('buildGameViewData', () => {
 
   it('pickNames in groupData are correctly mapped from pick IDs', async () => {
     mockGameRepo.getAllTournamentDetails.mockResolvedValue({
-      activeGames: [], teams: TEAMS, regions: [],
+      activeGames: [],
+      teams: TEAMS,
+      regions: [],
     });
     mockViewRepo.getGroupTeams.mockResolvedValue([
       { teamName: 'Entry A', picks: [1, 4], person: 'Alice', groups: ['Test'] },
@@ -695,15 +1044,25 @@ describe('buildGameViewData', () => {
 
     expect(groupData[0].pickNames).toHaveLength(2);
     expect(groupData[0].pickNames[0]).toMatchObject({ sID: 1, name: 'Duke' });
-    expect(groupData[0].pickNames[1]).toMatchObject({ sID: 4, name: 'Gonzaga' });
+    expect(groupData[0].pickNames[1]).toMatchObject({
+      sID: 4,
+      name: 'Gonzaga',
+    });
   });
 
   it('filters out unknown pick IDs from pickNames', async () => {
     mockGameRepo.getAllTournamentDetails.mockResolvedValue({
-      activeGames: [], teams: TEAMS, regions: [],
+      activeGames: [],
+      teams: TEAMS,
+      regions: [],
     });
     mockViewRepo.getGroupTeams.mockResolvedValue([
-      { teamName: 'Entry A', picks: [2, 999], person: 'Alice', groups: ['Test'] },
+      {
+        teamName: 'Entry A',
+        picks: [2, 999],
+        person: 'Alice',
+        groups: ['Test'],
+      },
     ]);
 
     const { groupData } = await buildGameViewData('Test', 2024);
@@ -715,9 +1074,30 @@ describe('buildGameViewData', () => {
   it('adds winnerName to active games that have a winner', async () => {
     mockGameRepo.getAllTournamentDetails.mockResolvedValue({
       activeGames: [
-        { gameID: 1, team1ID: 1, team2ID: 2, team1Name: 'Duke', team2Name: 'Kansas', winner: 1 },
-        { gameID: 2, team1ID: 3, team2ID: 4, team1Name: 'UNC', team2Name: 'Gonzaga', winner: 4 },
-        { gameID: 3, team1ID: 1, team2ID: 3, team1Name: 'Duke', team2Name: 'UNC', winner: null },
+        {
+          gameID: 1,
+          team1ID: 1,
+          team2ID: 2,
+          team1Name: 'Duke',
+          team2Name: 'Kansas',
+          winner: 1,
+        },
+        {
+          gameID: 2,
+          team1ID: 3,
+          team2ID: 4,
+          team1Name: 'UNC',
+          team2Name: 'Gonzaga',
+          winner: 4,
+        },
+        {
+          gameID: 3,
+          team1ID: 1,
+          team2ID: 3,
+          team1Name: 'Duke',
+          team2Name: 'UNC',
+          winner: null,
+        },
       ],
       teams: TEAMS,
       regions: [],
@@ -726,7 +1106,7 @@ describe('buildGameViewData', () => {
 
     const { enrichedActiveGames } = await buildGameViewData('Test', 2024);
 
-    expect(enrichedActiveGames[0].winnerName).toBe('Duke');   // winner is team1
+    expect(enrichedActiveGames[0].winnerName).toBe('Duke'); // winner is team1
     expect(enrichedActiveGames[1].winnerName).toBe('Gonzaga'); // winner is team2
     expect(enrichedActiveGames[2].winnerName).toBeUndefined(); // no winner yet
   });
@@ -735,12 +1115,14 @@ describe('buildGameViewData', () => {
     // conferenceName is now denormalized into schoolRecords and returned by
     // getAllTournamentDetails — no separate school/conference fetch needed.
     const teams = [
-      { sID: 1, name: 'Duke',   gameStatus: null, conferenceName: 'ACC' },
+      { sID: 1, name: 'Duke', gameStatus: null, conferenceName: 'ACC' },
       { sID: 2, name: 'Kansas', gameStatus: null, conferenceName: 'ACC' },
-      { sID: 3, name: 'UNC',    gameStatus: null, conferenceName: 'Big 12' },
+      { sID: 3, name: 'UNC', gameStatus: null, conferenceName: 'Big 12' },
     ];
     mockGameRepo.getAllTournamentDetails.mockResolvedValue({
-      activeGames: [], teams, regions: [],
+      activeGames: [],
+      teams,
+      regions: [],
     });
     mockViewRepo.getGroupTeams.mockResolvedValue([]);
 
@@ -753,15 +1135,26 @@ describe('buildGameViewData', () => {
   it('passes through espnID, logoUrl, primaryColor from schoolRecords', async () => {
     // These fields are now denormalized into schoolRecords and returned directly
     // by getAllTournamentDetails — no separate allSchools fetch.
-    const teams = [{ sID: 1, name: 'Duke', gameStatus: null, espnID: 'espn-duke', logoUrl: 'duke.png', primaryColor: '#003087' }];
+    const teams = [
+      {
+        sID: 1,
+        name: 'Duke',
+        gameStatus: null,
+        espnID: 'espn-duke',
+        logoUrl: 'duke.png',
+        primaryColor: '#003087',
+      },
+    ];
     mockGameRepo.getAllTournamentDetails.mockResolvedValue({
-      activeGames: [], teams, regions: [],
+      activeGames: [],
+      teams,
+      regions: [],
     });
     mockViewRepo.getGroupTeams.mockResolvedValue([]);
 
     const { allTeamsRaw } = await buildGameViewData('Test', 2024);
 
-    const duke = allTeamsRaw.find(t => t.sID === 1);
+    const duke = allTeamsRaw.find((t) => t.sID === 1);
     expect(duke.espnID).toBe('espn-duke');
     expect(duke.logoUrl).toBe('duke.png');
     expect(duke.primaryColor).toBe('#003087');
@@ -821,7 +1214,11 @@ describe('calculateMaxPossiblePoints', () => {
       teams: TEAMS,
       regions: [],
     });
-    calculateEntryPointsAndPaths.mockReturnValue({ currentPoints: 5, maxPoints: 75, futureGamePaths: [] });
+    calculateEntryPointsAndPaths.mockReturnValue({
+      currentPoints: 5,
+      maxPoints: 75,
+      futureGamePaths: [],
+    });
 
     const result = await calculateMaxPossiblePoints([1, 2], 2024);
 
@@ -831,8 +1228,14 @@ describe('calculateMaxPossiblePoints', () => {
   it('calls calculateEntryPointsAndPaths with exactly (picks, teams, allGames) — no extra args', async () => {
     // This is the regression test for the bug where findNextGameId/getNextFutureGame/getFuturePoints
     // were erroneously passed as the 4th argument (prebuiltMaps), breaking the lookup maps.
-    const allGames = [{ gameID: 1, team1ID: 1, team2ID: 2, winner: null, nextGameID: 0 }];
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ allGames, teams: TEAMS, regions: [] });
+    const allGames = [
+      { gameID: 1, team1ID: 1, team2ID: 2, winner: null, nextGameID: 0 },
+    ];
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      allGames,
+      teams: TEAMS,
+      regions: [],
+    });
 
     await calculateMaxPossiblePoints([1, 2], 2024);
 
@@ -841,13 +1244,17 @@ describe('calculateMaxPossiblePoints', () => {
     // Must be called with exactly 3 arguments (picks, teams, allGames).
     // A 4th argument (prebuiltMaps) would be undefined or absent — never a function.
     expect(callArgs).toHaveLength(3);
-    expect(callArgs[0]).toEqual([1, 2]);   // picks as numbers
-    expect(callArgs[1]).toBe(TEAMS);        // teams array
-    expect(callArgs[2]).toBe(allGames);     // allGames, not activeGames
+    expect(callArgs[0]).toEqual([1, 2]); // picks as numbers
+    expect(callArgs[1]).toBe(TEAMS); // teams array
+    expect(callArgs[2]).toBe(allGames); // allGames, not activeGames
   });
 
   it('filters out non-numeric SIDs before passing picks', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ allGames: [], teams: TEAMS, regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      allGames: [],
+      teams: TEAMS,
+      regions: [],
+    });
 
     // 'abc' and NaN-producing values must be stripped
     await calculateMaxPossiblePoints(['1', 'abc', '3'], 2024);
@@ -857,7 +1264,11 @@ describe('calculateMaxPossiblePoints', () => {
   });
 
   it('returns 0 and does not call calculateEntryPointsAndPaths when all SIDs are invalid', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ allGames: [], teams: TEAMS, regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      allGames: [],
+      teams: TEAMS,
+      regions: [],
+    });
 
     const result = await calculateMaxPossiblePoints(['abc', 'xyz'], 2024);
 
@@ -866,7 +1277,11 @@ describe('calculateMaxPossiblePoints', () => {
   });
 
   it('coerces string SIDs to numbers for valid picks', async () => {
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ allGames: [], teams: TEAMS, regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      allGames: [],
+      teams: TEAMS,
+      regions: [],
+    });
 
     await calculateMaxPossiblePoints(['1', '2', '3'], 2024);
 
@@ -877,9 +1292,14 @@ describe('calculateMaxPossiblePoints', () => {
   it('uses allGames (not activeGames) from getAllTournamentDetails', async () => {
     // allGames includes TBD-slot games; activeGames is a filtered subset.
     // calculateMaxPossiblePoints must pass allGames so future-path tracing works.
-    const allGames    = [{ gameID: 1 }, { gameID: 2 }];
+    const allGames = [{ gameID: 1 }, { gameID: 2 }];
     const activeGames = [{ gameID: 1 }];
-    mockGameRepo.getAllTournamentDetails.mockResolvedValue({ allGames, activeGames, teams: TEAMS, regions: [] });
+    mockGameRepo.getAllTournamentDetails.mockResolvedValue({
+      allGames,
+      activeGames,
+      teams: TEAMS,
+      regions: [],
+    });
 
     await calculateMaxPossiblePoints([1], 2024);
 
@@ -893,12 +1313,16 @@ describe('calculateMaxPossiblePoints', () => {
     const repoError = new Error('Database down');
     mockGameRepo.getAllTournamentDetails.mockRejectedValue(repoError);
 
-    await expect(calculateMaxPossiblePoints([1, 2], 2024)).rejects.toThrow('Failed to calculate maximum possible points.');
+    await expect(calculateMaxPossiblePoints([1, 2], 2024)).rejects.toThrow(
+      'Failed to calculate maximum possible points.',
+    );
 
     expect(errorSpy).toHaveBeenCalled();
     const logOutput = JSON.parse(errorSpy.mock.calls[0][0]);
     expect(logOutput.severity).toBe('ERROR');
-    expect(logOutput.message).toBe('Error in calculateMaxPossiblePoints service:');
+    expect(logOutput.message).toBe(
+      'Error in calculateMaxPossiblePoints service:',
+    );
     expect(logOutput.data.message).toBe('Database down');
 
     errorSpy.mockRestore();
@@ -919,14 +1343,23 @@ describe('normalizeAndValidateEntryPicks', () => {
   let mockViewRepo;
 
   // 12 ordinary (non-FF) teams so individual tests can pick any 10 valid sIDs.
-  const teamsFor = (sIDs) => sIDs.map((sID) => ({ sID, nameNick: `Team ${sID}`, seed: 1, regionName: 'East', isFFDoc: false }));
+  const teamsFor = (sIDs) =>
+    sIDs.map((sID) => ({
+      sID,
+      nameNick: `Team ${sID}`,
+      seed: 1,
+      regionName: 'East',
+      isFFDoc: false,
+    }));
 
   beforeEach(() => {
     mockViewRepo = { getGroupTeams: vi.fn().mockResolvedValue([]) };
     mockGameRepo = {
       getFirstFourGames: vi.fn().mockResolvedValue([]), // identity FF by default
       getAllTournamentDetails: vi.fn().mockResolvedValue({
-        teams: teamsFor([101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 999]),
+        teams: teamsFor([
+          101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 999,
+        ]),
         allGames: [],
         regions: [{ regionName: 'East' }],
       }),
@@ -940,13 +1373,16 @@ describe('normalizeAndValidateEntryPicks', () => {
 
   it('returns the picks unchanged for 10 valid, unique, non-FF picks', async () => {
     const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110];
-    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test')).resolves.toEqual(picks);
+    await expect(
+      normalizeAndValidateEntryPicks(picks, 2024, 'Test'),
+    ).resolves.toEqual(picks);
   });
 
   it('rejects fewer than 10 picks before any team lookup', async () => {
     const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109];
-    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
-      .rejects.toThrow(/Exactly 10 team picks are required/i);
+    await expect(
+      normalizeAndValidateEntryPicks(picks, 2024, 'Test'),
+    ).rejects.toThrow(/Exactly 10 team picks are required/i);
   });
 
   it('maps a stale First Four pick onto the live winner and accepts it', async () => {
@@ -955,8 +1391,9 @@ describe('normalizeAndValidateEntryPicks', () => {
       { team1ID: 101, team2ID: 102, winner: 999 },
     ]);
     const picks = [101, 103, 104, 105, 106, 107, 108, 109, 110, 111];
-    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
-      .resolves.toEqual([999, 103, 104, 105, 106, 107, 108, 109, 110, 111]);
+    await expect(
+      normalizeAndValidateEntryPicks(picks, 2024, 'Test'),
+    ).resolves.toEqual([999, 103, 104, 105, 106, 107, 108, 109, 110, 111]);
   });
 
   it('rejects when both FF teams of one unresolved game collapse to the same pick (duplicate)', async () => {
@@ -965,15 +1402,17 @@ describe('normalizeAndValidateEntryPicks', () => {
       { team1ID: 101, team2ID: 102, winner: null },
     ]);
     const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110];
-    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
-      .rejects.toThrow(/Duplicate team picks/i);
+    await expect(
+      normalizeAndValidateEntryPicks(picks, 2024, 'Test'),
+    ).rejects.toThrow(/Duplicate team picks/i);
   });
 
   it('rejects a pick that is not a team in the tournament/group', async () => {
     // 777 is not in the registration team list.
     const picks = [101, 102, 103, 104, 105, 106, 107, 108, 109, 777];
-    await expect(normalizeAndValidateEntryPicks(picks, 2024, 'Test'))
-      .rejects.toThrow(/Pick 10 is not a valid team/i);
+    await expect(
+      normalizeAndValidateEntryPicks(picks, 2024, 'Test'),
+    ).rejects.toThrow(/Pick 10 is not a valid team/i);
   });
 });
 
@@ -982,7 +1421,13 @@ describe('validateEntryPicks', () => {
     const mockViewRepo = { getGroupTeams: vi.fn().mockResolvedValue([]) };
     const mockGameRepo = {
       getAllTournamentDetails: vi.fn().mockResolvedValue({
-        teams: [101, 102, 103].map((sID) => ({ sID, nameNick: `Team ${sID}`, seed: 1, regionName: 'East', isFFDoc: false })),
+        teams: [101, 102, 103].map((sID) => ({
+          sID,
+          nameNick: `Team ${sID}`,
+          seed: 1,
+          regionName: 'East',
+          isFFDoc: false,
+        })),
         allGames: [],
         regions: [{ regionName: 'East' }],
       }),
@@ -995,11 +1440,14 @@ describe('validateEntryPicks', () => {
   });
 
   it('resolves when every pick is a valid team in the group', async () => {
-    await expect(validateEntryPicks([101, 102, 103], 2024, 'Test')).resolves.toBeUndefined();
+    await expect(
+      validateEntryPicks([101, 102, 103], 2024, 'Test'),
+    ).resolves.toBeUndefined();
   });
 
   it('throws naming the 1-based position of the first invalid pick', async () => {
-    await expect(validateEntryPicks([101, 555, 103], 2024, 'Test'))
-      .rejects.toThrow(/Pick 2 is not a valid team/i);
+    await expect(
+      validateEntryPicks([101, 555, 103], 2024, 'Test'),
+    ).rejects.toThrow(/Pick 2 is not a valid team/i);
   });
 });

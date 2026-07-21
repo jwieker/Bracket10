@@ -56,11 +56,15 @@ beforeEach(() => {
   gameRepoMock.addPendingRecalcSIDs.mockImplementation(async (_year, sIDs) => {
     pendingMarker = [...new Set([...pendingMarker, ...sIDs.map(Number)])];
   });
-  gameRepoMock.getPendingRecalcSIDs.mockImplementation(async () => [...pendingMarker]);
-  gameRepoMock.clearPendingRecalcSIDs.mockImplementation(async (_year, sIDs) => {
-    const toRemove = new Set(sIDs.map(Number));
-    pendingMarker = pendingMarker.filter((s) => !toRemove.has(s));
-  });
+  gameRepoMock.getPendingRecalcSIDs.mockImplementation(async () => [
+    ...pendingMarker,
+  ]);
+  gameRepoMock.clearPendingRecalcSIDs.mockImplementation(
+    async (_year, sIDs) => {
+      const toRemove = new Set(sIDs.map(Number));
+      pendingMarker = pendingMarker.filter((s) => !toRemove.has(s));
+    },
+  );
 });
 
 describe('runEspnPoll — early-exits', () => {
@@ -106,7 +110,16 @@ describe('runEspnPoll — early-exits', () => {
     // ESPN's today/yesterday feed still reports it as completed. Without the
     // hold filter the poll would re-resolve it within one cycle.
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 42, round: 1, winner: null, manualHold: true, team1ID: 28, team2ID: 73, nextGameID: 50, nextGameSpot: 1 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        manualHold: true,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 50,
+        nextGameSpot: 1,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -128,7 +141,15 @@ describe('runEspnPoll — early-exits', () => {
 describe('runEspnPoll — happy path', () => {
   test('matches a completed ESPN game to an unresolved DB game and writes the result', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 42, round: 1, winner: null, team1ID: 28, team2ID: 73, nextGameID: 50, nextGameSpot: 1 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 50,
+        nextGameSpot: 1,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -143,18 +164,41 @@ describe('runEspnPoll — happy path', () => {
 
     const result = await runEspnPoll(2024);
 
-    expect(updateTeamRecordsMock).toHaveBeenCalledWith(28, 73, 1, 42, 50, 1, 2024);
+    expect(updateTeamRecordsMock).toHaveBeenCalledWith(
+      28,
+      73,
+      1,
+      42,
+      50,
+      1,
+      2024,
+    );
     expect(result.updated).toBe(1);
     expect(result.games).toHaveLength(1);
-    expect(result.games[0]).toMatchObject({ gameID: 42, winnerSID: 28, loserSID: 73 });
-    expect(updatePointsMock).toHaveBeenCalledWith(2024, expect.arrayContaining([28, 73]));
+    expect(result.games[0]).toMatchObject({
+      gameID: 42,
+      winnerSID: 28,
+      loserSID: 73,
+    });
+    expect(updatePointsMock).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([28, 73]),
+    );
   });
 
   test('resolves a First Four (round 0) game through the same path with round 0 args', async () => {
     // FF games sit in the unresolved set like any other game; the poll must
     // pass round 0 through so gameService takes the pick-swap branch.
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 64, round: 0, winner: null, team1ID: 28, team2ID: 73, nextGameID: 5, nextGameSpot: 2 },
+      {
+        gameID: 64,
+        round: 0,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 5,
+        nextGameSpot: 2,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -169,16 +213,35 @@ describe('runEspnPoll — happy path', () => {
 
     const result = await runEspnPoll(2024);
 
-    expect(updateTeamRecordsMock).toHaveBeenCalledWith(73, 28, 0, 64, 5, 2, 2024);
+    expect(updateTeamRecordsMock).toHaveBeenCalledWith(
+      73,
+      28,
+      0,
+      64,
+      5,
+      2,
+      2024,
+    );
     expect(result.updated).toBe(1);
     // The recalc must see both FF sIDs so swapped entries are re-scored.
-    expect(updatePointsMock).toHaveBeenCalledWith(2024, expect.arrayContaining([73, 28]));
+    expect(updatePointsMock).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([73, 28]),
+    );
   });
 
   test('matches when team1ID/team2ID order is reversed from ESPN winner orientation', async () => {
     // DB has team1=Kansas, team2=Duke. ESPN says Duke won.
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 42, round: 1, winner: null, team1ID: 73, team2ID: 28, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 73,
+        team2ID: 28,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -193,7 +256,15 @@ describe('runEspnPoll — happy path', () => {
 
     const result = await runEspnPoll(2024);
 
-    expect(updateTeamRecordsMock).toHaveBeenCalledWith(28, 73, 1, 42, 0, 0, 2024);
+    expect(updateTeamRecordsMock).toHaveBeenCalledWith(
+      28,
+      73,
+      1,
+      42,
+      0,
+      0,
+      2024,
+    );
     expect(result.updated).toBe(1);
   });
 });
@@ -201,7 +272,15 @@ describe('runEspnPoll — happy path', () => {
 describe('runEspnPoll — dedup, skip, unmapped', () => {
   test('dedupes ESPN games appearing in both today and yesterday by espnEventId', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 42, round: 1, winner: null, team1ID: 28, team2ID: 73, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     const dup = {
       espnEventId: 'evt-dup',
@@ -210,7 +289,9 @@ describe('runEspnPoll — dedup, skip, unmapped', () => {
       winnerDisplayName: 'Duke Blue Devils',
     };
     // today + yesterday both return the same game
-    fetchCompletedMock.mockResolvedValueOnce([dup]).mockResolvedValueOnce([dup]);
+    fetchCompletedMock
+      .mockResolvedValueOnce([dup])
+      .mockResolvedValueOnce([dup]);
     updateTeamRecordsMock.mockResolvedValue();
     updatePointsMock.mockResolvedValue();
 
@@ -224,7 +305,15 @@ describe('runEspnPoll — dedup, skip, unmapped', () => {
   test('skips ESPN games with no matching unresolved DB game', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
       // Different teams than ESPN reports
-      { gameID: 42, round: 1, winner: null, team1ID: 41, team2ID: 55, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 41,
+        team2ID: 55,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -244,7 +333,15 @@ describe('runEspnPoll — dedup, skip, unmapped', () => {
 
   test('records unmapped team names without crashing', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 42, round: 1, winner: null, team1ID: 28, team2ID: 73, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -263,10 +360,147 @@ describe('runEspnPoll — dedup, skip, unmapped', () => {
   });
 });
 
+describe('runEspnPoll — First Four week: half-filled slots and duplicate pairs', () => {
+  test('a half-filled R1 game (team2ID null, awaiting an FF winner) is excluded from matching without crashing, while a resolvable FF game still matches', async () => {
+    // R1 game 5 has an open slot fed by FF game 64. Both are unresolved at
+    // once during FF week — the null-team-ID guard must skip game 5 (Math.min/max
+    // on a null would throw or produce a bogus key) while still matching game 64.
+    gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
+      {
+        gameID: 5,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: null,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
+      {
+        gameID: 64,
+        round: 0,
+        winner: null,
+        team1ID: 41,
+        team2ID: 55,
+        nextGameID: 5,
+        nextGameSpot: 2,
+      },
+    ]);
+    fetchCompletedMock.mockResolvedValue([
+      {
+        espnEventId: 'evt-ff-week',
+        team1DisplayName: 'Alabama Crimson Tide',
+        team2DisplayName: 'Arizona Wildcats',
+        winnerDisplayName: 'Alabama Crimson Tide',
+      },
+    ]);
+    updateTeamRecordsMock.mockResolvedValue();
+    updatePointsMock.mockResolvedValue();
+
+    const result = await runEspnPoll(2024);
+
+    expect(result.updated).toBe(1);
+    expect(updateTeamRecordsMock).toHaveBeenCalledTimes(1);
+    expect(updateTeamRecordsMock).toHaveBeenCalledWith(
+      41,
+      55,
+      0,
+      64,
+      5,
+      2,
+      2024,
+    );
+  });
+
+  test('ESPN reporting a result for a team whose only DB game has a null slot is skipped, not matched', async () => {
+    // Team 28 (Duke) is only present in a half-filled game — ESPN reporting a
+    // Duke result must not fall through to a stale/wrong match.
+    gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
+      {
+        gameID: 5,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: null,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
+    ]);
+    fetchCompletedMock.mockResolvedValue([
+      {
+        espnEventId: 'evt-null-slot',
+        team1DisplayName: 'Duke Blue Devils',
+        team2DisplayName: 'Kansas Jayhawks',
+        winnerDisplayName: 'Duke Blue Devils',
+      },
+    ]);
+
+    const result = await runEspnPoll(2024);
+
+    expect(result.skipped).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(updateTeamRecordsMock).not.toHaveBeenCalled();
+  });
+
+  test('two unresolved DB games sharing the same team pair (corrupted duplicate) resolve to exactly one write, targeting the first-seen game', async () => {
+    gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
+      {
+        gameID: 43,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
+    ]);
+    fetchCompletedMock.mockResolvedValue([
+      {
+        espnEventId: 'evt-dup-pair',
+        team1DisplayName: 'Duke Blue Devils',
+        team2DisplayName: 'Kansas Jayhawks',
+        winnerDisplayName: 'Duke Blue Devils',
+      },
+    ]);
+    updateTeamRecordsMock.mockResolvedValue();
+    updatePointsMock.mockResolvedValue();
+
+    const result = await runEspnPoll(2024);
+
+    expect(updateTeamRecordsMock).toHaveBeenCalledTimes(1);
+    expect(updateTeamRecordsMock).toHaveBeenCalledWith(
+      28,
+      73,
+      1,
+      42,
+      0,
+      0,
+      2024,
+    );
+    expect(result.updated).toBe(1);
+  });
+});
+
 describe('runEspnPoll — dry-run', () => {
   test('dry-run reports games as updated without invoking write paths', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 42, round: 1, winner: null, team1ID: 28, team2ID: 73, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 42,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -290,7 +524,15 @@ describe('runEspnPoll — dry-run', () => {
 describe('runEspnPoll — date override and error propagation', () => {
   test('with explicit dateStr, fetches only that date and skips yesterday lookup', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 1, winner: null, team1ID: 28, team2ID: 73, round: 1, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        round: 1,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([]);
 
@@ -303,7 +545,15 @@ describe('runEspnPoll — date override and error propagation', () => {
 
   test('with no dateStr, fetches today and yesterday in parallel', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 1, winner: null, team1ID: 28, team2ID: 73, round: 1, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        round: 1,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([]);
 
@@ -316,7 +566,15 @@ describe('runEspnPoll — date override and error propagation', () => {
 
   test('rethrows ESPN fetch errors instead of swallowing', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 1, winner: null, team1ID: 28, team2ID: 73, round: 1, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        round: 1,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     const boom = new Error('ESPN 503');
     fetchCompletedMock.mockRejectedValue(boom);
@@ -326,7 +584,15 @@ describe('runEspnPoll — date override and error propagation', () => {
 
   test('rethrows ESPN fetch errors when explicit dateStr is provided', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 1, winner: null, team1ID: 28, team2ID: 73, round: 1, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        round: 1,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     const boom = new Error('ESPN 503 for date');
     fetchCompletedMock.mockRejectedValue(boom);
@@ -339,8 +605,24 @@ describe('runEspnPoll — date override and error propagation', () => {
 
   test('continues recording other games when one updateTeamRecords promise rejects', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 1, round: 1, winner: null, team1ID: 28, team2ID: 73, nextGameID: 0, nextGameSpot: 0 },
-      { gameID: 2, round: 1, winner: null, team1ID: 41, team2ID: 55, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 1,
+        round: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
+      {
+        gameID: 2,
+        round: 1,
+        winner: null,
+        team1ID: 41,
+        team2ID: 55,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     fetchCompletedMock.mockResolvedValue([
       {
@@ -369,7 +651,15 @@ describe('runEspnPoll — date override and error propagation', () => {
 
   test('does NOT recompute points when no games were updated', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
-      { gameID: 1, winner: null, team1ID: 28, team2ID: 73, round: 1, nextGameID: 0, nextGameSpot: 0 },
+      {
+        gameID: 1,
+        winner: null,
+        team1ID: 28,
+        team2ID: 73,
+        round: 1,
+        nextGameID: 0,
+        nextGameSpot: 0,
+      },
     ]);
     // ESPN game references unmapped teams → no writes
     fetchCompletedMock.mockResolvedValue([
@@ -389,26 +679,41 @@ describe('runEspnPoll — date override and error propagation', () => {
 
 describe('runEspnPoll — durable recalc marker (failed recalcs are retried)', () => {
   const dukeKansasGame = {
-    gameID: 42, round: 1, winner: null, team1ID: 28, team2ID: 73, nextGameID: 50, nextGameSpot: 1,
+    gameID: 42,
+    round: 1,
+    winner: null,
+    team1ID: 28,
+    team2ID: 73,
+    nextGameID: 50,
+    nextGameSpot: 1,
   };
-  const dukeWinsFeed = [{
-    espnEventId: 'evt-marker',
-    team1DisplayName: 'Duke Blue Devils',
-    team2DisplayName: 'Kansas Jayhawks',
-    winnerDisplayName: 'Duke Blue Devils',
-  }];
+  const dukeWinsFeed = [
+    {
+      espnEventId: 'evt-marker',
+      team1DisplayName: 'Duke Blue Devils',
+      team2DisplayName: 'Kansas Jayhawks',
+      winnerDisplayName: 'Duke Blue Devils',
+    },
+  ];
 
   test('marks affected sIDs durably BEFORE writing any game result', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([dukeKansasGame]);
     fetchCompletedMock.mockResolvedValue(dukeWinsFeed);
     const callOrder = [];
-    gameRepoMock.addPendingRecalcSIDs.mockImplementation(async () => { callOrder.push('mark'); });
-    updateTeamRecordsMock.mockImplementation(async () => { callOrder.push('write'); });
+    gameRepoMock.addPendingRecalcSIDs.mockImplementation(async () => {
+      callOrder.push('mark');
+    });
+    updateTeamRecordsMock.mockImplementation(async () => {
+      callOrder.push('write');
+    });
     updatePointsMock.mockResolvedValue();
 
     await runEspnPoll(2024);
 
-    expect(gameRepoMock.addPendingRecalcSIDs).toHaveBeenCalledWith(2024, expect.arrayContaining([28, 73]));
+    expect(gameRepoMock.addPendingRecalcSIDs).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([28, 73]),
+    );
     expect(callOrder[0]).toBe('mark');
     expect(callOrder).toContain('write');
   });
@@ -421,8 +726,14 @@ describe('runEspnPoll — durable recalc marker (failed recalcs are retried)', (
 
     await runEspnPoll(2024);
 
-    expect(updatePointsMock).toHaveBeenCalledWith(2024, expect.arrayContaining([28, 73]));
-    expect(gameRepoMock.clearPendingRecalcSIDs).toHaveBeenCalledWith(2024, expect.arrayContaining([28, 73]));
+    expect(updatePointsMock).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([28, 73]),
+    );
+    expect(gameRepoMock.clearPendingRecalcSIDs).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([28, 73]),
+    );
     // Marker drained: a follow-up run with nothing new must not recalc again.
     expect(await gameRepoMock.getPendingRecalcSIDs(2024)).toEqual([]);
   });
@@ -439,12 +750,17 @@ describe('runEspnPoll — durable recalc marker (failed recalcs are retried)', (
 
     // Run 2: the game is now resolved (the "no unresolved games" early exit —
     // previously the path that stranded wrong standings forever).
-    gameRepoMock.getActiveAndFutureGames.mockResolvedValue([{ ...dukeKansasGame, winner: 28 }]);
+    gameRepoMock.getActiveAndFutureGames.mockResolvedValue([
+      { ...dukeKansasGame, winner: 28 },
+    ]);
     updatePointsMock.mockResolvedValue();
 
     await runEspnPoll(2024);
 
-    expect(updatePointsMock).toHaveBeenCalledWith(2024, expect.arrayContaining([28, 73]));
+    expect(updatePointsMock).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([28, 73]),
+    );
     expect(await gameRepoMock.getPendingRecalcSIDs(2024)).toEqual([]);
   });
 
@@ -457,7 +773,10 @@ describe('runEspnPoll — durable recalc marker (failed recalcs are retried)', (
 
     await runEspnPoll(2024);
 
-    expect(updatePointsMock).toHaveBeenCalledWith(2024, expect.arrayContaining([99, 100]));
+    expect(updatePointsMock).toHaveBeenCalledWith(
+      2024,
+      expect.arrayContaining([99, 100]),
+    );
     expect(await gameRepoMock.getPendingRecalcSIDs(2024)).toEqual([]);
   });
 
@@ -476,7 +795,9 @@ describe('runEspnPoll — durable recalc marker (failed recalcs are retried)', (
   test('if the marker write itself fails, the run aborts before any game result is written', async () => {
     gameRepoMock.getActiveAndFutureGames.mockResolvedValue([dukeKansasGame]);
     fetchCompletedMock.mockResolvedValue(dukeWinsFeed);
-    gameRepoMock.addPendingRecalcSIDs.mockRejectedValue(new Error('marker write failed'));
+    gameRepoMock.addPendingRecalcSIDs.mockRejectedValue(
+      new Error('marker write failed'),
+    );
 
     await expect(runEspnPoll(2024)).rejects.toThrow('marker write failed');
     expect(updateTeamRecordsMock).not.toHaveBeenCalled();
