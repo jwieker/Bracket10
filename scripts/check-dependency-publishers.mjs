@@ -23,6 +23,18 @@ const LOCKFILES = [
   { label: 'jobs', path: 'jobs/package-lock.json' },
 ];
 
+// Exact name@version pairs that were flagged, investigated by hand, and
+// verified benign. Because the entry pins one immutable published artifact,
+// the exemption cannot silently extend to a future release. Each entry
+// documents why it is safe; remove entries that no longer appear in the tree.
+export const ALLOWLIST = {
+  'json-buffer@3.0.1': [
+    'published 2018-09-10 by dominictarr, the package author at the time;',
+    'ownership later transferred to nopersonsmodules, so the historical',
+    'publisher can never match the current maintainer list',
+  ].join(' '),
+};
+
 // Strips control characters (including newlines) from strings that embed
 // registry/lockfile data before they hit console.log, so a crafted package
 // name or maintainer field can't forge extra log lines. Same approach as
@@ -172,6 +184,18 @@ export function evaluateCooldown(
   return { problem: null };
 }
 
+// A publisher/approver record carries both an npm username and an email.
+// Accept a match on either: usernames are unique and permanent on npm, while
+// the email on old version manifests is whatever the account used at publish
+// time — e.g. eslint-visitor-keys@3.4.3 was published by "eslintbot" under a
+// since-retired email, and eslintbot is still a registered maintainer today.
+function personMatchesMaintainers(person, maintainers) {
+  return (
+    isKnownMaintainer(person.email, maintainers) ||
+    isKnownMaintainer(person.name, maintainers)
+  );
+}
+
 // Classic (non-OIDC) publishes report `_npmUser` as a "name <email>" string
 // rather than an object; normalize so the checks below have a stable shape.
 export function evaluatePublisherIdentity(rawNpmUser, maintainers) {
@@ -184,10 +208,9 @@ export function evaluatePublisherIdentity(rawNpmUser, maintainers) {
   const approver = npmUser.approver;
 
   if (approver) {
-    const identity = approver.email || approver.name;
-    if (!isKnownMaintainer(identity, maintainers)) {
+    if (!personMatchesMaintainers(approver, maintainers)) {
       problems.push(
-        `publish was approved by "${identity}", who is not in the registered maintainer list (${maintainers.join(', ') || 'none listed'})`,
+        `publish was approved by "${approver.email || approver.name}", who is not in the registered maintainer list (${maintainers.join(', ') || 'none listed'})`,
       );
     }
   } else if (npmUser.trustedPublisher) {
@@ -199,10 +222,9 @@ export function evaluatePublisherIdentity(rawNpmUser, maintainers) {
       `published via CI trusted publisher with no human approver on record (${npmUser.name ?? 'unknown'}) — confirm this package normally publishes this way`,
     );
   } else {
-    const identity = npmUser.email || npmUser.name;
-    if (!isKnownMaintainer(identity, maintainers)) {
+    if (!personMatchesMaintainers(npmUser, maintainers)) {
       problems.push(
-        `published by "${identity}", who is not in the registered maintainer list (${maintainers.join(', ') || 'none listed'})`,
+        `published by "${npmUser.email || npmUser.name}", who is not in the registered maintainer list (${maintainers.join(', ') || 'none listed'})`,
       );
     }
   }
@@ -264,6 +286,14 @@ export async function checkPackage({ name, baseVersion, headVersion }) {
     // If the base version is missing from the packument, we don't block on
     // the repository-continuity check alone — the cooldown/identity checks
     // above already ran against the head version and are the primary gate.
+  }
+
+  const allowlistReason = ALLOWLIST[`${name}@${headVersion}`];
+  if (allowlistReason && problems.length > 0) {
+    notices.push(
+      `allowlisted despite: ${problems.join('; ')} — ${allowlistReason}`,
+    );
+    problems.length = 0;
   }
 
   return { problems, notices, error: null };
