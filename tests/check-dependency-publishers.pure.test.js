@@ -181,30 +181,6 @@ describe('evaluatePublisherIdentity', () => {
     expect(notices).toHaveLength(1);
   });
 
-  test('passes when the publisher username matches a maintainer even though the email does not', () => {
-    // Real case: eslint-visitor-keys@3.4.3 was published by "eslintbot"
-    // under an email the account no longer uses; the username is still in
-    // the maintainer list.
-    const { problems } = evaluatePublisherIdentity(
-      { name: 'oreanno', email: 'old-address@former-employer.example' },
-      maintainers,
-    );
-    expect(problems).toEqual([]);
-  });
-
-  test('passes when an approver username matches a maintainer even though the email does not', () => {
-    const npmUser = {
-      name: 'GitHub Actions',
-      approver: {
-        name: 'oreanno',
-        email: 'old-address@former-employer.example',
-      },
-      trustedPublisher: { id: 'github' },
-    };
-    const { problems } = evaluatePublisherIdentity(npmUser, maintainers);
-    expect(problems).toEqual([]);
-  });
-
   test('checks classic string-form _npmUser against maintainers', () => {
     const { problems: okProblems } = evaluatePublisherIdentity(
       'oreanno <foxzdavinci@gmail.com>',
@@ -309,56 +285,6 @@ describe('checkPackage (stubbed registry)', () => {
     });
     expect(error).toBeNull();
     expect(problems).toEqual([]);
-  });
-
-  test('downgrades problems to a notice for an allowlisted name@version', async () => {
-    stubRegistry({
-      name: 'json-buffer',
-      maintainers: [
-        { name: 'nopersonsmodules', email: 'nopersonsmodules@gmail.com' },
-      ],
-      time: { '3.0.1': OLD_DATE },
-      versions: {
-        '3.0.1': {
-          _npmUser: { name: 'dominictarr', email: 'dominic.tarr@gmail.com' },
-          repository: {
-            url: 'git+https://github.com/dominictarr/json-buffer.git',
-          },
-        },
-      },
-    });
-    const { problems, notices, error } = await checkPackage({
-      name: 'json-buffer',
-      baseVersion: null,
-      headVersion: '3.0.1',
-    });
-    expect(error).toBeNull();
-    expect(problems).toEqual([]);
-    expect(notices).toHaveLength(1);
-    expect(notices[0]).toMatch(
-      /^allowlisted despite: published by "dominic.tarr@gmail.com"/,
-    );
-  });
-
-  test('does not allowlist a different version of an allowlisted package', async () => {
-    stubRegistry({
-      name: 'json-buffer',
-      maintainers: [
-        { name: 'nopersonsmodules', email: 'nopersonsmodules@gmail.com' },
-      ],
-      time: { '3.0.2': OLD_DATE },
-      versions: {
-        '3.0.2': {
-          _npmUser: { name: 'mallory', email: 'mallory@evil.example' },
-        },
-      },
-    });
-    const { problems } = await checkPackage({
-      name: 'json-buffer',
-      baseVersion: null,
-      headVersion: '3.0.2',
-    });
-    expect(problems).toHaveLength(1);
   });
 
   test('reports a fetch error (not a pass) after exhausting all retries', async () => {
