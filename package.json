@@ -51,8 +51,8 @@
   "license": "ISC",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@typescript-eslint/eslint-plugin": "^8.64.0",
-    "@typescript-eslint/parser": "^8.64.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.62.0",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.6.0",
     "eslint-plugin-n": "^18.2.1",
@@ -78,9 +78,6 @@
     "minimatch": "^10.2.1",
     "glob": "^11.0.2",
     "@tootallnate/once": "3.0.1",
-    "ip-address": "^10.2.0",
-    "enhanced-resolve": "5.24.2",
-    "lightningcss": "1.32.0",
-    "postcss": "8.5.19"
+    "ip-address": "^10.2.0"
   }
 }

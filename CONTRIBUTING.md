@@ -93,7 +93,7 @@ The CSP violation endpoint (`POST /csp-report`) follows this contract: it logs t
 Many features and architectural choices in this project have non-obvious reasons behind them. Before proposing a change that would "simplify" or "optimize" something, consider:
 
 - **Cost contract**: We aim to stay near **$0/month** on infrastructure. If something looks inefficient but avoids an API call or database operation, that's intentional.
-- **Auditability**: Some processes (like the loop coordination system in `docs/private/development/loop-engineering.md`) use indirection through GitHub rather than direct coupling. This looks slower but provides a crucial audit trail and avoids race conditions.
+- **Auditability**: Some processes (like the maintainer's automated PR review/fix loops) use indirection through GitHub rather than direct coupling. This looks slower but provides a crucial audit trail and avoids race conditions.
 - **Coupling & resilience**: Tight coupling between systems may seem redundant but often prevents cascading failures. The trade-off (latency vs. decoupling) is usually worth it.
 - **Agent loops**: Autonomous agent routines have explicit permission gates (`agent:ready` labels, draft PRs, human gates on merge) for good reason. They're not meant to be "optimized" to near-zero human involvement.
 
