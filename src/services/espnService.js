@@ -50,32 +50,38 @@ export function loadTeamMap() {
 }
 
 /**
+ * Shared fetch+timeout+error-logging wrapper for the ESPN scoreboard endpoint.
+ * Each caller passes its own log prefix so failures are traceable to the
+ * specific consumer (poll vs. scheduled-preview vs. plan normalization).
+ */
+async function fetchScoreboardData(dateStr, logPrefix) {
+  const url = `${ESPN_SCOREBOARD_URL}?limit=200&dates=${dateStr}`;
+  Logger.info(`${logPrefix}: fetching scoreboard for date ${dateStr}`);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`ESPN API returned HTTP ${response.status}`);
+    }
+    return await response.json();
+  } catch (err) {
+    Logger.error(`${logPrefix}: failed to fetch scoreboard`, err);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Fetches completed NCAA tournament games from ESPN's unofficial scoreboard API.
  * @param {string} dateStr - Date in YYYYMMDD format (defaults to today)
  * @returns {Promise<Array<{espnEventId, team1DisplayName, team2DisplayName, winnerDisplayName}>>}
  */
 export async function fetchCompletedTournamentGames(dateStr = null) {
   const date = assertValidDateStr(dateStr ?? getTodayDateStr());
-  const url = `${ESPN_SCOREBOARD_URL}?limit=200&dates=${date}`;
-
-  Logger.info(`ESPN poll: fetching scoreboard for date ${date}`);
-
-  let data;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (!response.ok) {
-      throw new Error(`ESPN API returned HTTP ${response.status}`);
-    }
-    data = await response.json();
-  } catch (err) {
-    Logger.error('ESPN poll: failed to fetch scoreboard', err);
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const data = await fetchScoreboardData(date, 'ESPN poll');
 
   const events = data?.events ?? [];
   const completedGames = [];
@@ -116,26 +122,7 @@ export async function fetchCompletedTournamentGames(dateStr = null) {
  */
 export async function fetchScheduledTournamentGames(dateStr) {
   assertValidDateStr(dateStr);
-  const url = `${ESPN_SCOREBOARD_URL}?limit=200&dates=${dateStr}`;
-
-  Logger.info(`ESPN scheduled: fetching scoreboard for date ${dateStr}`);
-
-  let data;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (!response.ok) {
-      throw new Error(`ESPN API returned HTTP ${response.status}`);
-    }
-    data = await response.json();
-  } catch (err) {
-    Logger.error('ESPN scheduled: failed to fetch scoreboard', err);
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const data = await fetchScoreboardData(dateStr, 'ESPN scheduled');
 
   const events = data?.events ?? [];
   const games = [];
@@ -173,6 +160,119 @@ export async function fetchScheduledTournamentGames(dateStr) {
 
   Logger.info(`ESPN scheduled: found ${games.length} game(s) on ${dateStr}`);
   return games;
+}
+
+// Only these two round labels are admitted for the ESPN-driven bracket-creation
+// feature; every other event (NIT, later rounds, non-tournament games) is
+// reported back as excluded rather than silently dropped, per the plan's
+// "diagnostics, not disappear" requirement.
+const RECOGNIZED_ROUNDS = new Set(['First Four', '1st Round']);
+
+/**
+ * @typedef {Object} NormalizedTournamentTeam
+ * @property {string|null} espnId - Raw ESPN team id (string); null for an
+ *   unresolved/TBD play-in destination slot.
+ * @property {string|null} displayName
+ * @property {number|null} seed
+ */
+
+/**
+ * @typedef {Object} NormalizedTournamentEvent
+ * @property {string} espnEventId
+ * @property {string|null} eventDate - ISO timestamp as ESPN reports it.
+ * @property {string} round - "First Four" or "1st Round".
+ * @property {string} regionName
+ * @property {boolean} completed
+ * @property {NormalizedTournamentTeam} team1
+ * @property {NormalizedTournamentTeam} team2
+ * @property {NormalizedTournamentTeam|null} winner
+ */
+
+/**
+ * Normalizes one date's ESPN scoreboard into First Four / Round 1 men's
+ * championship events, for the ESPN-driven tournament-creation assembler.
+ * Distinct from `fetchScheduledTournamentGames` (kept as-is for its existing
+ * `pollEspnScheduled` consumer): this adds competitor ESPN ids, event
+ * timestamps, round labels, and an admission filter, and never silently
+ * drops an event — anything not admitted is returned in `excluded` with a
+ * reason so the caller can surface it as a diagnostic.
+ * @param {string} dateStr - Date in YYYYMMDD format
+ * @returns {Promise<{events: NormalizedTournamentEvent[], excluded: Array<{espnEventId: string|null, reason: string}>}>}
+ */
+export async function fetchNormalizedTournamentEvents(dateStr) {
+  assertValidDateStr(dateStr);
+  const data = await fetchScoreboardData(dateStr, 'ESPN normalized');
+
+  const rawEvents = data?.events ?? [];
+  const seenEventIds = new Set();
+  const events = [];
+  const excluded = [];
+
+  for (const event of rawEvents) {
+    const espnEventId = event?.id ?? null;
+    if (!espnEventId) {
+      excluded.push({ espnEventId: null, reason: 'missing event id' });
+      continue;
+    }
+    if (seenEventIds.has(espnEventId)) continue;
+    seenEventIds.add(espnEventId);
+
+    const competition = event?.competitions?.[0];
+    const competitors = competition?.competitors ?? [];
+    if (!competition || competitors.length !== 2) {
+      excluded.push({ espnEventId, reason: 'not a two-competitor event' });
+      continue;
+    }
+
+    // Real ESPN headline (verified against recorded 2025 responses — see
+    // tests/fixtures/espn/): "Men's Basketball Championship - West Region -
+    // 1st Round". No "NCAA " prefix, unlike the format assumed in an earlier
+    // draft of this function.
+    const noteHeadline = competition?.notes?.[0]?.headline ?? '';
+    const headlineMatch = noteHeadline.match(
+      /Men's Basketball Championship - (\w+) Region - (.+)$/,
+    );
+    if (!headlineMatch) {
+      excluded.push({
+        espnEventId,
+        reason: "headline did not match the men's championship round format",
+      });
+      continue;
+    }
+    const [, regionName, roundText] = headlineMatch;
+    const round = roundText.trim();
+    if (!RECOGNIZED_ROUNDS.has(round)) {
+      excluded.push({ espnEventId, reason: `unrecognized round "${round}"` });
+      continue;
+    }
+
+    const [c1, c2] = competitors;
+    const winnerCompetitor = competitors.find((c) => c.winner === true);
+
+    events.push({
+      espnEventId,
+      eventDate: event?.date ?? null,
+      round,
+      regionName,
+      completed: event?.status?.type?.completed === true,
+      team1: toNormalizedTeam(c1),
+      team2: toNormalizedTeam(c2),
+      winner: winnerCompetitor ? toNormalizedTeam(winnerCompetitor) : null,
+    });
+  }
+
+  Logger.info(
+    `ESPN normalized: ${events.length} admitted, ${excluded.length} excluded on ${dateStr}`,
+  );
+  return { events, excluded };
+}
+
+function toNormalizedTeam(competitor) {
+  return {
+    espnId: competitor?.team?.id ?? null,
+    displayName: competitor?.team?.displayName ?? null,
+    seed: competitor?.curatedRank?.current ?? null,
+  };
 }
 
 function getTodayDateStr() {

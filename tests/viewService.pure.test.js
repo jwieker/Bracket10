@@ -334,6 +334,30 @@ describe('addTeamProgressforGroup', () => {
     expect(result.teamsAdvanced).toBe(0);
   });
 
+  it('derives pickPoints on a copy, leaving the shared cached team objects untouched', async () => {
+    // These stand in for entries in the 300s `tournamentDetails_` cache: every
+    // group resolves its picks through the same objects, so a write landing on
+    // one is visible to every other concurrent request and every other group
+    // (#554). This is the invariant addPickCount documents and follows.
+    const cachedTeams = [
+      { sID: 1, gameStatus: ['W', 'W'] },
+      { sID: 2, gameStatus: ['L'] },
+    ];
+    const entryA = { pickNames: [cachedTeams[0], cachedTeams[1]] };
+    const entryB = { pickNames: [cachedTeams[0]] };
+
+    const [resultA] = await addTeamProgressforGroup([entryA], cachedTeams);
+    await addTeamProgressforGroup([entryB], cachedTeams);
+
+    expect(cachedTeams[0]).not.toHaveProperty('pickPoints');
+    expect(cachedTeams[1]).not.toHaveProperty('pickPoints');
+
+    // ...while the derived value still reaches the caller, on the per-request
+    // copy that results.ejs actually renders.
+    expect(resultA.pickNames[0]).not.toBe(cachedTeams[0]);
+    expect(resultA.pickNames[0].pickPoints).toBeGreaterThan(0);
+  });
+
   it('builds a 6x4 picksProgress array for each entry', async () => {
     const allTeams = [{ gameStatus: null }];
     const [result] = await addTeamProgressforGroup(

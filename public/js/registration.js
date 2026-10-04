@@ -219,6 +219,19 @@ $(document).ready(function () {
     .forEach((el) => new bootstrap.Tooltip(el));
   $('.dropdown-toggle').dropdown();
 
+  // The popover holds a link, so it opens on click and stays open until the
+  // reader clicks elsewhere or presses Escape.
+  const emailInfoBtn = document.getElementById('emailInfoBtn');
+  if (emailInfoBtn) {
+    const emailInfo = new bootstrap.Popover(emailInfoBtn);
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#emailInfoBtn, .popover')) emailInfo.hide();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') emailInfo.hide();
+    });
+  }
+
   // --- Real-time Name Preview ---
   const inputName = document.getElementById('inputName');
   const inputTeam = document.getElementById('inputTeam');

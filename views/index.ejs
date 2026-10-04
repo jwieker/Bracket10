@@ -2,234 +2,1016 @@
 <html lang="en">
 <meta itemprop="name" content="Bracket 10">
 <meta itemprop="description"
-    content="A new web application for for playing a different kind of college basketball tournament game.">
+    content="Pick ten teams, one from each seed line. Score every time one of them wins. Most points takes it.">
 <% if (appHost) { %>
 <meta itemprop="image" content="https://<%= appHost %>/logo.png">
 <% } %>
 
 <head>
     <%- include('partials/header') %>
+    <style>
+        /* ── Page Shell & Theme ─────────────────────────────────────────── */
+        .b2-page {
+            --b2-accent: #b4531f;
+            --b2-accent-glow: rgba(234, 123, 64, 0.15);
+            --b2-surface: var(--bg-card);
+            --b2-surface-subtle: var(--bg-soft);
+            --b2-border: var(--border-color);
+            --b2-border-strong: var(--border-strong);
+            --b2-text-main: var(--text-main);
+            --b2-text-muted: var(--text-muted);
+            --b2-mono: var(--mono);
+        }
+
+        [data-theme='dark'] .b2-page {
+            --b2-accent: var(--primary-color);
+            --b2-accent-glow: rgba(247, 149, 99, 0.15);
+        }
+
+        .b2-container {
+            max-width: 1120px;
+            margin: 1.75rem auto 3.5rem;
+            padding: 0 clamp(1.25rem, 4vw, 2.75rem);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* ── Sports Editorial Header Bar ─────────────────────────────────── */
+        .b2-status-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            padding: 0.85rem 0;
+            border-bottom: 1px solid var(--b2-border);
+            font-size: 12.5px;
+            color: var(--b2-text-muted);
+        }
+
+        .b2-live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--b2-text-main);
+        }
+
+        .b2-pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--b2-text-muted);
+        }
+
+        .b2-pulse-dot.is-live {
+            background: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-soft);
+            animation: b2-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes b2-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .b2-pulse-dot.is-live {
+                animation: none;
+            }
+        }
+
+        /* ── Hero Section ───────────────────────────────────────────────── */
+        .b2-hero {
+            padding: 1.25rem 0 1.5rem;
+        }
+
+        .b2-hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+            gap: clamp(1.75rem, 4vw, 3.5rem);
+            align-items: center;
+        }
+
+        .b2-hero-title {
+            font-size: clamp(34px, 5vw, 50px);
+            font-weight: 900;
+            letter-spacing: -0.035em;
+            line-height: 1.05;
+            margin: 0 0 1rem;
+            color: var(--b2-text-main);
+            text-wrap: balance;
+        }
+
+        .b2-hero-lede {
+            font-size: 16.5px;
+            line-height: 1.55;
+            color: var(--b2-text-muted);
+            margin: 0 0 1.75rem;
+            max-width: 48ch;
+        }
+
+        /* ── Action Panel ───────────────────────────────────────────────── */
+        .b2-action-box {
+            background: var(--b2-surface);
+            border: 1px solid var(--b2-border-strong);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .b2-action-heading {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--b2-accent);
+            margin-bottom: 0.5rem;
+        }
+
+        .b2-action-form {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .b2-action-form .form-control {
+            flex: 1 1 12rem;
+            min-width: 0;
+            padding: 0.65rem 0.9rem;
+            font-size: 15px;
+            background: var(--bg-body);
+            border: 1px solid var(--b2-border-strong);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+        }
+
+        .b2-action-form .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-soft);
+        }
+
+        .b2-action-form .btn {
+            flex: 0 0 auto;
+            padding: 0.65rem 1.35rem;
+            font-weight: 700;
+            border-radius: var(--radius-md);
+            white-space: nowrap;
+        }
+
+        .b2-fineprint {
+            font-size: 12.5px;
+            color: var(--b2-text-muted);
+            margin: 0.65rem 0 0;
+            line-height: 1.4;
+        }
+
+        .b2-error {
+            color: var(--danger-color);
+            font-weight: 700;
+            font-size: 13px;
+            margin: 0.65rem 0 0;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .b2-auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 1.15rem 0;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--b2-text-muted);
+        }
+
+        .b2-auth-divider::before,
+        .b2-auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--b2-border);
+        }
+
+        .b2-auth-user {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding-top: 0.25rem;
+        }
+
+        .b2-auth-user .btn-google {
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        /* Flatten nested partial card in action box */
+        .b2-action-box .container {
+            display: contents;
+        }
+
+        .b2-action-box .row {
+            display: block;
+            margin: 0;
+        }
+
+        .b2-action-box .row > [class*='col-'] {
+            width: 100%;
+            max-width: none;
+            padding: 0;
+        }
+
+        .b2-action-box .ds-card {
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .b2-action-box .ds-card-body {
+            padding: 0;
+        }
+
+        .b2-action-box .btn-google {
+            width: 100%;
+        }
+
+        .b2-action-box .text-center {
+            text-align: left !important;
+        }
+
+        /* ── Seed Lineup Visual Card ────────────────────────────────────── */
+        .b2-card-preview {
+            background: var(--b2-surface-subtle);
+            border: 1px solid var(--b2-border);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem 1.4rem;
+        }
+
+        .b2-preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 1px solid var(--b2-border);
+            padding-bottom: 0.65rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .b2-preview-title {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--b2-text-main);
+        }
+
+        .b2-preview-subtitle {
+            font-family: var(--b2-mono);
+            font-size: 12px;
+            color: var(--b2-text-muted);
+        }
+
+        .b2-seeds-strip {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .b2-seed-slot {
+            background: var(--b2-surface);
+            border: 1px solid var(--b2-border);
+            border-radius: var(--radius-sm);
+            padding: 0.45rem 0.55rem;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+
+        .b2-seed-num {
+            font-family: var(--b2-mono);
+            font-size: 11px;
+            font-weight: 800;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background: var(--b2-surface-subtle);
+            border: 1px solid var(--b2-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--b2-accent);
+            flex-shrink: 0;
+        }
+
+        .b2-seed-team {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--b2-text-main);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ── Sections Common ────────────────────────────────────────────── */
+        .b2-section {
+            padding: 2.75rem 0;
+            border-top: 1px solid var(--b2-border);
+        }
+
+        .b2-section-head {
+            margin-bottom: 2rem;
+        }
+
+        .b2-section-eyebrow {
+            font-size: 11.5px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--b2-accent);
+            margin-bottom: 0.35rem;
+        }
+
+        .b2-section-title {
+            font-size: clamp(22px, 3.5vw, 30px);
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            color: var(--b2-text-main);
+            margin: 0 0 0.5rem;
+        }
+
+        .b2-section-sub {
+            font-size: 15px;
+            color: var(--b2-text-muted);
+            margin: 0;
+            max-width: 58ch;
+        }
+
+        /* ── 3-Stage Game Rules ─────────────────────────────────────────── */
+        .b2-stages {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.75rem;
+        }
+
+        .b2-stage {
+            border-left: 2px solid var(--b2-border);
+            padding-left: 1.25rem;
+        }
+
+        .b2-stage-index {
+            font-family: var(--b2-mono);
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--b2-accent);
+            letter-spacing: 0.06em;
+            margin-bottom: 0.4rem;
+        }
+
+        .b2-stage h3 {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--b2-text-main);
+            margin: 0 0 0.45rem;
+        }
+
+        .b2-stage p {
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--b2-text-muted);
+            margin: 0;
+        }
+
+        /* ── Scoring Ladder & Analytical Stat Split ─────────────────────── */
+        .b2-scoring-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+            gap: 2rem;
+            align-items: stretch;
+        }
+
+        .b2-scoreboard {
+            background: var(--b2-surface-subtle);
+            border: 1px solid var(--b2-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+        }
+
+        .b2-table-ladder {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .b2-table-ladder th {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--b2-text-muted);
+            padding: 0.4rem 0.5rem 0.65rem;
+            border-bottom: 1px solid var(--b2-border);
+        }
+
+        .b2-table-ladder td {
+            padding: 0.6rem 0.5rem;
+            border-bottom: 1px solid var(--b2-border);
+            font-size: 13.5px;
+            vertical-align: middle;
+        }
+
+        .b2-table-ladder tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .b2-col-round {
+            font-weight: 700;
+            color: var(--b2-text-main);
+        }
+
+        .b2-col-pts {
+            font-family: var(--b2-mono);
+            font-variant-numeric: tabular-nums;
+            font-weight: 800;
+            color: var(--b2-accent);
+            text-align: right;
+        }
+
+        .b2-col-bar {
+            width: 32%;
+            padding: 0 0.5rem;
+        }
+
+        .b2-meter-track {
+            height: 8px;
+            border-radius: 999px;
+            background: var(--bg-body);
+            overflow: hidden;
+        }
+
+        .b2-meter-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--primary-color);
+        }
+
+        .b2-col-total {
+            font-family: var(--b2-mono);
+            font-variant-numeric: tabular-nums;
+            font-weight: 800;
+            color: var(--b2-text-main);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .b2-ladder-note {
+            font-size: 12.5px;
+            color: var(--b2-text-muted);
+            margin: 1rem 0 0;
+            line-height: 1.45;
+        }
+
+        /* ── Analytical Comparison (The Math) ───────────────────────────── */
+        .b2-stat-card {
+            background: var(--b2-surface-subtle);
+            border: 1px solid var(--b2-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            gap: 1.15rem;
+        }
+
+        .b2-stat-split {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.75rem;
+            align-items: center;
+            margin: 0.25rem 0;
+        }
+
+        .b2-stat-box {
+            padding: 1rem 0.85rem;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--b2-border);
+            background: var(--b2-surface-subtle);
+            text-align: center;
+        }
+
+        .b2-stat-box.highlight {
+            border-color: var(--primary-color);
+            background: var(--primary-soft);
+        }
+
+        .b2-stat-number {
+            font-family: var(--b2-mono);
+            font-size: 36px;
+            font-weight: 900;
+            line-height: 1;
+            margin-bottom: 0.35rem;
+            letter-spacing: -0.03em;
+        }
+
+        .b2-stat-box.highlight .b2-stat-number {
+            color: var(--b2-accent);
+        }
+
+        .b2-stat-label {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: var(--b2-text-muted);
+            line-height: 1.3;
+            margin: 0;
+        }
+
+        .b2-stat-vs {
+            font-family: var(--b2-mono);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--b2-text-muted);
+        }
+
+        /* ── Strategy Callouts (The Two Rules) ──────────────────────────── */
+        .b2-rules-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .b2-rule-item {
+            background: var(--b2-surface-subtle);
+            border: 1px solid var(--b2-border);
+            border-radius: var(--radius-lg);
+            padding: 1.35rem 1.5rem;
+        }
+
+        .b2-rule-tag {
+            font-family: var(--b2-mono);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--b2-accent);
+            margin-bottom: 0.4rem;
+        }
+
+        .b2-rule-item h3 {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--b2-text-main);
+            margin: 0 0 0.5rem;
+        }
+
+        .b2-rule-item p {
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: var(--b2-text-muted);
+            margin: 0;
+        }
+
+        /* ── Footer & Archive ───────────────────────────────────────────── */
+        .b2-footer {
+            border-top: 1px solid var(--b2-border);
+            padding: 2.25rem 0 3.5rem;
+        }
+
+        .b2-footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+
+        .b2-archive-form {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: nowrap;
+        }
+
+        .b2-year-select {
+            width: auto;
+            min-width: 85px;
+            font-family: var(--b2-mono);
+            font-weight: 700;
+            padding: 0.65rem 0.8rem;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--b2-border-strong);
+            background: var(--bg-card);
+            color: var(--text-main);
+        }
+
+        .b2-archive-form .form-control {
+            min-width: 180px;
+            flex: 1 1 14rem;
+        }
+
+        .b2-archive-form .btn {
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+
+        .b2-footer-nav {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+            font-size: 13px;
+            color: var(--b2-text-muted);
+            flex-wrap: wrap;
+        }
+
+        .b2-footer-nav a {
+            color: var(--b2-text-muted);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .b2-footer-nav a:hover {
+            color: var(--primary-color);
+        }
+
+        /* ── Dev Preview Controls ───────────────────────────────────────── */
+        .b2-preview-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            padding: 0.6rem 0.9rem;
+            margin-top: 1.25rem;
+            margin-bottom: 1.25rem;
+            background: var(--alert-warn-bg);
+            border: 1px solid var(--alert-warn-border);
+            border-radius: var(--radius-md);
+            color: var(--alert-warn-fg);
+            font-size: 12px;
+        }
+
+        .b2-preview-bar a {
+            font-family: var(--b2-mono);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 0.2rem 0.55rem;
+            border: 1px solid var(--alert-warn-border);
+            border-radius: 999px;
+            color: var(--alert-warn-fg);
+            text-decoration: none;
+        }
+
+        .b2-preview-bar a.active {
+            background: var(--alert-warn-fg);
+            color: var(--bg-card);
+        }
+
+        /* ── Responsive Queries ─────────────────────────────────────────── */
+        @media (max-width: 900px) {
+            .b2-hero-grid,
+            .b2-scoring-grid,
+            .b2-stages,
+            .b2-rules-grid {
+                grid-template-columns: 1fr;
+                gap: 1.75rem;
+            }
+
+            .b2-seeds-strip {
+                grid-template-columns: 1fr;
+            }
+
+            .b2-footer-content {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .b2-archive-form {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
 </head>
 
-<body>
-    <% if (state === 'comingsoon') { %>
+<body class="b2-page">
+    <div class="b2-container">
 
-    <div class="container-fluid p-3">
-        <div class="row align-items-center justify-content-center" id="row1">
-            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
-                <h1 class="t-display text-center pt-3 mb-2">
-                    New Tournament Brackets Coming Soon!
-                </h1>
-                <p class="t-body text-center pt-2 mb-4">
-                    Check back after 8:30PM EST Sunday, March 15th to create your bracket
-                </p>
-                <div class="container mt-3">
-                    <div class="row justify-content-center">
-                        <div class="col-12">
-                            <p class="t-label text-center mb-2">View previous brackets</p>
-                            <form action="/gameView" method="post">
-                                <div class="row justify-content-center pb-3">
-                                    <input type="hidden" name="year" value="2025" />
-                                    <div class="col-7 col-sm-6">
-                                        <input class="form-control" type="text" placeholder="Enter group name"
-                                            aria-label="Group name" name="game" required>
-                                    </div>
-                                    <div class="col-5 col-sm-3">
-                                        <button class="btn btn-primary w-100" type="submit">View</button>
-                                    </div>
-                                    <% if (error) { %>
-                                        <div class="col-12 col-sm-8 mt-2">
-                                            <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
-                                        </div>
-                                    <% } %>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+        <% if (preview) { %>
+            <div class="b2-preview-bar">
+                <strong>Dev Preview:</strong>
+                <a href="<%= currentPath %>?preview=comingsoon" class="<%= layout === 'comingsoon' ? 'active' : '' %>">coming soon</a>
+                <a href="<%= currentPath %>?preview=registration" class="<%= layout === 'registration' ? 'active' : '' %>">registration</a>
+                <a href="<%= currentPath %>?preview=tournament" class="<%= layout === 'tournament' ? 'active' : '' %>">tournament</a>
+            </div>
+        <% } %>
+
+        <%# ── Sports Header Status Bar ──────────────────────────────────── %>
+        <div class="b2-status-strip">
+            <div class="b2-live-indicator">
+                <span class="b2-pulse-dot<%= layout === 'tournament' ? ' is-live' : '' %>"></span>
+                <% if (layout === 'registration') { %>
+                    <span>Registration Open</span>
+                <% } else if (layout === 'tournament') { %>
+                    <span><%= thisYear %> Tournament In Progress</span>
+                <% } else { %>
+                    <span>Next Pool Opens <%= launchDateLabel %></span>
+                <% } %>
+            </div>
+            <div>
+                <% if (layout === 'registration') { %>
+                    <span>Picks lock at opening tip-off</span>
+                <% } else if (layout === 'tournament') { %>
+                    <span>Live scoring updated after each game</span>
+                <% } else { %>
+                    <span>Selection Sunday tournament launch</span>
+                <% } %>
             </div>
         </div>
-    </div>
 
-    <% } else if (state === 'registration') { %>
+        <%# ── Hero Section ──────────────────────────────────────────────── %>
+        <section class="b2-hero">
+            <div class="b2-hero-grid">
+                <div>
+                    <h1 class="b2-hero-title">
+                        Ten teams.<br>
+                        Every round counts.
+                    </h1>
 
-    <div class="container-fluid pt-3">
-        <div class="row align-items-center justify-content-center" id="row1">
-            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
-                <h1 class="t-h1 text-center pt-3 mb-2">
-                    Create your bracket for the tournament!
-                </h1>
-                <p class="t-body text-center mb-4">
-                    Enter your group name to start creating your bracket
-                </p>
-                <form action="/newEntry" method="post">
-                    <div class="container">
-                        <div class="row pb-4 justify-content-center">
-                            <div class="col-7 col-sm-6">
-                                <input class="form-control" type="text" data-clear-placeholder
-                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameName">
-                            </div>
-                            <div class="col-5 col-sm-3">
-                                <button class="btn btn-primary w-100" type="submit">Enter</button>
-                            </div>
+                    <p class="b2-hero-lede">
+                        Ditch picking every game. Select your 10-team lineup and score points every time your picks win.
+                    </p>
+
+                    <%# Main Call-to-Action Form %>
+                    <div class="b2-action-box">
+                        <% if (layout === 'registration') { %>
+                            <div class="b2-action-heading">Create a New Bracket</div>
+                            <form action="/newEntry" method="post" class="b2-action-form">
+                                <input class="form-control" type="text" data-clear-placeholder placeholder="Enter your group name"
+                                    aria-label="Group name" name="game" id="gameName" required>
+                                <button class="btn btn-primary" type="submit">Create Bracket</button>
+                            </form>
+                            <% if (createError || error) { %>
+                                <p class="b2-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                    We couldn&rsquo;t find that group name. Check the spelling and try again.
+                                </p>
+                            <% } %>
+                            <p class="b2-fineprint">
+                                No password required. Your group name is your key. Adjust picks anytime before tip-off.
+                            </p>
+                        <% } else if (layout === 'tournament') { %>
+                            <div class="b2-action-heading">Find Your Bracket</div>
+                            <form action="/gameView" method="post" class="b2-action-form">
+                                <input type="hidden" name="year" value="<%= thisYear %>">
+                                <input class="form-control" type="text" data-clear-placeholder placeholder="Enter your group name"
+                                    aria-label="Group name" name="game" id="gameViewID" required>
+                                <button class="btn btn-primary" type="submit">View Standings</button>
+                            </form>
                             <% if (error || createError) { %>
-                                <div class="col-12 col-sm-8 mt-2">
-                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
-                                </div>
+                                <p class="b2-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                    We couldn&rsquo;t find that group name. Check the spelling and try again.
+                                </p>
                             <% } %>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <% } else if (state === 'tournament') { %>
-
-    <div class="container-fluid pt-4">
-        <div class="row align-items-center justify-content-center" id="row1">
-            <div class="col-12 col-sm-10 col-md-8 col-lg-7 col-xl-6 form-container" id="col2">
-                <h1 class="t-h1 text-center pt-4 mb-2">
-                    View your bracket
-                </h1>
-                <p class="t-body text-center mb-4">
-                    Enter your group name to see how your bracket is doing
-                </p>
-                <form action="/gameView" method="post">
-                    <div class="container">
-                        <div class="row pb-4 justify-content-center">
-                            <input type="hidden" name="year" value="<%= thisYear %>" />
-                            <div class="col-7 col-sm-7">
-                                <input class="form-control" type="text" data-clear-placeholder
-                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameViewID">
-                            </div>
-                            <div class="col-5 col-sm-5">
-                                <button class="btn btn-primary w-100" type="submit">View Bracket</button>
-                            </div>
-                            <% if (error) { %>
-                                <div class="col-12 col-sm-8 mt-2">
-                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
-                                </div>
-                            <% } %>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <% } else { %><%# test/dev: show all three sections %>
-
-    <div class="container-fluid p-3">
-        <div class="row align-items-center justify-content-center" id="row1">
-            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
-                <h1 class="t-display text-center pt-3 mb-2">
-                    New Tournament Brackets Coming Soon!
-                </h1>
-                <p class="t-body text-center pt-2 mb-4">
-                    Check back after 8:30PM EST Sunday, March 15th to create your bracket
-                </p>
-                <div class="container mt-3">
-                    <div class="row justify-content-center">
-                        <div class="col-12">
-                            <p class="t-label text-center mb-2">View previous brackets</p>
-                            <form action="/gameView" method="post">
-                                <div class="row justify-content-center pb-3">
-                                    <input type="hidden" name="year" value="2025" />
-                                    <div class="col-7 col-sm-6">
-                                        <input class="form-control" type="text" placeholder="Enter group name"
-                                            aria-label="Group name" name="game" required>
-                                    </div>
-                                    <div class="col-5 col-sm-3">
-                                        <button class="btn btn-primary w-100" type="submit">View</button>
-                                    </div>
-                                    <% if (error) { %>
-                                        <div class="col-12 col-sm-8 mt-2">
-                                            <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
-                                        </div>
-                                    <% } %>
-                                </div>
+                            <p class="b2-fineprint">
+                                Entries are locked for <%= thisYear %>. Enter your group name to view live scores.
+                            </p>
+                        <% } else { %>
+                            <div class="b2-action-heading">Look Up Past Tournament</div>
+                            <form action="/gameView" method="post" class="b2-action-form">
+                                <select class="form-select b2-year-select" name="year" aria-label="Tournament year">
+                                    <% archiveYears.filter(year => year < thisYear).forEach(function (year) { %>
+                                        <option value="<%= year %>"><%= year %></option>
+                                    <% }); %>
+                                </select>
+                                <input class="form-control" type="text" placeholder="Enter past group name" aria-label="Group name"
+                                    name="game" required>
+                                <button class="btn btn-primary" type="submit">View Standings</button>
                             </form>
+                            <% if (error || createError) { %>
+                                <p class="b2-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                    We couldn&rsquo;t find that group name. Check the spelling and try again.
+                                </p>
+                            <% } %>
+                            <p class="b2-fineprint">
+                                Brackets for <%= thisYear %> open <%= launchDateLabel %>. Past tournament brackets remain viewable.
+                            </p>
+                        <% } %>
+
+                        <%# Clean Secondary Sign-In %>
+                        <div class="b2-auth-divider">or</div>
+                        <div class="b2-auth-user">
+                            <% if (typeof userEmail !== 'undefined' && userEmail) { %>
+                                <span class="t-small">Signed in as <strong><%= userEmail %></strong></span>
+                                <a href="/my-brackets" class="btn btn-sm btn-outline-primary">My Brackets &rarr;</a>
+                            <% } else { %>
+                                <span class="t-small">Already entered? Sign in to view picks</span>
+                                <form action="/auth/google/user/start" method="get" class="m-0">
+                                    <button type="submit" class="btn btn-google btn-sm">
+                                        <svg class="g-logo" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                                        </svg>
+                                        Sign in with Google
+                                    </button>
+                                </form>
+                            <% } %>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="container-fluid pt-3">
-        <div class="row align-items-center justify-content-center" id="row1">
-            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
-                <h1 class="t-h1 text-center pt-3 mb-2">
-                    Create your bracket for the tournament!
-                </h1>
-                <p class="t-body text-center mb-4">
-                    Enter your group name to start creating your bracket
-                </p>
-                <form action="/newEntry" method="post">
-                    <div class="container">
-                        <div class="row pb-4 justify-content-center">
-                            <div class="col-7 col-sm-6">
-                                <input class="form-control" type="text" data-clear-placeholder
-                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameName">
-                            </div>
-                            <div class="col-5 col-sm-3">
-                                <button class="btn btn-primary w-100" type="submit">Enter</button>
-                            </div>
-                            <% if (createError) { %>
-                                <div class="col-12 col-sm-8 mt-2">
-                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
-                                </div>
-                            <% } %>
+                <%# Seed Lineup Demonstration Box %>
+                <div class="b2-card-preview">
+                    <div class="b2-preview-header">
+                        <span class="b2-preview-title">Top <%= thisYear %> Bracket</span>
+                        <span class="b2-preview-subtitle">153 Points</span>
+                    </div>
+                    <div class="b2-seeds-strip">
+                        <div class="b2-seed-slot"><span class="b2-seed-num">1</span><span class="b2-seed-team">Michigan</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">2</span><span class="b2-seed-team">UConn</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">3</span><span class="b2-seed-team">Illinois</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">4</span><span class="b2-seed-team">Arkansas</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">5</span><span class="b2-seed-team">Vandy</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">6</span><span class="b2-seed-team">Tennessee</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">7</span><span class="b2-seed-team">The U (Miami)</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">8</span><span class="b2-seed-team">Ohio State</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">9</span><span class="b2-seed-team">Iowa</span></div>
+                        <div class="b2-seed-slot"><span class="b2-seed-num">10</span><span class="b2-seed-team">Santa Clara</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <%# ── How It Works (3 Core Stages) ─────────────────────────────── %>
+        <section class="b2-section">
+            <div class="b2-section-head">
+                <div class="b2-section-eyebrow">Gameplay</div>
+                <h2 class="b2-section-title">How Bracket 10 Works</h2>
+                <p class="b2-section-sub">Simple to pick, thrilling to follow through April.</p>
+            </div>
+
+            <div class="b2-stages">
+                <div class="b2-stage">
+                    <div class="b2-stage-index">01 / LINEUP</div>
+                    <h3>Pick 10 Teams</h3>
+                    <p>Select one team from each seed line (#1 through #10). No complex game-by-game bracket to bust on day one.</p>
+                </div>
+                <div class="b2-stage">
+                    <div class="b2-stage-index">02 / SURVIVAL</div>
+                    <h3>Score on Every Win</h3>
+                    <p>Every time one of your 10 picks wins a game, you earn points. Points multiply nearly 2x with each round reached.</p>
+                </div>
+                <div class="b2-stage">
+                    <div class="b2-stage-index">03 / VICTORY</div>
+                    <h3>Most Points Takes It</h3>
+                    <p>Deep tournament runs dominate. One team in the Final Four pays more than a dozen opening-round wins combined.</p>
+                </div>
+            </div>
+        </section>
+
+        <%# ── Scoring Table & Analytical Stat Split ────────────────────── %>
+        <section class="b2-section">
+            <div class="b2-scoring-grid">
+                <div class="b2-scoreboard">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h2 class="t-h2 mb-0">Round-by-Round Scoring</h2>
+                        <span class="badge bg-secondary">Minus One Formula</span>
+                    </div>
+                    <p class="t-small text-muted mb-0">
+                        Points are based solely on the round won. Seed number never limits your scoring.
+                    </p>
+
+                    <table class="b2-table-ladder" aria-label="Scoring ladder per round">
+                        <thead>
+                            <tr>
+                                <th scope="col">Tournament Round</th>
+                                <th scope="col" style="text-align: right;">Win Points</th>
+                                <th scope="col" class="b2-col-bar">Scale</th>
+                                <th scope="col" style="text-align: right;">Cumulative</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% ladder.forEach(function (rung) { %>
+                                <tr>
+                                    <td class="b2-col-round"><%= rung.name %></td>
+                                    <td class="b2-col-pts">+<%= rung.roundPoints %></td>
+                                    <td class="b2-col-bar">
+                                        <div class="b2-meter-track">
+                                            <div class="b2-meter-fill" style="width: <%= rung.barWidth %>%;"></div>
+                                        </div>
+                                    </td>
+                                    <td class="b2-col-total"><%= rung.cumulative %> pts</td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                    <p class="b2-ladder-note">
+                        First Four play-in games award 0 points. Cumulative shows total points earned by a single team advancing through that round.
+                    </p>
+                </div>
+
+                <div class="b2-stat-card">
+                    <div>
+                        <div class="b2-section-eyebrow">Strategy Breakdown</div>
+                        <h3 class="t-h3 mt-1 mb-1">Depth Beats Breadth</h3>
+                        <p class="t-small text-muted mb-0">Why second-weekend survival is where pools are won:</p>
+                    </div>
+
+                    <div class="b2-stat-split">
+                        <div class="b2-stat-box highlight">
+                            <div class="b2-stat-number"><%= compare.deep %></div>
+                            <p class="b2-stat-label">One Team in <%= compare.deepLabel %></p>
+                        </div>
+                        <div class="b2-stat-vs">beats</div>
+                        <div class="b2-stat-box">
+                            <div class="b2-stat-number" style="color: var(--b2-text-muted);"><%= compare.shallow %></div>
+                            <p class="b2-stat-label"><%= compare.shallowTeams %> Teams Winning Once</p>
                         </div>
                     </div>
+
+                    <p class="t-small text-muted mb-0" style="line-height: 1.5;">
+                        A single deep run generates <strong><%= compare.ratio %>x</strong> as many points as multiple early-round exits. Target teams with genuine <%= compare.deepLabel %> potential.
+                    </p>
+                    <a href="/scoring" class="btn btn-outline-primary btn-sm align-self-start">
+                        Full Scoring Table &rarr;
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <%# ── Two Key Tactical Rules ───────────────────────────────────── %>
+        <section class="b2-section">
+            <div class="b2-section-head">
+                <div class="b2-section-eyebrow">Important Rules</div>
+                <h2 class="b2-section-title">Two Rules to Remember</h2>
+                <p class="b2-section-sub">Simple rules that make pick strategy interesting.</p>
+            </div>
+
+            <div class="b2-rules-grid">
+                <div class="b2-rule-item">
+                    <div class="b2-rule-tag">Flexibility</div>
+                    <h3>Trade Down, Never Up</h3>
+                    <p>
+                        You can skip any seed line and draft a second, lower-seeded team instead &mdash; for example, pass on your 3-seed to take an extra 5-seed.
+                    </p>
+                </div>
+
+                <div class="b2-rule-item">
+                    <div class="b2-rule-tag">Automatic Coverage</div>
+                    <h3>Play-In Game Protection</h3>
+                    <p>
+                        Picked a team playing in the Tuesday/Wednesday First Four play-in games and they lose? You automatically inherit the winner at no penalty!
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <%# ── Footer & Historical Archive ──────────────────────────────── %>
+        <footer class="b2-footer">
+            <% if (layout !== 'comingsoon') { %>
+            <div class="b2-footer-content">
+                <div>
+                    <h3 class="t-h3 mb-1">Past Brackets &amp; Archives</h3>
+                    <p class="t-small text-muted mb-0">All previous tournament leaderboards remain viewable.</p>
+                </div>
+
+                <form action="/gameView" method="post" class="b2-archive-form mb-0">
+                    <select class="form-select b2-year-select" name="year" aria-label="Tournament year">
+                        <% archiveYears.forEach(function (year) { %>
+                            <option value="<%= year %>"><%= year %></option>
+                        <% }); %>
+                    </select>
+                    <input class="form-control" type="text" placeholder="Enter group name"
+                        aria-label="Past group name" name="game" required style="min-width: 150px;">
+                    <button class="btn btn-outline-secondary" type="submit">Look Up</button>
                 </form>
             </div>
-        </div>
+
+            <% } %>
+
+            <nav class="b2-footer-nav mt-4" aria-label="Site Links">
+                <a href="/privacy">Privacy Notice</a>
+                <a href="#" data-bs-toggle="modal" data-bs-target="#rulesModal">Rules</a>
+                <a href="/scoring">Scoring</a>
+                <span class="text-muted ms-auto">&copy; <%= thisYear %> Bracket 10</span>
+            </nav>
+        </footer>
+
     </div>
-
-    <div class="container-fluid pt-3">
-        <div class="row align-items-center justify-content-center" id="row1">
-            <div class="col-12 col-sm-10 col-md-8 col-lg-6 form-container" id="col2">
-                <h1 class="t-h1 text-center pt-3 mb-2">
-                    View your bracket
-                </h1>
-                <p class="t-body text-center mb-4">
-                    Enter your group name to see how your bracket is doing
-                </p>
-                <form action="/gameView" method="post">
-                    <div class="container">
-                        <div class="row pb-4 justify-content-center">
-                            <input type="hidden" name="year" value="<%= thisYear %>" />
-                            <div class="col-7 col-sm-6">
-                                <input class="form-control" type="text" data-clear-placeholder
-                                    placeholder="Enter group name" aria-label="Game Name" name="game" id="gameViewID">
-                            </div>
-                            <div class="col-5 col-sm-3">
-                                <button class="btn btn-primary w-100" type="submit">View</button>
-                            </div>
-                            <% if (error) { %>
-                                <div class="col-12 col-sm-8 mt-2">
-                                    <p class="text-danger fw-bolder">Invalid group name. Please try again.</p>
-                                </div>
-                            <% } %>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <% } %>
-
-    <%- include('partials/userSignIn') %>
 
     <div>
         <%- include('partials/rulesModal') %> <%- include('partials/scripts') %>
     </div>
 </body>
-<footer>
-
-</footer>
 
 </html>

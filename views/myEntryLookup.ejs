@@ -41,7 +41,10 @@
                     <div class="container pb-3">
                         <label for="email">Email Address</label>
                         <input type="email" name="email" id="email" class="form-control form-control-lg"
-                            placeholder="you@example.com" required>
+                            placeholder="you@example.com" aria-describedby="emailHelp" required>
+                        <div id="emailHelp" class="form-text text-muted">
+                            We use your email to verify this is your entry. <a href="/privacy">Privacy Notice</a>.
+                        </div>
                     </div>
                     <input type="hidden" name="year" value="<%= year || currentYear %>">
                     <div class="container pb-3">

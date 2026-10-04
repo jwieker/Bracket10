@@ -1,9 +1,9 @@
-const CACHE_NAME = 'admin-bracket10-v6';
+const CACHE_NAME = 'admin-bracket10-8b7594b9d6f3fa83';
+const CACHE_PREFIX = 'admin-bracket10-';
 const OFFLINE_PAGE = '/offline.html';
 
-// Assets to cache on install
+// Only public files may survive a session in Cache Storage.
 const STATIC_ASSETS = [
-  '/',
   OFFLINE_PAGE,
   '/style.css',
   '/logo.png',
@@ -16,134 +16,71 @@ const STATIC_ASSETS = [
   '/teams.webp',
 ];
 
-const DEBUG = self.location.hostname === 'localhost';
-
-function log(...args) {
-  if (DEBUG) {
-    console.log(...args);
-  }
-}
-
-// Install event - cache static assets
 self.addEventListener('install', (event) => {
-  log('[Service Worker] Installing...');
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => {
-        log('[Service Worker] Caching static assets');
-        return cache.addAll(STATIC_ASSETS);
-      })
+      .then((cache) => cache.addAll(STATIC_ASSETS))
       .then(() => self.skipWaiting()),
   );
 });
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  log('[Service Worker] Activating...');
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME) {
-              log('[Service Worker] Deleting old cache:', cacheName);
-              return caches.delete(cacheName);
-            }
-          }),
-        );
-      })
+      .then((names) =>
+        Promise.all(
+          names
+            .filter(
+              (name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME,
+            )
+            .map((name) => caches.delete(name)),
+        ),
+      )
       .then(() => self.clients.claim()),
   );
 });
 
-// Fetch event - implement caching strategies
-self.addEventListener('fetch', (event) => {
-  // DEVELOPMENT MODE: Temporarily disabled caching - all requests go to network
-  // This allows you to see live changes without cache interference
-  // To re-enable PWA caching, comment out the return below
-  // return;
+async function staticResponse(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
 
+  const response = await fetch(request);
+  const cacheControl = response.headers.get('Cache-Control') || '';
+  if (
+    response.status === 200 &&
+    !response.redirected &&
+    !/\b(private|no-store|no-cache)\b/i.test(cacheControl)
+  ) {
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+  if (url.origin !== self.location.origin || request.method !== 'GET') return;
 
-  // Skip cross-origin requests
-  if (url.origin !== location.origin) {
-    return;
-  }
-
-  // IMPORTANT: Skip POST requests (form submissions) - let them go directly to the server
-  if (request.method !== 'GET') {
-    return;
-  }
-
-  // Cache-first strategy for static assets (CSS, JS, images)
+  // A file extension or image destination is not proof that a route is public.
   if (
-    request.destination === 'style' ||
-    request.destination === 'script' ||
-    request.destination === 'image' ||
-    request.url.match(/\.(css|js|jpg|jpeg|png|gif|ico|webp|svg)$/)
+    request.mode !== 'navigate' &&
+    !url.search &&
+    STATIC_ASSETS.includes(url.pathname)
   ) {
-    event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // Return cached version and update cache in background
-          fetch(request)
-            .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200) {
-                caches.open(CACHE_NAME).then((cache) => {
-                  cache.put(request, networkResponse.clone());
-                });
-              }
-            })
-            .catch(() => {
-              // Network failed, cached version is still being served
-            });
-          return cachedResponse;
-        }
-        // Not in cache, fetch from network
-        return fetch(request).then((response) => {
-          if (response && response.status === 200) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return response;
-        });
-      }),
-    );
+    event.respondWith(staticResponse(request));
+    return;
   }
-  // Network-first strategy for pages and API calls
-  else {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Clone the response
-          const responseToCache = response.clone();
 
-          // Cache successful responses
-          if (response && response.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-
-          return response;
-        })
-        .catch(() => {
-          // Network failed, try cache
-          return caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            // If no cached version, return offline page for navigation requests
-            if (request.mode === 'navigate') {
-              return caches.match(OFFLINE_PAGE);
-            }
-          });
-        }),
-    );
-  }
+  // Never persist or replay dynamic HTML/JSON, including the signed-in homepage.
+  // Bypass the HTTP cache too: a previous session's response is not a fallback.
+  event.respondWith(
+    fetch(request, { cache: 'no-store' }).catch(async (error) => {
+      if (request.mode !== 'navigate') throw error;
+      const cache = await caches.open(CACHE_NAME);
+      return (await cache.match(OFFLINE_PAGE)) || Response.error();
+    }),
+  );
 });

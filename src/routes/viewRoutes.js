@@ -52,6 +52,7 @@ import {
   requireUser,
 } from '../middleware/adminMiddleware.js';
 import { verifyCsrf } from '../middleware/csrf.js';
+import { verifyRequestOrigin } from '../middleware/verifyRequestOrigin.js';
 import { isRegistrationOpen } from '../config/app.js';
 
 const router = express.Router();
@@ -85,11 +86,14 @@ const requireRegistrationOpen = (req, res, next) => {
 
 // Public self-service entry edit (Entry-ID + email fallback)
 router.get('/my-entry', publicLimiter, myEntryLookup);
-// The per-entryId brute-force guard now lives inside myEntryVerify so it counts
-// only FAILED verifications — a correct email can't be locked out by an attacker
-// spending the bucket on garbage attempts (#161). publicLimiter still caps
-// per-IP volume here.
-router.post('/my-entry/verify', publicLimiter, myEntryVerify);
+// myEntryVerify reserves a global per-entry attempt before checking credentials.
+// publicLimiter also caps per-IP volume, including malformed requests.
+router.post(
+  '/my-entry/verify',
+  publicLimiter,
+  verifyRequestOrigin,
+  myEntryVerify,
+);
 router.get('/my-entry/edit', publicLimiter, myEntryView);
 // verifyCsrf here (#301): entryId/year are visible in the /my-entry/edit URL,
 // so without a token check this was forgeable via a cross-site top-level

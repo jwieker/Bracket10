@@ -32,7 +32,7 @@ import { db } from '../src/config/firestore.js';
 
 const RUN_LIVE = process.env.LIVE_E2E === 'true';
 
-// Same 2022 bracket data used in e2e-v4 (seeded into year 2019 to avoid conflicts)
+// Same 2022 bracket data used in e2e-v4 (seeded into reserved test year 9995 — see testing.md § Data safety)
 const GAMES_SPEC_2022 = [
   '1-1-1-67',
   '1-1-16-307', // R1: 67 vs 307
@@ -108,8 +108,8 @@ describe('LIVE — Firestore Targeted Updates (requires LIVE_E2E=true)', () => {
     return;
   }
 
-  const year = 2019;
-  const GROUP = 'E2E-TARGETED-2019';
+  const year = 9995;
+  const GROUP = 'E2E-TARGETED-9995';
   const ENTRY_A_ID = 999991; // picks INCLUDE team 67 (game 1 participant)
   const ENTRY_B_ID = 999992; // picks do NOT include team 67 or 307
 

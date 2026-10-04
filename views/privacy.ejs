@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/header') %>
+    <style>
+        .privacy-notice {
+            max-width: 760px;
+            margin: 1.5rem auto 3rem;
+            padding: clamp(1.25rem, 4vw, 2.5rem);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            line-height: 1.65;
+        }
+        .privacy-notice h2 { margin-top: 1.75rem; }
+        .privacy-notice a { color: var(--blue-link); overflow-wrap: anywhere; }
+    </style>
+</head>
+
+<body>
+    <div class="container px-3">
+        <main class="privacy-notice">
+            <h1 class="t-h1">Privacy Notice</h1>
+            <p class="t-small">Last updated: September 15, 2026</p>
+            <p>Bracket 10 is a friendly basketball picks game operated from Virginia. This notice explains
+                how we use information when you visit, enter, or manage your picks.</p>
+
+            <h2 class="t-h2">What we collect and why</h2>
+            <ul>
+                <li><strong>Your entry:</strong> your name, team name, email address, group, team selections,
+                    and entry records. We use these to run the game, calculate standings, and help you manage your entry.</li>
+                <li><strong>Google sign-in:</strong> if you choose it, Google provides basic profile information
+                    and a verified email address. We use your email to find your entries and keep you signed in.
+                    We do not receive your Google password.</li>
+                <li><strong>Technical information:</strong> our hosting and security services process information
+                    such as IP addresses, browser details, and requests to operate the site, diagnose errors,
+                    and prevent abuse.</li>
+            </ul>
+
+            <h2 class="t-h2">What other people can see</h2>
+            <p>Your name, team name, picks, scores, and standings can be viewed on group results and bracket pages,
+                including past tournaments. These pages are not restricted to signed-in players. Choose names
+                you are comfortable sharing. Your email is not displayed on public results or bracket pages;
+                site administrators can access it to manage your entry.</p>
+
+            <h2 class="t-h2">How we use your email</h2>
+            <p>We use your email to confirm your signup, provide access to your entry, and help you change your
+                team selections. We also use it to verify entry ownership. We do not use addresses collected
+                through the site for marketing, newsletters, or future-season invitations.</p>
+
+            <h2 class="t-h2">Services that help us run the game</h2>
+            <p>We use Google Cloud to host the site and store game information, and Google for optional sign-in.
+                Email services and tools used to prepare entry emails, including AI-assisted drafting tools,
+                may process your email address and entry details for that purpose. Site assets also load from
+                third-party providers, which receive connection information such as your IP address.</p>
+            <p>We do not sell your personal information. We may disclose information when required by law or
+                when necessary to address misuse or protect the site and its players.</p>
+
+            <h2 class="t-h2">Cookies, browser storage, and analytics</h2>
+            <p>We use a session cookie to remember sign-in and entry verification. Browser storage remembers
+                preferences such as your color theme and caches site resources. You can clear these through
+                your browser settings; doing so may sign you out or reset preferences.</p>
+            <p>This site uses Google Analytics to understand visits and site usage. It uses cookies and
+                collects information about your browser, device, and activity on the site. Learn more about
+                <a href="https://policies.google.com/technologies/partner-sites">how Google uses information from sites that use its services</a>
+                and the <a href="https://tools.google.com/dlpage/gaoptout">Google Analytics browser opt-out</a>.</p>
+            <p>The site does not currently change its behavior in response to a browser's Do Not Track signal.</p>
+
+            <h2 class="t-h2">How long we keep information</h2>
+            <p>We keep entry records, including email addresses, across tournament seasons to support past results
+                and access to your entries. Entries are not automatically deleted at the end of a season.
+                You can request deletion. Technical logs, backups, and copies held by service providers may
+                remain for their applicable retention periods.</p>
+
+            <h2 class="t-h2">Questions, corrections, or deletion</h2>
+            <p>Contact the Bracket 10 organizer who invited you to play to ask about this notice or request
+                access, correction, or deletion of your information. Include your entry name and tournament year.
+                We may need to verify that the entry belongs to you before making changes.</p>
+
+            <h2 class="t-h2">Changes to this notice</h2>
+            <p>We will update this page and its date when our practices change.</p>
+            <a href="/">Back to Bracket 10</a>
+        </main>
+    </div>
+    <%- include('partials/rulesModal') %>
+    <%- include('partials/scripts') %>
+</body>
+
+</html>

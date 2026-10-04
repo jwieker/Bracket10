@@ -42,6 +42,40 @@ export const APP_CONFIG = {
     collectorPhone: process.env.PAYMENT_COLLECTOR_PHONE || '',
   },
 
+  // HTTP request handling
+  http: {
+    // Global cap for `express.json()` in server.js, replacing Express's 100kb
+    // default. Sized from the two largest JSON bodies the app actually posts,
+    // measured rather than guessed (#573): a full 32-game bracket plus 8 First
+    // Four games through /createTournament is ~1.6kb (the payload is 64 short
+    // "regionID-gameID-seed-teamSID" strings, not whole game objects — #551
+    // assumed the latter and put it at 25-30kb), and /admin/mark-emails-sent
+    // runs ~16 bytes per 13-digit entry id, so 32kb holds ~2,000 entries against
+    // a repository that already chunks at 500. Exported here rather than
+    // inlined so tests can assert the real number.
+    jsonBodyLimit: '32kb',
+
+    // Same cap for `express.urlencoded()`, which #573 left at Express's 100kb
+    // default (#584). Named separately rather than reusing jsonBodyLimit
+    // because the two parsers carry different traffic — the bulk tournament
+    // forms (/gamesVerify, /tournamentGamesUpdate) post urlencoded, and only
+    // /createTournament posts JSON — so a future tuning of one should not
+    // silently move the other. They happen to agree today: the largest real
+    // urlencoded body is the /tournamentGamesUpdate form at ~1.2kb (67 fields:
+    // 64 "regionID-gameID-seed-teamSID" slots plus _csrf/year/region), so 32kb
+    // is ~27x headroom on a once-a-year admin path where a tight limit would
+    // 413 during the only week anyone would notice.
+    urlencodedBodyLimit: '32kb',
+
+    // The urlencoded-specific knob, never set deliberately before. Express's
+    // default is 1000, and body-parser answers 413 above it. 200 is ~3x the
+    // largest real form (67 fields above); the count is bounded by form shape,
+    // not by user data, so it does not grow with entries or tournament size.
+    // The body limit alone would not do this job: 32kb of "a=1&" is ~8,000
+    // parameters, so parameterLimit is the binding constraint on qs work.
+    urlencodedParameterLimit: 200,
+  },
+
   // Performance
   performance: {
     batchSize: 100,

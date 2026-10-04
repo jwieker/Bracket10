@@ -1,6 +1,7 @@
 import { conferenceRepository } from '../repositories/index.js';
 import {
   controllerWrapper,
+  isValidSlug,
   validateConferencePayload,
 } from '../utils/controllerUtils.js';
 
@@ -17,7 +18,13 @@ export const listConferences = controllerWrapper(async (req, res) => {
 // GET /viewConference?slug=acc — edit form
 export const viewConference = controllerWrapper(async (req, res) => {
   const { slug } = req.query;
-  if (!slug) return res.status(400).send('Missing slug');
+  // Validate on read, not just on write (#512): both write paths run the slug
+  // through validateConferencePayload, so leaving the read unchecked is the
+  // kind of asymmetry that reads as an oversight and ages badly — today a
+  // crafted `?slug=x/y/z` only yields an invalid Firestore path (a 500), but it
+  // becomes a real read primitive the moment anything is stored beneath
+  // conferences/. Same bug class as validateEntryId (#335).
+  if (!isValidSlug(slug)) return res.status(400).send('Invalid slug');
   const conference = await conferenceRepository.getConferenceBySlug(slug);
   if (!conference) return res.status(404).send('Conference not found');
   res.render('editConference', { conference, isNew: false });

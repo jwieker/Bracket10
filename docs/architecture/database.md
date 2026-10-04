@@ -1,6 +1,6 @@
 ---
 tags: [database, firestore, schema]
-updated: 2026-04-12
+updated: 2026-09-17
 ---
 
 # Database: Firestore Schema & Structure
@@ -49,13 +49,23 @@ node scripts/seed-emulator.mjs
 
 ## Database Schema Reference and Test Data Creation
 
-To understand the exact structure, fields, and data types of each Firestore collection, refer to the exports in the `/databasebackup` directory. Files follow the naming pattern `{Date}_{collection}.json` with one JSON object per line. When creating mock data or writing tests, read the relevant backup file to accurately reflect the schema and data types used in production.
+Use the committed fixtures in **`data/seed/`** (`school.json`, `conferences.json`, `groups.json`,
+`regionID.json`, `entry.json`, plus year-suffixed `games.2022.json` / `schoolRecord.2022.json`).
+They are prod-shaped and are what the integration tests and the emulator seeder read, so they are
+the authoritative reference for field names and data types when writing mock data or a new test.
+
+A `/databasebackup` directory of dated production exports (`{Date}_{collection}.json`, one JSON
+object per line) exists on the maintainer's machine but is **gitignored** — it is not present in a
+fresh clone and an agent should not expect to find it. Reach for `data/seed/` instead.
 
 ## Firestore Data Structure
 
-The application supports two data structures, controlled by `APP_CONFIG.database.structure` in `/src/config/app.js` (or the `DB_STRUCTURE` environment variable):
+One structure, hierarchical, with no runtime toggle: `APP_CONFIG.database` in `/src/config/app.js`
+carries only `engine: 'firestore'`. (Earlier revisions of this doc described a
+`APP_CONFIG.database.structure` / `DB_STRUCTURE` switch between hierarchical and flat layouts. No
+such key or environment variable exists in the code — see "Legacy flat layout" below.)
 
-### Hierarchical Structure (`'hierarchical'` — current default)
+### Hierarchical structure
 
 Year-scoped data lives under `tournaments/{year}` subcollections:
 
@@ -95,25 +105,64 @@ Key benefits: no `where('year', '==', ...)` filters needed, `getTournamentTeams`
 - **Canonical:** `{regionID}_{seed}` (e.g. `1_16`).
 - **First Four:** `ff_{gameID}_{slot}` (e.g. `ff_64_1`). FF docs also have a `canonicalDocId` field (e.g. `1_16`) used to promote the winner to a canonical record upon resolution.
 
-Repository: `/src/repositories/hierarchicalRepository.js`
-*(Note: All repository methods emit `Logger.debug('DB CALL: ...')` traces. Visible only when `NODE_ENV=development` or `NODE_ENV=test`.)*
+### Repository layer — which class owns what
 
-### Flat Structure (`'flat'` — legacy)
+Every repository class lives in the single file `/src/repositories/hierarchicalRepository.js`.
+`/src/repositories/index.js` instantiates each one once and exports it as a plain singleton
+(`entryRepository`, `viewRepository`, `gameRepository`, `tourneyRepository`, `teamRepository`,
+`conferenceRepository`, `sessionRepository`, `rateLimitRepository`) — constructors do no I/O, so direct exports replaced
+an earlier lazy-getter `RepositoryManager`. Always import the singleton; don't `new` a repository
+in app code.
 
-All data in top-level collections with year as a field:
+| Class | Owns |
+|---|---|
+| `EntryRepository` | entry reads/queries under `tournaments/{year}/entries` |
+| `GameRepository` | games, next-game propagation, entry-by-team queries — **and `updateEntry`** |
+| `TourneyRepository` | tournament + region setup, bulk `schoolRecords` writes |
+| `TeamRepository` | `schoolRecords` scoring writes, canonical/FF record promotion, school ESPN enrichment |
+| `ViewRepository` | read-only composite fetches for render paths |
+| `ConferenceRepository` | `conferences` reference data |
+| `SessionRepository` | `express-sessions` documents — both the per-request store access and `clearAuthenticatedSessions` |
+| `RateLimitRepository` | `rateLimits` fixed-window counter documents |
 
-*   `entry` — Doc ID: `{year}_{id}`
-*   `games` — Doc ID: `{year}_{gameID}`
-*   `schoolRecord` — Doc ID: `{year}_{regionID}_{seed}`
-*   `school` — Doc ID: `{sid}`
-*   `groups` — Doc ID: `{groupName}`
-*   `regionID` — Region lookup table
+**The one name that surprises people: `updateEntry` is a `GameRepository` method, not an
+`EntryRepository` one**, despite operating on entries — `adminEntryController` and
+`selfServiceController` both call `gameRepository.updateEntry(...)`. Check before writing a test
+that reaches for `new EntryRepository().updateEntry`.
 
-Repository: `/src/repositories/firestoreRepository.js`
+*(All repository methods emit `Logger.debug('DB CALL: ...')` traces. Visible only when `NODE_ENV=development` or `NODE_ENV=test`.)*
 
-### Migration
+### Named exceptions to the repository rule
 
-To migrate from flat to hierarchical: `node databasebackup/migrate-to-hierarchical.mjs` (supports `--dry-run`). The script reads from flat collections and writes to the hierarchical structure without modifying old data.
+Only `src/repositories/*` may touch Firestore. Two files in the served app are deliberate
+exceptions to that rule, and there are no others — anything else reaching around the repository
+layer is a violation, not a precedent. Only the first of the two actually holds a Firestore
+handle; the second is listed because it is special-cased around a collection.
+
+| File | Why it is exempt |
+|---|---|
+| `src/utils/startupChecks.js` | Runs a `listCollections()` permissions probe *before* the app is serving. It exists to fail fast when credentials are wrong, so routing it through a repository would only add a layer between the process and the error it is trying to surface. |
+| `src/middleware/firestoreSessionStore.js` | Implements `express-session`'s callback-based `Store` interface, which does not fit the promise-based repository shape. **It holds no Firestore handle** — every document read and write delegates to `SessionRepository`, so `express-sessions` still has exactly one owner. Only the adapter lives outside. |
+
+The session store is the important one to understand: `SessionRepository.clearAuthenticatedSessions`
+is an admin incident-response control that inspects the stored document shape (`data.session`),
+so a second independent writer of that collection could drift and silently break it. That is why
+the adapter delegates rather than keeping its own collection handle.
+
+`scripts/` is out of scope for this rule entirely — `export-teams-conferences.js`,
+`enrichEspnData.js`, `buildEspnMap.js`, `buildFullD1Map.js` (via a dynamic `await import`) and
+`private/test-firestone.js` all import `db` directly, and others construct their own `Firestore`
+client. They are maintenance tooling run by hand, not part of the served app.
+
+### Legacy flat layout (historical — not supported)
+
+Before the hierarchical migration, data lived in top-level collections with `year` as a field:
+`entry` (`{year}_{id}`), `games` (`{year}_{gameID}`), `schoolRecord` (`{year}_{regionID}_{seed}`),
+`school` (`{sid}`), `groups` (`{groupName}`), and a `regionID` lookup table. Recorded here only so
+old exports and old plan docs are readable.
+
+There is **no flat code path left**: no `firestoreRepository.js`, no structure switch, and no
+`migrate-to-hierarchical.mjs` in the repo. Don't write code that branches on layout.
 
 ## ESPN School Data Schema
 

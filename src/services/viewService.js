@@ -98,6 +98,20 @@ function addTeamProgressforGroup(groupTeams, allTournamentTeams) {
   const globalRoundInProgress = globalMaxActiveLen > globalMinActiveLen;
 
   for (const team of groupTeams) {
+    // `pickNames` entries are resolved through a Map over the tournament teams,
+    // which come from the 300s `tournamentDetails_` cache and are shared by
+    // reference across concurrent requests and across groups. `pickPoints`
+    // below is derived per entry, so copy before deriving instead of stamping
+    // the shared objects — the same invariant addPickCount documents.
+    //
+    // The copy lives here, at the single write, rather than at the three sites
+    // that build pickNames: copying at two of three would leak silently, and
+    // there is no way to tell from this function which caller got it right.
+    // `team` is itself a fresh per-request spread at every call site, so
+    // replacing its pickNames array touches nothing shared.
+    if (team.pickNames) {
+      team.pickNames = team.pickNames.map((pick) => ({ ...pick }));
+    }
     const pickNames = team.pickNames || [];
     // Per-round counters: [wins, losses, toPlay, roundPoints] indexed by round (0..5).
     const picksProgress = Array.from({ length: 6 }, () => [0, 0, 0, 0]);

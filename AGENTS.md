@@ -2,10 +2,32 @@
 
 Canonical guidance for AI coding agents (and humans) working in this repo. Tool-specific
 files (`CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `.clinerules`, `.julesrules`,
-`gemini.md`) point here so there is a single source of truth.
+`GEMINI.md`, `.github/copilot-instructions.md`) point here so there is a single source of truth.
 
 **Start every task by reading [`docs/GUIDE.md`](./docs/GUIDE.md)** — it maps your task to the
 right architecture docs under `docs/`.
+
+## Session setup (all agents)
+
+1. Read `docs/GUIDE.md`, then run `node scripts/agent-context.js` from the repo root. It prints
+   optional checkout-specific context (none in a public clone is normal). Without shell tools,
+   continue with the shared docs and say so.
+2. Check `git status --short --branch` before editing. Preserve existing user changes. Use
+   the assigned branch; otherwise create a descriptive branch with your tool's normal prefix
+   (for example `codex/`, `claude/`, or `gemini/`).
+   **Never commit or push changes directly to `main`.** Always use a task branch and open
+   a PR against `main` (or update the existing PR), including for small fixes and docs-only
+   changes. A request to commit or push does not waive the PR requirement.
+3. Use Node 24 to match CI's major version (exact pin in `.github/workflows/test.yml`).
+   If dependencies are missing or the lockfile changed, run `npm ci --ignore-scripts`.
+   `npm test` needs no `.env`, GCP credentials, or running Firestore emulator. Leave
+   `LIVE_E2E` unset for the default suite; read `tests/README.md` before choosing live tests.
+4. Run `npm test` before changes, then the three CI gates below after changes. Report
+   checks that could not run and why. There is no web build step.
+
+Hooks, plugins, skills, and scheduled loops are optional integrations, not prerequisites.
+**Tool availability is not permission** to publish, merge, deploy, or send messages; follow the
+user's authorized scope. Record durable project knowledge in the repo's docs, not chat history.
 
 ## What this repo is
 
@@ -16,28 +38,45 @@ live scores. Both deployments share the same `src/` code and the same Firestore 
 
 ## Repo map
 
-| Path                                                            | What's there                                                                                                              |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `server.js`                                                     | Express app entry point                                                                                                   |
-| `src/`                                                          | App code, layered: `routes/` → `controllers/` → `services/` → `repositories/`, plus `config/`, `middleware/`, `utils/`    |
-| `jobs/`                                                         | ESPN polling Cloud Run Job (`espn-poll.js`); shares `src/services/pollService.js`                                         |
-| `views/`                                                        | EJS server-rendered templates                                                                                             |
-| `public/`                                                       | Static assets, client JS, PWA service workers                                                                             |
-| `data/`                                                         | Seed data (tournament fixtures, conferences, schools)                                                                     |
-| `scripts/`                                                      | Migration, seeding, backup, and the public-sync tooling                                                                   |
-| `tests/`                                                        | Vitest suite (unit, integration, live e2e)                                                                                |
-| `docs/`                                                         | Architecture/design/development/features docs; start at `docs/GUIDE.md`, component map in `docs/architecture/overview.md` |
-| `Dockerfile`, `Dockerfile.poll`, `cloudbuild*.yaml`, `Procfile` | Deploy config (web app + poll job, GCP Cloud Run)                                                                         |
+| Path                                                            | What's there                                                                                                                     |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `server.js`                                                     | Express app entry point                                                                                                          |
+| `src/`                                                          | App code, layered: `routes/` → `controllers/` → `services/` → `repositories/`, plus `config/`, `middleware/`, `types/`, `utils/` |
+| `jobs/`                                                         | ESPN polling Cloud Run Job (`espn-poll.js`); shares `src/services/pollService.js`                                                |
+| `views/`                                                        | EJS server-rendered templates                                                                                                    |
+| `public/`                                                       | Static assets, client JS, PWA service workers                                                                                    |
+| `data/`                                                         | Seed data (tournament fixtures, conferences, schools)                                                                            |
+| `scripts/`                                                      | Migration, seeding, backup, and the public-sync tooling                                                                          |
+| `tests/`                                                        | Vitest suite (unit, integration, live e2e)                                                                                       |
+| `docs/`                                                         | Architecture/design/development/features docs; start at `docs/GUIDE.md`, component map in `docs/architecture/overview.md`        |
+| `Dockerfile`, `Dockerfile.poll`, `cloudbuild*.yaml`, `Procfile` | Deploy config (web app + poll job, GCP Cloud Run)                                                                                |
 
 ## Conventions
 
 - **ESM** JavaScript, Node 20.6+, Express 5, EJS templates. No build step for the web app.
-- **Firestore is the single source of truth.** Only `src/repositories/*` access it directly —
-  routes/controllers/services must go through repositories.
+- **Firestore is the single source of truth, and only `src/repositories/*` touch it** —
+  routes/controllers/services go through repositories. The classes live in
+  `src/repositories/hierarchicalRepository.js`, consumed as singletons from
+  `src/repositories/index.js`; a class name doesn't always predict its entity (method map in
+  `docs/architecture/database.md`). The one other Firestore handle in the served app is
+  `src/utils/startupChecks.js` (`firestoreSessionStore.js` holds none — it delegates to
+  `SessionRepository`). **A second handle-holder is a violation, not a style note**; `scripts/`
+  is outside the rule.
 - **Tests: Vitest.** Run `npm test` (config in `vitest.config.js`) before and after changes.
-- **Lint before finishing.** Run `npm run lint` (config in `eslint.config.js`) and fix errors
-  before considering a task done — CI blocks on lint errors. `npm run lint:fix` handles the
-  mechanical ones. This is the enforced half of "match existing style".
+  Test tiers (pure / integration / live e2e) and which one a new test belongs in: `tests/README.md`.
+- **Run the exact CI sequence before any push.** `.github/workflows/test.yml` runs three gates,
+  and **all three block**:
+
+  ```bash
+  npm run lint          # eslint.config.js — errors block; no-console warnings don't
+  npm run format:check  # Prettier (.prettierrc.json) — fails on any unformatted file
+  npm test              # Vitest
+  ```
+
+  `npm run lint:fix` and `npm run format` fix the mechanical failures. **Skipping
+  `format:check` is the most common way a change here goes red.** EJS templates in `views/` are
+  exempt from Prettier (it mangles `<% %>`); match the surrounding style there.
+
 - **Use the `Logger`, not `console.log`** — tests assert on structured JSON log output.
 - **Cost contract: keep the project ~$0/month.** Any change adding recurring spend needs a
   kill switch or explicit funding — read `CONTRIBUTING.md` § "Cost contract" first.
@@ -57,37 +96,60 @@ These bias toward caution over speed; for trivial tasks, use judgment.
 - **Act decisively.** With a likely cause and a clear fix, make the change — don't re-litigate
   the same evidence.
 - **Update the docs.** If you discover new patterns or make architectural changes, update the
-  relevant file under `docs/`. Skip updates for minor changes.
+  relevant file under `docs/`. Skip updates for minor changes. When you edit a doc with YAML
+  front matter, **bump its `updated:` date in the same commit**.
+- **Correct in place; don't append.** Fix the sentence that's wrong. Never leave a stale claim
+  standing above a newer paragraph that contradicts it.
 - **Never leak internals.** Don't expose stack traces, Firestore paths, or user IDs in API
-  responses or rendered views — log them server-side only.
+  responses or rendered views — log them server-side only. Verbose error details require
+  explicit `DEBUG_ERRORS` and must never be exposed in production.
+
+## Output budgets
+
+Keep responses concise and lead with the outcome. These budgets govern artifacts written
+to GitHub and Slack by any agent, when the user has authorized those actions.
+
+Automated loops follow the same table; a ceiling may be narrowed here, never raised.
+
+Every artifact below is a **ceiling, not a target**. Come in under it.
+
+| Artifact              | Ceiling                                      | Lead with                        |
+| --------------------- | -------------------------------------------- | -------------------------------- |
+| PR body               | 200 words across all sections                | What broke and what the fix does |
+| PR review body        | 150 words + the inline comments              | The verdict                      |
+| Inline review comment | 3 sentences + an optional `suggestion` block | `file:line` and the consequence  |
+| Review-thread reply   | 2 sentences                                  | Changed it, or why not           |
+| PR/issue comment      | 150 words                                    | The outcome or the ASK           |
+| Slack summary         | 5 lines                                      | The ASK                          |
+| Commit message        | 72-char subject + 3 body lines               | The _why_                        |
+
+Rules that apply to all of them:
+
+- **The diff is the record.** Never walk a reviewer through changes they can read. Name what
+  isn't visible in the diff: the reason, the trade-off, the thing you couldn't test.
+- **Drop empty sections rather than filling them.** A required heading with nothing real under
+  it ("Trade-offs: none", "Risk: low") costs a reader a line and tells them nothing. Omit it.
+- **No praise, no throat-clearing.** Skip "Great catch", "This looks solid overall", and any
+  restatement of what the PR does before saying what's wrong with it.
+- **One artifact per event.** Don't post a comment that a thread reply covers, or a Slack
+  message that repeats a PR comment verbatim — link to it.
+- **Never post to say nothing changed — except a scheduled loop's heartbeat.** A no-op
+  event-driven round stays silent. A scheduled loop posts every firing, empty result included,
+  in one line — otherwise a loop that never fired looks the same as one that found nothing.
 
 ## Reviewing & maintaining PRs
 
-This repo receives a steady stream of auto-generated PRs, so reviewing and fixing existing
-PRs is a routine task. Beyond the normal review lens:
+**Review checklist** (omit headings with no findings):
 
-- **Verify locally; don't wait on CI.** CI status often reads `pending`. Check out the PR head
-  in a throwaway git worktree (symlink the repo's `node_modules` into it), then run the
-  affected tests plus `npm test`. This is faster and more trustworthy than the checks tab.
-- **Template changes need a render-level check.** Controller tests mock `res.render`, so they
-  do **not** catch EJS compile errors. When a PR touches a `.ejs` view, render the real
-  template. Watch especially for an undefined local in a view shared by an authenticated and an
-  anonymous flow (e.g. `myEditEntry.ejs` serves both `/my-brackets` and the public `/my-entry`)
-  — EJS throws on undefined locals, so a missing `csrfToken`/`userEmail` will 500 the page.
-- **Watch for overlapping PRs.** Auto-generated PRs frequently touch the same file or region.
-  When several do, call out the overlap, name which one is the superset, and warn about
-  merge-order conflicts before approving.
-- **Resolving conflicts / updating onto main is a maintenance action — only do it when asked.**
-  Merge `origin/main` into the PR branch; do **not** rebase + force-push a branch you don't own
-  (bot- or contributor-authored). Rebase + force-push is only for your own `claude/*` branches.
-  After resolving, run the full `npm test` (not just the conflicted file — semantic conflicts
-  pass locally and break elsewhere) and confirm the PR is no longer marked conflicting.
-- **Branch scope.** Net-new work originating in a session goes on your assigned `claude/*`
-  branch. Review/maintenance fixes go on the target PR's own branch, with the user's permission.
-- **Reply on the review thread, not just the commit.** When you apply a finding from an inline
-  review comment, reply on that specific thread (not a general PR comment) confirming what
-  changed and the commit SHA — the diff alone doesn't tell the reviewer their comment was seen.
-  If you decline a suggestion or resolve it differently than proposed (e.g. scoping a fix down
-  instead of extending it), reply with the reasoning instead of silently diverging. Findings
-  that depend on each other (a nit that only applies if a should-fix goes one way) need their
-  own reply once the dependency resolves, even if the code itself didn't change for that thread.
+- **Security**: Auth bypasses, CSP violations, missing rate limits, session handling, OAuth state, XSS/injection — threat model in [docs/architecture/security.md](./docs/architecture/security.md).
+- **Cost**: New Firestore reads/writes, Cloud Run scaling changes, third-party API calls, missing kill switches — see [CONTRIBUTING.md](./CONTRIBUTING.md#cost-contract).
+- **Architecture**: Layer violations (routes → controllers → services → repositories), Firestore access outside repositories, business logic in the wrong layer.
+- **Correctness**: Logic bugs, off-by-one errors, missing null/undefined checks at system boundaries (user input, external API responses).
+- **Tests**: Missing coverage for changed logic; existing suite in `./tests`.
+- **Style**: Deviations from [CONTRIBUTING.md](./CONTRIBUTING.md#code-style).
+
+Reviewing or fixing an existing PR — auto-generated PRs, overlapping PRs, coverage-only PRs,
+performance claims, conflict resolution, thread replies — follow
+[`docs/development/reviewing-prs.md`](./docs/development/reviewing-prs.md). Two rules from it
+apply everywhere: never rebase or force-push a branch you don't own (merge `origin/main` into it
+instead, and only when asked), and reply on the review thread when you apply or decline a finding.

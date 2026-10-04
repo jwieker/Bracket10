@@ -1,6 +1,5 @@
 import {
   ValidationError,
-  DatabaseError,
   ServiceError,
   withErrorHandling,
 } from '../src/utils/errors.js';
@@ -17,20 +16,6 @@ describe('ValidationError', () => {
   test('field defaults to null', () => {
     const err = new ValidationError('bad input');
     expect(err.field).toBeNull();
-  });
-});
-
-describe('DatabaseError', () => {
-  test('sets name, message, and operation', () => {
-    const err = new DatabaseError('connection failed', 'getActiveGames');
-    expect(err.name).toBe('DatabaseError');
-    expect(err.message).toBe('connection failed');
-    expect(err.operation).toBe('getActiveGames');
-  });
-
-  test('operation defaults to null', () => {
-    const err = new DatabaseError('connection failed');
-    expect(err.operation).toBeNull();
   });
 });
 
@@ -61,14 +46,6 @@ describe('withErrorHandling', () => {
 
   test('re-throws ValidationError unchanged', async () => {
     const original = new ValidationError('bad', 'field');
-    const fn = withErrorHandling(async () => {
-      throw original;
-    });
-    await expect(fn()).rejects.toBe(original);
-  });
-
-  test('re-throws DatabaseError unchanged', async () => {
-    const original = new DatabaseError('db down', 'read');
     const fn = withErrorHandling(async () => {
       throw original;
     });

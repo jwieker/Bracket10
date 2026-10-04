@@ -4,6 +4,113 @@
 <head>
     <%- include('partials/admin-header') %>
         <title>Game Results — Admin</title>
+        <style>
+            #gamesTable.games-compact .col-detail {
+                display: none;
+            }
+            /* One container step down from container-xl (1140px → 960px); narrows the #col2 card and the table inside it. */
+            #regcont.games-compact {
+                max-width: 960px;
+            }
+            .admin-team-logo {
+                width: 24px;
+                height: 24px;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                border: 1px solid var(--border-strong);
+                border-radius: var(--radius-sm);
+                background: var(--bg-card);
+            }
+            #gamesTable .team-pick-label .admin-team-logo {
+                width: 28px;
+                height: 28px;
+            }
+            .admin-team-logo img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .admin-team-logo-fallback {
+                font-size: 0.55rem;
+                font-weight: 700;
+                line-height: 1;
+                color: var(--text-muted);
+            }
+            .team-pick-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.4rem;
+                width: 100%;
+                padding: 0.4rem 0.6rem;
+                background: transparent;
+                color: var(--text-main);
+                border: 2px solid var(--border-strong);
+                border-radius: var(--radius-md);
+                line-height: 1.2;
+                text-align: center;
+                cursor: pointer;
+                transition: border-color 0.15s, background-color 0.15s, opacity 0.15s;
+            }
+            .team-pick-btn:hover {
+                border-color: var(--primary-color);
+                background: var(--bg-hover);
+            }
+            .team-pick-btn:focus-visible {
+                outline: 2px solid var(--primary-color);
+                outline-offset: 2px;
+            }
+            .team-pick-card {
+                flex: 1 1 0;
+                min-width: 0;
+                flex-direction: column;
+            }
+            .team-pick-label {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                min-width: 0;
+            }
+            .team-pick-btn.is-winner {
+                border-color: var(--success-color);
+            }
+            .team-pick-btn.is-loser {
+                opacity: 0.5;
+                filter: grayscale(0.6);
+            }
+            /* A decided game is settled until Undo, so its teams stop being buttons. */
+            .game-row:not([data-winner-id=""]) .team-pick-btn {
+                cursor: default;
+                pointer-events: none;
+            }
+            .result-toast {
+                position: fixed;
+                bottom: 1rem;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1090;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                max-width: calc(100vw - 2rem);
+                padding: 0.6rem 0.9rem;
+                background: var(--bg-card);
+                color: var(--text-main);
+                border: 1px solid var(--border-strong);
+                border-left: 4px solid var(--success-color);
+                border-radius: var(--radius-md);
+                box-shadow: var(--shadow-lg);
+            }
+            .result-toast[hidden] {
+                display: none;
+            }
+            .result-toast.is-error {
+                border-left-color: var(--danger-color);
+            }
+        </style>
 </head>
 
 <% const adminSection='tournament' ; %>
@@ -28,6 +135,7 @@
                                         <input type="hidden" name="year" value="<%= year %>">
                                         <button class="btn btn-primary" type="submit">Create <%= year %> Bracket</button>
                                     </form>
+                                    <a class="btn btn-outline-primary" href="/admin/tournament/espn-setup?year=<%= year %>">Create from ESPN</a>
                                 <% } %>
                             </div>
                             <div>
@@ -61,6 +169,8 @@
                             <% if (isDev) { %>
                             <input type="date" id="espnPollDate" class="form-control form-control-sm d-inline-block ms-1" style="width:auto;" placeholder="today">
                             <% } %>
+                            <button type="button" class="btn btn-outline-secondary d-none d-lg-inline-block"
+                                id="toggleDetailsBtn" aria-controls="gamesTable" aria-expanded="true">Show less</button>
                         </div>
 
                         <div id="espnPollResults" class="container pt-1 pb-1" style="display:none;">
@@ -76,34 +186,36 @@
                         <div class="mt-2 mb-3 d-none d-lg-block w-100">
                             <div class="table-responsive table-scroll w-100" data-mdb-perfect-scrollbar="true"
                                 style="position: relative; max-height: 75vh">
-                                <table class="table table-striped mb-0 w-100">
+                                <table class="table table-striped mb-0 w-100" id="gamesTable">
                                     <thead>
                                         <tr>
-                                            <th colspan="3" class="text-center border-secondary border-2">
+                                            <th colspan="3" data-span-full="3" data-span-short="2"
+                                                class="text-center border-secondary border-2">
                                                 Game</th>
-                                            <th colspan="3" class="text-center border-secondary border-2">
+                                            <th colspan="3" data-span-full="3" data-span-short="2"
+                                                class="text-center border-secondary border-2">
                                                 Team 1</th>
-                                            <th colspan="3" class="text-center border-secondary border-2">
+                                            <th colspan="3" data-span-full="3" data-span-short="2"
+                                                class="text-center border-secondary border-2">
                                                 Team 2</th>
-                                            <th colspan="2" class="text-center border-secondary border-2">
+                                            <th colspan="2" class="col-detail text-center border-secondary border-2">
                                                 Next Game</th>
-                                            <th colspan="4" class="text-center border-secondary border-2">
+                                            <th class="text-center border-secondary border-2">
                                                 Update Info</th>
                                         </tr>
                                         <tr>
-                                            <th class="border-secondary border-2">GameID</th>
+                                            <th class="col-detail border-secondary border-2">GameID</th>
                                             <th class="border-secondary border-2">Round</th>
                                             <th class="border-secondary border-2">Region</th>
                                             <th class="border-secondary border-2">Seed</th>
                                             <th class="border-secondary border-2">Name</th>
-                                            <th class="border-secondary border-2">ID</th>
+                                            <th class="col-detail border-secondary border-2">ID</th>
                                             <th class="border-secondary border-2">Seed</th>
                                             <th class="border-secondary border-2">Name</th>
-                                            <th class="border-secondary border-2">ID</th>
-                                            <th class="border-secondary border-2">ID</th>
-                                            <th class="border-secondary border-2">Spot</th>
-                                            <th class="border-secondary border-2">Winner</th>
-                                            <th class="border-secondary border-2">Button</th>
+                                            <th class="col-detail border-secondary border-2">ID</th>
+                                            <th class="col-detail border-secondary border-2">ID</th>
+                                            <th class="col-detail border-secondary border-2">Spot</th>
+                                            <th class="border-secondary border-2">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -116,8 +228,9 @@
                                                 data-team2-id="<%= group.team2ID %>"
                                                 data-team2-name="<%= group.team2Name %>"
                                                 data-next-game-id="<%= group.nextGameID %>"
-                                                data-next-game-spot="<%= group.nextGameSpot %>">
-                                                <td>
+                                                data-next-game-spot="<%= group.nextGameSpot %>"
+                                                data-winner-id="<%= group.winner || '' %>">
+                                                <td class="col-detail">
                                                     <%= group.gameID %>
                                                 </td>
                                                 <td class="round-display" data-round="<%= group.round %>">
@@ -130,50 +243,37 @@
                                                     <%= group.team1Seed %>
                                                 </td>
                                                 <td>
-                                                    <%= group.team1Name %>
+                                                    <%- include('partials/adminTeamPick', { group, n: 1, layout: 'cell' }) %>
                                                 </td>
-                                                <td>
+                                                <td class="col-detail">
                                                     <%= group.team1ID %>
                                                 </td>
                                                 <td>
                                                     <%= group.team2Seed %>
                                                 </td>
                                                 <td>
-                                                    <%= group.team2Name %>
+                                                    <%- include('partials/adminTeamPick', { group, n: 2, layout: 'cell' }) %>
                                                 </td>
-                                                <td>
+                                                <td class="col-detail">
                                                     <%= group.team2ID %>
                                                 </td>
-                                                <td class="next-game-display">
+                                                <td class="col-detail next-game-display">
                                                     <%= group.nextGameID %>
                                                 </td>
-                                                <td>
+                                                <td class="col-detail">
                                                     <%= group.nextGameSpot %>
                                                 </td>
                                                 <td>
-                                                    <span class="winner-name-display">
-                                                        <%= group.winnerName %>
-                                                    </span>
-                                                    <select class="form-select winner-select">
-                                                        <option value="<%= group.team1ID %>">
-                                                            <%= group.team1Name %>
-                                                        </option>
-                                                        <option value="<%= group.team2ID %>">
-                                                            <%= group.team2Name %>
-                                                        </option>
-                                                    </select>
-                                                </td>
-                                                <td>
                                                     <button
-                                                        class="btn btn-primary submit-game-result">Submit</button>
+                                                        class="btn btn-primary undo-game-result<%= group.winner ? '' : ' d-none' %>">Undo</button>
+                                                    <%# Always rendered, hidden when unheld: Undo sets manualHold server-side and
+                                                        setGameState toggles d-none, so rendering it conditionally left an
+                                                        in-session undo holding with no button until the reload. %>
                                                     <button
-                                                        class="btn btn-primary undo-game-result">Undo</button>
-                                                    <% if (group.manualHold && !group.winner) { %>
-                                                        <button class="btn btn-warning release-hold-btn"
-                                                            data-game-id="<%= group.gameID %>"
-                                                            title="Undone game — the ESPN poll is skipping it. Release to let the poll resolve it again.">
-                                                            Release Hold</button>
-                                                    <% } %>
+                                                        class="btn btn-warning release-hold-btn<%= group.manualHold && !group.winner ? '' : ' d-none' %>"
+                                                        data-game-id="<%= group.gameID %>"
+                                                        title="Undone game — the ESPN poll is skipping it. Release to let the poll resolve it again.">
+                                                        Release Hold</button>
                                                 </td>
                                             </tr>
                                             <% }); %>
@@ -190,7 +290,8 @@
                                     data-team1-id="<%= group.team1ID %>" data-team1-name="<%= group.team1Name %>"
                                     data-team2-id="<%= group.team2ID %>" data-team2-name="<%= group.team2Name %>"
                                     data-next-game-id="<%= group.nextGameID %>"
-                                    data-next-game-spot="<%= group.nextGameSpot %>">
+                                    data-next-game-spot="<%= group.nextGameSpot %>"
+                                    data-winner-id="<%= group.winner || '' %>">
                                     <div
                                         class="card-header bg-light d-flex justify-content-between align-items-center py-2">
                                         <span class="fw-bold round-display" data-round="<%= group.round %>"><%= group.round === 0 ? 'First Four' : `Round ${group.round}` %></span>
@@ -202,51 +303,19 @@
                                         </span>
                                     </div>
                                     <div class="card-body py-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <div class="text-center" style="width: 45%;">
-                                                <span class="badge bg-light text-dark mb-1 border">
-                                                    <%= group.team1Seed %>
-                                                </span>
-                                                <h6 class="mb-0 text-truncate">
-                                                    <%= group.team1Name %>
-                                                </h6>
-                                            </div>
-                                            <div class="text-muted small fw-bold">VS</div>
-                                            <div class="text-center" style="width: 45%;">
-                                                <span class="badge bg-light text-dark mb-1 border">
-                                                    <%= group.team2Seed %>
-                                                </span>
-                                                <h6 class="mb-0 text-truncate">
-                                                    <%= group.team2Name %>
-                                                </h6>
-                                            </div>
+                                        <div class="d-flex justify-content-between align-items-stretch gap-2 mb-3">
+                                            <%- include('partials/adminTeamPick', { group, n: 1, layout: 'card' }) %>
+                                            <div class="text-muted small fw-bold align-self-center">VS</div>
+                                            <%- include('partials/adminTeamPick', { group, n: 2, layout: 'card' }) %>
                                         </div>
                                         <div class="mt-3">
-                                            <div
-                                                class="mb-2 text-center text-success fw-bold winner-name-display-container">
-                                                <span class="winner-name-display">
-                                                    <%= group.winnerName %>
-                                                </span>
-                                            </div>
-                                            <select class="form-select mb-2 winner-select">
-                                                <option value="<%= group.team1ID %>">
-                                                    <%= group.team1Name %>
-                                                </option>
-                                                <option value="<%= group.team2ID %>">
-                                                    <%= group.team2Name %>
-                                                </option>
-                                            </select>
-                                            <div class="d-flex gap-2 justify-content-center mt-2">
-                                                <button class="btn btn-primary w-100 submit-game-result">Submit
-                                                    Winner</button>
-                                                <button class="btn btn-warning w-100 undo-game-result">Undo
-                                                    Winner</button>
-                                            </div>
-                                            <% if (group.manualHold && !group.winner) { %>
-                                                <button class="btn btn-warning w-100 mt-2 release-hold-btn"
-                                                    data-game-id="<%= group.gameID %>">
-                                                    Release Poll Hold</button>
-                                            <% } %>
+                                            <button
+                                                class="btn btn-warning w-100 undo-game-result<%= group.winner ? '' : ' d-none' %>">Undo
+                                                Winner</button>
+                                            <button
+                                                class="btn btn-warning w-100 mt-2 release-hold-btn<%= group.manualHold && !group.winner ? '' : ' d-none' %>"
+                                                data-game-id="<%= group.gameID %>">
+                                                Release Poll Hold</button>
                                         </div>
                                     </div>
                                 </div>
@@ -254,6 +323,11 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div id="resultToast" class="result-toast" role="status" aria-live="polite" hidden>
+                <span id="resultToastMsg"></span>
+                <button type="button" id="resultToastAction" class="btn btn-sm btn-primary" hidden></button>
             </div>
 
             <div>
@@ -394,6 +468,30 @@
                         }
                     });
 
+                    const gamesTable = document.getElementById('gamesTable');
+                    const toggleDetailsBtn = document.getElementById('toggleDetailsBtn');
+                    if (gamesTable && toggleDetailsBtn) {
+                        const STORAGE_KEY = 'adminGamesCompact';
+                        const setCompact = (compact) => {
+                            gamesTable.classList.toggle('games-compact', compact);
+                            document.getElementById('regcont').classList.toggle('games-compact', compact);
+                            // Group headings span the columns still visible.
+                            gamesTable.querySelectorAll('th[data-span-full]').forEach(th => {
+                                th.colSpan = Number(compact ? th.dataset.spanShort : th.dataset.spanFull);
+                            });
+                            toggleDetailsBtn.textContent = compact ? 'Show more' : 'Show less';
+                            toggleDetailsBtn.setAttribute('aria-expanded', String(!compact));
+                        };
+                        let saved = false;
+                        try { saved = localStorage.getItem(STORAGE_KEY) === '1'; } catch (e) { /* storage blocked */ }
+                        setCompact(saved);
+                        toggleDetailsBtn.addEventListener('click', () => {
+                            const compact = !gamesTable.classList.contains('games-compact');
+                            setCompact(compact);
+                            try { localStorage.setItem(STORAGE_KEY, compact ? '1' : '0'); } catch (e) { /* storage blocked */ }
+                        });
+                    }
+
                     const gameRows = document.querySelectorAll('.game-row');
 
                     let maxRound = 0;
@@ -420,8 +518,6 @@
                     gameRows.forEach((row) => {
                         const round = parseInt(row.dataset.round);
                         const nextGameID = row.dataset.nextGameId || '';
-                        const winnerNameSpan = row.querySelector('.winner-name-display');
-                        const winnerCellName = winnerNameSpan ? winnerNameSpan.textContent.trim() : '';
 
                         let hideRow = false;
 
@@ -433,9 +529,7 @@
                             const nextGameRows = Array.from(gameRows).filter(r => r.dataset.gameId === nextGameID);
                             if (nextGameRows && nextGameRows.length > 0) {
                                 const nextGameRow = nextGameRows[0];
-                                const nextGameWinnerSpan = nextGameRow.querySelector('.winner-name-display');
-                                const nextGameWinnerName = nextGameWinnerSpan ? nextGameWinnerSpan.textContent.trim() : '';
-                                if (nextGameWinnerName !== "") {
+                                if (nextGameRow.dataset.winnerId) {
                                     hideRow = true;
                                 }
                             }
@@ -452,124 +546,127 @@
                     });
                     applyStripedStyling();
 
+                    const toast = document.getElementById('resultToast');
+                    const toastMsg = document.getElementById('resultToastMsg');
+                    const toastAction = document.getElementById('resultToastAction');
+                    const TOAST_MS = 8000;
+                    let toastTimer = null;
+                    let toastActionFn = null;
+                    let inFlight = false;
+                    // A saved result leaves the rest of the page (next-round games, row hiding) stale until reload.
+                    let dirty = false;
+
+                    const hideToast = () => {
+                        clearTimeout(toastTimer);
+                        toast.hidden = true;
+                        toastActionFn = null;
+                    };
+                    const showToast = (message, { actionLabel = '', onAction = null, error = false } = {}) => {
+                        clearTimeout(toastTimer);
+                        toastMsg.textContent = message;
+                        toast.classList.toggle('is-error', error);
+                        toastAction.hidden = !actionLabel;
+                        toastAction.textContent = actionLabel;
+                        toastActionFn = onAction;
+                        toast.hidden = false;
+                        toastTimer = setTimeout(() => {
+                            hideToast();
+                            if (dirty && !inFlight) window.location.reload();
+                        }, TOAST_MS);
+                    };
+                    toastAction.addEventListener('click', () => {
+                        const fn = toastActionFn;
+                        hideToast();
+                        if (fn) fn();
+                    });
+
+                    // Results are applied one at a time: concurrent writes could race on a shared next-game slot or the points recompute.
+                    const setBusy = (busy) => {
+                        inFlight = busy;
+                        document.querySelectorAll('.game-row button:not(.team-pick-btn)').forEach(b => { b.disabled = busy; });
+                    };
+                    const postResult = async (url, row, winnerID, winnerName) => {
+                        try {
+                            const response = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                body: JSON.stringify({
+                                    gameID: row.dataset.gameId, regionID: row.dataset.region, round: row.dataset.round,
+                                    team1ID: row.dataset.team1Id, team1Name: row.dataset.team1Name,
+                                    team2ID: row.dataset.team2Id, team2Name: row.dataset.team2Name,
+                                    nextGameID: row.dataset.nextGameId, nextGameSpot: row.dataset.nextGameSpot,
+                                    winnerID, winnerName, year: currentYear
+                                })
+                            });
+                            return response.ok;
+                        } catch (error) {
+                            return false;
+                        }
+                    };
+                    // Each game renders twice (desktop table + mobile card), so update every copy.
+                    const setGameState = (gameID, winnerID) => {
+                        const decided = Boolean(winnerID);
+                        document.querySelectorAll(`.game-row[data-game-id="${gameID}"]`).forEach(r => {
+                            r.dataset.winnerId = decided ? winnerID : '';
+                            r.querySelectorAll('.team-pick-btn').forEach(b => {
+                                const isWinner = decided && b.dataset.teamId === String(winnerID);
+                                b.classList.toggle('is-winner', isWinner);
+                                b.classList.toggle('is-loser', decided && !isWinner);
+                            });
+                            r.querySelector('.undo-game-result').classList.toggle('d-none', !decided);
+                            const hold = r.querySelector('.release-hold-btn');
+                            if (hold) hold.classList.toggle('d-none', decided);
+                        });
+                    };
+
+                    const submitPick = async (row, winnerID, winnerName) => {
+                        if (inFlight) return;
+                        hideToast();
+                        setBusy(true);
+                        const ok = await postResult('/updateWinner', row, winnerID, winnerName);
+                        setBusy(false);
+                        if (!ok) {
+                            showToast(`Couldn't save game ${row.dataset.gameId}. Try again.`, { error: true });
+                            return;
+                        }
+                        dirty = true;
+                        setGameState(row.dataset.gameId, winnerID);
+                        showToast(`${winnerName} wins`, { actionLabel: 'Undo', onAction: () => submitUndo(row) });
+                    };
+
+                    const submitUndo = async (row) => {
+                        const winnerID = row.dataset.winnerId;
+                        if (inFlight || !winnerID) return;
+                        const winnerName = winnerID === row.dataset.team1Id ? row.dataset.team1Name : row.dataset.team2Name;
+                        hideToast();
+                        setBusy(true);
+                        const ok = await postResult('/undoGame', row, winnerID, winnerName);
+                        setBusy(false);
+                        if (!ok) {
+                            showToast(`Couldn't undo game ${row.dataset.gameId}. Try again.`, { error: true });
+                            return;
+                        }
+                        dirty = true;
+                        setGameState(row.dataset.gameId, null);
+                        showToast(`Game ${row.dataset.gameId} undone`, {
+                            actionLabel: 'Redo',
+                            onAction: () => submitPick(row, winnerID, winnerName)
+                        });
+                    };
+
+                    document.addEventListener('click', (e) => {
+                        const pick = e.target.closest('.team-pick-btn');
+                        if (pick) {
+                            const row = pick.closest('.game-row');
+                            if (!row.dataset.winnerId) submitPick(row, pick.dataset.teamId, pick.dataset.teamName);
+                            return;
+                        }
+                        const undo = e.target.closest('.undo-game-result');
+                        if (undo) submitUndo(undo.closest('.game-row'));
+                    });
+
                     gameRows.forEach((row) => {
-                        const submitButton = row.querySelector('.submit-game-result');
-                        const undoButton = row.querySelector('.undo-game-result');
-                        const formSelect = row.querySelector('.winner-select');
-
                         const gameID = row.dataset.gameId;
-                        const winnerNameSpan = row.querySelector('.winner-name-display');
-                        const winnerCellName = winnerNameSpan ? winnerNameSpan.textContent.trim() : '';
-
-                        if (winnerCellName !== '') {
-                            if (undoButton) undoButton.style.display = 'block';
-                            if (submitButton) submitButton.style.display = 'none';
-                            if (formSelect) formSelect.style.display = 'none';
-                        } else {
-                            if (undoButton) undoButton.style.display = 'none';
-                            if (submitButton) submitButton.style.display = 'block';
-                            if (formSelect) formSelect.style.display = 'block';
-                        }
-
-                        if (submitButton) {
-                            submitButton.addEventListener('click', async () => {
-                                const winnerSelect = row.querySelector('.winner-select');
-                                const winnerNameConfirm = winnerSelect.options[winnerSelect.selectedIndex].text;
-                                if (!window.confirm(`Set winner for game ${gameID}: ${winnerNameConfirm}?`)) return;
-
-                                const allButtons = document.querySelectorAll('.game-row button');
-                                allButtons.forEach(button => { button.disabled = true; });
-                                submitButton.textContent = 'Loading...';
-
-                                const roundID = row.dataset.round;
-                                const regionID = row.dataset.region;
-                                const team1Name = row.dataset.team1Name;
-                                const team1ID = row.dataset.team1Id;
-                                const team2Name = row.dataset.team2Name;
-                                const team2ID = row.dataset.team2Id;
-                                const nextGameID = row.dataset.nextGameId;
-                                const nextGameSpot = row.dataset.nextGameSpot;
-                                const winnerID = winnerSelect.value;
-                                const winnerName = winnerSelect.options[winnerSelect.selectedIndex].text;
-
-                                const gameData = {
-                                    gameID, regionID, round: roundID,
-                                    team1ID, team1Name, team2ID, team2Name,
-                                    nextGameID, nextGameSpot, winnerID, winnerName, year: currentYear
-                                };
-
-                                try {
-                                    const response = await fetch('/updateWinner', {
-                                        method: 'POST',
-                                        headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                                        body: JSON.stringify(gameData)
-                                    });
-                                    if (response.ok) {
-                                        alert('Game result submitted successfully! The page will refresh on OK.');
-                                        window.location.reload();
-                                    } else {
-                                        alert('Error submitting game result. Please try again.');
-                                        document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
-                                        submitButton.textContent = 'Submit';
-                                    }
-                                } catch (error) {
-                                    console.error('Error submitting game result:', error);
-                                    alert('Network error submitting game result. Please try again.');
-                                    document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
-                                    submitButton.textContent = 'Submit';
-                                }
-                            });
-                        }
-
-                        if (undoButton) {
-                            undoButton.addEventListener('click', async () => {
-                                if (!window.confirm(`Undo the winner for game ${gameID}?`)) return;
-
-                                const allButtons = document.querySelectorAll('.game-row button');
-                                allButtons.forEach(button => { button.disabled = true; });
-                                undoButton.textContent = 'Loading...';
-
-                                const roundID = row.dataset.round;
-                                const regionID = row.dataset.region;
-                                const team1Name = row.dataset.team1Name;
-                                const team1ID = row.dataset.team1Id;
-                                const team2Name = row.dataset.team2Name;
-                                const team2ID = row.dataset.team2Id;
-                                const nextGameID = row.dataset.nextGameId;
-                                const nextGameSpot = row.dataset.nextGameSpot;
-                                const winnerSelect = row.querySelector('.winner-select');
-                                const winnerID = winnerSelect.value;
-                                const winnerName = winnerSelect.options[winnerSelect.selectedIndex].text;
-
-                                const gameData = {
-                                    gameID, regionID, round: roundID,
-                                    team1ID, team1Name, team2ID, team2Name,
-                                    nextGameID, nextGameSpot, winnerID, winnerName, year: currentYear
-                                };
-
-                                try {
-                                    const response = await fetch('/undoGame', {
-                                        method: 'POST',
-                                        headers: { 'x-csrf-token': '<%= csrfToken %>', 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                                        body: JSON.stringify(gameData)
-                                    });
-                                    if (response.ok) {
-                                        alert('Game result undone successfully! The page will refresh on OK.');
-                                        window.location.reload();
-                                    } else {
-                                        alert('Error undoing game result. Please try again.');
-                                        document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
-                                        undoButton.textContent = 'Undo';
-                                    }
-                                } catch (error) {
-                                    console.error('Error undoing game result:', error);
-                                    alert('Network error undoing game result. Please try again.');
-                                    document.querySelectorAll('.game-row button').forEach(b => b.disabled = false);
-                                    undoButton.textContent = 'Undo';
-                                }
-                            });
-                        }
-
                         const releaseHoldButton = row.querySelector('.release-hold-btn');
                         if (releaseHoldButton) {
                             releaseHoldButton.addEventListener('click', async () => {

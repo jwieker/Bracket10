@@ -94,6 +94,13 @@ export function repositoryUrl(repository) {
     : (repository?.url ?? null);
 }
 
+// "github.com/<owner>" for a GitHub repository URL in any common form
+// (git+https, git://, ssh, scp-style), lowercased; null for anything else.
+export function githubOwner(url) {
+  const match = /github\.com[/:]([^/\s]+)\/[^/\s]+/i.exec(String(url ?? ''));
+  return match ? match[1].toLowerCase() : null;
+}
+
 export function extractTopLevelVersions(lockfileText) {
   if (!lockfileText) return {};
   let lock;
@@ -257,9 +264,15 @@ export async function checkPackage({ name, baseVersion, headVersion }) {
     );
     const headRepo = repositoryUrl(headManifest.repository);
     if (baseRepo && headRepo && baseRepo !== headRepo) {
-      problems.push(
-        `repository URL changed from ${baseRepo} to ${headRepo} between versions`,
-      );
+      const message = `repository URL changed from ${baseRepo} to ${headRepo} between versions`;
+      const baseOwner = githubOwner(baseRepo);
+      // A move between repos under the same GitHub owner (e.g. into a
+      // monorepo) is routine; a move to another owner or host stays a failure.
+      if (baseOwner && baseOwner === githubOwner(headRepo)) {
+        notices.push(`${message} (same GitHub owner "${baseOwner}")`);
+      } else {
+        problems.push(message);
+      }
     }
     // If the base version is missing from the packument, we don't block on
     // the repository-continuity check alone — the cooldown/identity checks

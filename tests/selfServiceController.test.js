@@ -61,7 +61,7 @@ vi.mock('../src/config/app.js', () => ({
   },
 }));
 vi.mock('../src/middleware/rateLimit.js', () => ({
-  registerFailedAttempt: vi.fn(async () => false),
+  reserveVerificationAttempt: vi.fn(async () => false),
 }));
 
 import {
@@ -74,7 +74,7 @@ import {
 } from '../src/services/index.js';
 import { gameRepository } from '../src/repositories/index.js';
 import { isRegistrationOpen, APP_CONFIG } from '../src/config/app.js';
-import { registerFailedAttempt } from '../src/middleware/rateLimit.js';
+import { reserveVerificationAttempt } from '../src/middleware/rateLimit.js';
 import { ValidationError } from '../src/utils/errors.js';
 
 function mockRes() {
@@ -347,7 +347,7 @@ describe('myEntryVerify', () => {
     };
     const res = mockRes();
     await myEntryVerify(req, res);
-    expect(registerFailedAttempt).toHaveBeenCalledWith({
+    expect(reserveVerificationAttempt).toHaveBeenCalledWith({
       key: 'verify:7',
       windowMs: expect.any(Number),
       max: expect.any(Number),
@@ -357,7 +357,7 @@ describe('myEntryVerify', () => {
     );
   });
 
-  test('uses the tightened 5-failures / 15-minute verify window (#166 interim)', async () => {
+  test('uses the tightened 5-attempts / 15-minute verify window (#166 interim)', async () => {
     gameRepository.getEntryById.mockResolvedValue({
       id: '1',
       email: 'real@b.com',
@@ -370,7 +370,7 @@ describe('myEntryVerify', () => {
     };
     const res = mockRes();
     await myEntryVerify(req, res);
-    expect(registerFailedAttempt).toHaveBeenCalledWith({
+    expect(reserveVerificationAttempt).toHaveBeenCalledWith({
       key: 'verify:7',
       windowMs: 15 * 60 * 1000,
       max: 5,
@@ -397,33 +397,38 @@ describe('myEntryVerify', () => {
     expect(res.redirect).toHaveBeenCalledWith(
       expect.stringContaining('/my-entry/edit'),
     );
-    expect(registerFailedAttempt).not.toHaveBeenCalled();
+    expect(reserveVerificationAttempt).toHaveBeenCalledTimes(1);
   });
 
-  test('returns 429 once the per-entryId failure window is exhausted', async () => {
-    gameRepository.getEntryById.mockResolvedValue({
-      id: '1',
-      email: 'real@b.com',
-    });
-    registerFailedAttempt.mockResolvedValueOnce(true);
-    const req = {
-      body: { entryId: '1', year: '2024', email: 'wrong@b.com' },
-      session: {},
-      method: 'POST',
-      url: '/my-entry/verify',
-    };
-    const res = mockRes();
-    await myEntryVerify(req, res);
-    expect(res.status).toHaveBeenCalledWith(429);
-    expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
-    expect(res.render).toHaveBeenCalledWith(
-      'myEntryLookup',
-      expect.objectContaining({ error: 'ratelimited' }),
-    );
-    expect(res.redirect).not.toHaveBeenCalled();
-  });
+  test.each(['wrong@b.com', 'real@b.com'])(
+    'blocks exhausted verification before entry lookup, including %s',
+    async (email) => {
+      gameRepository.getEntryById.mockResolvedValue({
+        id: '1',
+        email: 'real@b.com',
+      });
+      reserveVerificationAttempt.mockResolvedValueOnce(true);
+      const req = {
+        body: { entryId: '1', year: '2024', email },
+        session: {},
+        method: 'POST',
+        url: '/my-entry/verify',
+      };
+      const res = mockRes();
+      await myEntryVerify(req, res);
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
+      expect(res.render).toHaveBeenCalledWith(
+        'myEntryLookup',
+        expect.objectContaining({ error: 'ratelimited' }),
+      );
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(gameRepository.getEntryById).not.toHaveBeenCalled();
+      expect(req.session.verifiedEntries).toBeUndefined();
+    },
+  );
 
-  test('a successful verification never consumes the failure bucket', async () => {
+  test('a successful verification consumes an attempt', async () => {
     gameRepository.getEntryById.mockResolvedValue({
       id: '1',
       email: 'a@b.com',
@@ -440,7 +445,7 @@ describe('myEntryVerify', () => {
     };
     const res = mockRes();
     await myEntryVerify(req, res);
-    expect(registerFailedAttempt).not.toHaveBeenCalled();
+    expect(reserveVerificationAttempt).toHaveBeenCalledTimes(1);
     expect(res.redirect).toHaveBeenCalledWith(
       expect.stringContaining('/my-entry/edit'),
     );
@@ -494,6 +499,151 @@ describe('myEntryVerify', () => {
     expect(res.redirect).toHaveBeenCalledWith(
       expect.stringContaining('entryId=1'),
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // #513 — a coexisting login must survive the regenerate()
+  // -------------------------------------------------------------------------
+
+  // server.js's session default; a fresh session falls back to this.
+  const DEFAULT_MAX_AGE = 8 * 60 * 60 * 1000;
+
+  // The plain `regenerate: cb => cb(null)` mocks above leave the old session
+  // data in place, so a snapshot-and-restore assertion against them would pass
+  // without the fix. express-session hands back an empty session with a fresh
+  // cookie — simulate that, or these tests prove nothing.
+  function makeRegeneratingSession(initial = {}) {
+    const session = {
+      ...initial,
+      cookie: { maxAge: DEFAULT_MAX_AGE, ...(initial.cookie ?? {}) },
+      save: vi.fn((cb) => cb(null)),
+    };
+    session.regenerate = vi.fn((cb) => {
+      for (const key of Object.keys(session)) {
+        if (key !== 'regenerate' && key !== 'save' && key !== 'cookie') {
+          delete session[key];
+        }
+      }
+      session.cookie = { maxAge: DEFAULT_MAX_AGE };
+      cb(null);
+    });
+    return session;
+  }
+
+  async function verifyWith(session) {
+    gameRepository.getEntryById.mockResolvedValue({
+      id: '1',
+      email: 'a@b.com',
+    });
+    const req = {
+      body: { entryId: '1', year: '2024', email: 'a@b.com' },
+      session,
+      method: 'POST',
+      url: '/my-entry/verify',
+    };
+    const res = mockRes();
+    await myEntryVerify(req, res);
+    return res;
+  }
+
+  test('keeps an admin logged in across the verify regenerate (#513)', async () => {
+    const session = makeRegeneratingSession({
+      siteAdmin: true,
+      adminEmail: 'admin@gmail.com',
+      csrfToken: 'admin-token',
+      cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }, // remember-me admin
+    });
+    await verifyWith(session);
+
+    expect(session.regenerate).toHaveBeenCalled();
+    expect(session.siteAdmin).toBe(true);
+    expect(session.adminEmail).toBe('admin@gmail.com');
+    // Rotating the token would turn the forced logout into a forced "invalid
+    // CSRF token" on the admin's next submit — the same denial, relocated.
+    expect(session.csrfToken).toBe('admin-token');
+    // Restored exactly, not reset to the 8h default and not lengthened (#426).
+    expect(session.cookie.maxAge).toBe(30 * 24 * 60 * 60 * 1000);
+    // ...and the verification itself still took effect.
+    expect(session.verifiedEntries?.['2024:1']).toBe(true);
+  });
+
+  test('keeps a signed-in participant logged in across the verify regenerate (#513)', async () => {
+    const session = makeRegeneratingSession({
+      userEmail: 'user@example.com',
+      csrfToken: 'user-token',
+      cookie: { maxAge: 14 * 24 * 60 * 60 * 1000 },
+    });
+    await verifyWith(session);
+
+    expect(session.userEmail).toBe('user@example.com');
+    expect(session.csrfToken).toBe('user-token');
+    expect(session.cookie.maxAge).toBe(14 * 24 * 60 * 60 * 1000);
+    expect(session.verifiedEntries?.['2024:1']).toBe(true);
+  });
+
+  test('preserves both an admin and a coexisting participant login', async () => {
+    const session = makeRegeneratingSession({
+      siteAdmin: true,
+      adminEmail: 'admin@gmail.com',
+      userEmail: 'user@example.com',
+      csrfToken: 'shared-token',
+      cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 },
+    });
+    await verifyWith(session);
+
+    expect(session.siteAdmin).toBe(true);
+    expect(session.adminEmail).toBe('admin@gmail.com');
+    expect(session.userEmail).toBe('user@example.com');
+    expect(session.csrfToken).toBe('shared-token');
+    expect(session.cookie.maxAge).toBe(30 * 24 * 60 * 60 * 1000);
+  });
+
+  test('an identity with no prior CSRF token restores no token (guard skips, does not throw)', async () => {
+    const session = makeRegeneratingSession({
+      userEmail: 'user@example.com',
+      csrfToken: undefined,
+      cookie: { maxAge: 14 * 24 * 60 * 60 * 1000 },
+    });
+    await verifyWith(session);
+
+    expect(session.userEmail).toBe('user@example.com');
+    expect(session.csrfToken).toBeUndefined();
+  });
+
+  test('an identity with no prior cookie maxAge keeps the fresh session lifetime', async () => {
+    const session = makeRegeneratingSession({
+      userEmail: 'user@example.com',
+      csrfToken: 'user-token',
+      cookie: { maxAge: undefined },
+    });
+    await verifyWith(session);
+
+    expect(session.userEmail).toBe('user@example.com');
+    expect(session.cookie.maxAge).toBe(DEFAULT_MAX_AGE);
+  });
+
+  test('an anonymous verifier gains no admin or user identity, and keeps the fresh session lifetime', async () => {
+    const session = makeRegeneratingSession();
+    await verifyWith(session);
+
+    expect(session.siteAdmin).toBeUndefined();
+    expect(session.adminEmail).toBeUndefined();
+    expect(session.userEmail).toBeUndefined();
+    expect(session.csrfToken).toBeUndefined();
+    expect(session.cookie.maxAge).toBe(DEFAULT_MAX_AGE);
+    expect(session.verifiedEntries?.['2024:1']).toBe(true);
+  });
+
+  test('a prior verifiedEntries grant does not survive the regenerate (only logins are carried)', async () => {
+    // Session fixation is what regenerate() is here to prevent; carrying the
+    // whole session across would defeat it. Only the identity fields are
+    // restored — everything else, including older entry grants, is dropped.
+    const session = makeRegeneratingSession({
+      verifiedEntries: { '2023:99': true },
+    });
+    await verifyWith(session);
+
+    expect(session.verifiedEntries).toEqual({ '2024:1': true });
   });
 });
 
@@ -1029,6 +1179,103 @@ describe('myEntryUpdate', () => {
       expect.objectContaining({
         picksNames: resolvedNames,
       }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyEntryUpdate free-text validation (#548)
+// ---------------------------------------------------------------------------
+
+describe('myEntryUpdate name/team validation (#548)', () => {
+  const validBody = {
+    entryId: '1',
+    year: '2024',
+    team: 'Dukes',
+    name: 'Alex',
+    ...tenPickSelections,
+    maxPoints: '0',
+  };
+
+  function reqFor(bodyOverrides) {
+    return {
+      body: { ...validBody, ...bodyOverrides },
+      session: { verifiedEntries: { '2024:1': true } },
+      method: 'POST',
+      url: '/my-entry/update',
+    };
+  }
+
+  beforeEach(() => {
+    isRegistrationOpen.mockReturnValue(true);
+    getGroupRegistrationData.mockResolvedValue({
+      teamData: tenPickTeamData,
+      gameData: [],
+      regions: [{ regionName: 'East' }],
+    });
+    gameRepository.getEntryById.mockResolvedValue({
+      id: '1',
+      email: 'stored@b.com',
+      groups: ['House'],
+    });
+    gameRepository.updateEntry.mockResolvedValue();
+  });
+
+  // The status code is the visible half; `updateEntry` never being called is
+  // the half that matters, because the pre-fix failure was Firestore's SDK
+  // rejecting `undefined` *inside* the write and surfacing as a 500.
+  test.each([
+    ['team is missing', { team: undefined }, 'Team name is required.'],
+    ['name is missing', { name: undefined }, 'Name is required.'],
+    ['team is an empty string', { team: '   ' }, 'Team name is required.'],
+    // Repeated form key: express.urlencoded({ extended: true }) parses
+    // `team=a&team=b` to an array, which is truthy — the exact input the old
+    // truthiness guard let through into `.trim()`.
+    ['team is submitted twice', { team: ['a', 'b'] }, 'Team name is required.'],
+    ['name is submitted twice', { name: ['a', 'b'] }, 'Name is required.'],
+    [
+      'team exceeds the 128-char cap',
+      { team: 'x'.repeat(129) },
+      'Team name must be at most 128 characters.',
+    ],
+    [
+      'name exceeds the 128-char cap',
+      { name: 'y'.repeat(129) },
+      'Name must be at most 128 characters.',
+    ],
+  ])('returns 400 and never writes when %s', async (_label, override, msg) => {
+    const res = mockRes();
+    await myEntryUpdate(reqFor(override), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: msg }),
+    );
+    expect(gameRepository.updateEntry).not.toHaveBeenCalled();
+  });
+
+  // The check was deliberately hoisted above pick parsing and the service
+  // calls: everything downstream burns Firestore reads, and a request that was
+  // always going to be rejected shouldn't pay for them ($0 cost contract).
+  test('rejects before the pick pipeline spends any Firestore reads', async () => {
+    const res = mockRes();
+    await myEntryUpdate(reqFor({ team: undefined }), res);
+    expect(normalizeAndValidateEntryPicks).not.toHaveBeenCalled();
+    expect(calculateMaxPossiblePoints).not.toHaveBeenCalled();
+  });
+
+  test('a 128-char value is accepted — the cap is inclusive', async () => {
+    const res = mockRes();
+    await myEntryUpdate(reqFor({ team: 'x'.repeat(128) }), res);
+    expect(gameRepository.updateEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ teamName: 'x'.repeat(128) }),
+    );
+  });
+
+  test('persists the trimmed values', async () => {
+    const res = mockRes();
+    await myEntryUpdate(reqFor({ team: '  Dukes  ', name: ' Alex ' }), res);
+    expect(gameRepository.updateEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ teamName: 'Dukes', person: 'Alex' }),
     );
   });
 });

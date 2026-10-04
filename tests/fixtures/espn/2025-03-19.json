@@ -1,0 +1,84 @@
+{
+  "events": [
+    {
+      "id": "401745909",
+      "date": "2025-03-20T01:18Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - Midwest Region - First Four"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": false,
+              "team": {
+                "id": "251",
+                "displayName": "Texas Longhorns"
+              },
+              "curatedRank": {
+                "current": 11
+              }
+            },
+            {
+              "winner": true,
+              "team": {
+                "id": "2752",
+                "displayName": "Xavier Musketeers"
+              },
+              "curatedRank": {
+                "current": 11
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401745913",
+      "date": "2025-03-19T22:40Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - First Four"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": false,
+              "team": {
+                "id": "44",
+                "displayName": "American University Eagles"
+              },
+              "curatedRank": {
+                "current": 16
+              }
+            },
+            {
+              "winner": true,
+              "team": {
+                "id": "116",
+                "displayName": "Mount St. Mary's Mountaineers"
+              },
+              "curatedRank": {
+                "current": 16
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

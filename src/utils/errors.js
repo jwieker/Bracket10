@@ -1,7 +1,7 @@
 import Logger from './logger.js';
 
 // Single source of truth for the error-disclosure gate. Verbose internal error
-// fields (the internal `service`/`operation` names and raw exception messages)
+// fields (the internal `service` name and raw exception messages)
 // are exposed only when DEBUG_ERRORS is explicitly enabled. Both errorMiddleware
 // and controllerWrapper import this so their policies can't drift (#168).
 export const debugErrorsEnabled = () =>
@@ -13,14 +13,6 @@ export class ValidationError extends Error {
     super(message);
     this.name = 'ValidationError';
     this.field = field;
-  }
-}
-
-export class DatabaseError extends Error {
-  constructor(message, operation = null) {
-    super(message);
-    this.name = 'DatabaseError';
-    this.operation = operation;
   }
 }
 
@@ -44,11 +36,7 @@ export const withErrorHandling = (operation, context = '') => {
       // prior `error.name === '...'` check: subclasses are preserved, and
       // a third-party error that happens to set `name = 'ValidationError'`
       // can no longer slip through unwrapped.
-      if (
-        error instanceof ValidationError ||
-        error instanceof DatabaseError ||
-        error instanceof ServiceError
-      ) {
+      if (error instanceof ValidationError || error instanceof ServiceError) {
         throw error;
       }
 

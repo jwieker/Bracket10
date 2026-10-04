@@ -1,4 +1,4 @@
-import { Filter, FieldValue } from '@google-cloud/firestore';
+import { Filter, FieldValue, Firestore } from '@google-cloud/firestore';
 import { db } from '../config/firestore.js';
 import { thisYear, APP_CONFIG } from '../config/app.js';
 import Logger from '../utils/logger.js';
@@ -28,16 +28,124 @@ function isDeletedEntry(data) {
   return !!data.deletedAt;
 }
 
+// School ids 999990–999999 are reserved for live-E2E fixtures (see
+// docs/private/development/testing.md § Data safety). Real schools are never
+// allocated into this block — see getMaxSchoolId.
+const RESERVED_TEST_SID_MIN = 999990;
+
+// Years 9988+ are reserved for live-E2E fixtures (see
+// docs/private/development/testing.md § Data safety), mirroring the reserved
+// SID block above. `parseYear` caps a real season at currentYear + 1, so the
+// two ranges can never overlap — which is what makes the reserved block
+// structurally safe rather than safe-by-coincidence. Seeding a live test into
+// a real-looking year is safe only for as long as that year stays empty.
+const RESERVED_TEST_YEAR_MIN = 9988;
+
+// True only under vitest or an explicitly flagged live-E2E run. Never set in
+// the deployed app, which is what makes it usable as a safety boundary.
+const isTestContext = () =>
+  process.env.NODE_ENV === 'test' || process.env.LIVE_E2E === 'true';
+
 // ─── Path helpers ─────────────────────────────────────────────────
 
 const toNum = (v) => (v == null ? v : Number(v));
 
+/**
+ * Validates a year and returns its `tournaments/{year}` path segment.
+ *
+ * Rejects any year that isn't a positive integer (#477, #598). The original
+ * guard tested only `Number.isNaN`, which caught "abc" but let through the
+ * shapes a forgetful caller actually produces: `''` coerces to **0**, and
+ * `undefined`/`null` pass `toNum` unchanged and fail `Number.isNaN`. All of
+ * them build a real path — `tournaments/0`, `tournaments/undefined`,
+ * `tournaments/null` — because `String(x)` is a valid segment for every one.
+ * Reads then return [] and the caller reports "nothing here"; writes land in
+ * a junk document; and any cache bust on the same call targets
+ * `allEntries_0` / `allEntries_undefined`, leaving the real year's cache stale.
+ *
+ * **Every `tournaments/{year}` path must be built through this**, not just the
+ * subcollection helper below. The doc-level callers (pendingRecalcSIDs, the
+ * tournament-doc upsert/delete, the parent-doc batch writes) address that path
+ * directly, so a guard that lived only in `yearCol` left the writes among them
+ * unprotected — `upsertTournamentDoc(undefined)` would *create* a real
+ * `tournaments/undefined` document rather than merely read an empty one.
+ *
+ * Deliberately *narrower* than `parseYear`: this checks "is this a usable path
+ * segment", not "is this a plausible season". `parseYear` bounds the year to
+ * 1980..currentYear+1 at the controller boundary, and that range must NOT be
+ * mirrored here — the live E2E suites address reserved years (9996/9997/9999)
+ * through this layer, so a season-range check would reject them. Controllers
+ * stay the first line of defense; this backstops the ones that forget.
+ */
+function yearSegment(year) {
+  const n = toNum(year);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new ValidationError(`Invalid year: ${year}.`, 'year');
+  }
+  // The reserved block is addressable only from a test context, so a bug or a
+  // hostile input in the deployed app can never read or write the sentinel
+  // years the live suites depend on being theirs alone.
+  if (n >= RESERVED_TEST_YEAR_MIN && !isTestContext()) {
+    throw new ValidationError(
+      `Invalid year: ${year}. Years ${RESERVED_TEST_YEAR_MIN}+ are reserved for tests.`,
+      'year',
+    );
+  }
+  return String(n);
+}
+
+/**
+ * Validates a year for a **bulk, year-scoped delete** — the operations that
+ * wipe every document for a year rather than the ones a caller created.
+ *
+ * Production deletes real years legitimately (the admin delete-tournament
+ * flow), so the real-year restriction applies only under a live-E2E run. That
+ * inverts the reserved block for exactly the destructive calls: in a live test,
+ * these may target the reserved years and nothing else. It turns
+ * testing.md's written rule — "never pass a real tournament year to them" —
+ * into something enforced, instead of a convention each new live test has to
+ * remember. A live suite pointed at a real season now fails loudly before the
+ * first delete rather than emptying that season's collections.
+ */
+function bulkDeleteYearSegment(year) {
+  const seg = yearSegment(year);
+  if (process.env.LIVE_E2E === 'true' && Number(seg) < RESERVED_TEST_YEAR_MIN) {
+    throw new ValidationError(
+      `Refusing a year-scoped delete of ${seg} during a live-E2E run: only years ${RESERVED_TEST_YEAR_MIN}+ are deletable in tests.`,
+      'year',
+    );
+  }
+  return seg;
+}
+
+/**
+ * True if a doc id read out of the `tournaments` collection is safe to fan out
+ * on. A stored id is data-hygiene input, not caller input: a bad one is a row
+ * to skip and log, never a reason to fail the caller's page. Both enumeration
+ * sites wrap their per-year work in `Promise.all`, so one leftover
+ * `tournaments/9999` (or a legacy `tournaments/0`) would otherwise reject the
+ * whole call and answer every signed-in user a 400.
+ *
+ * Delegates to `yearSegment` rather than restating its bounds so the two can
+ * never drift — including the reserved block staying addressable from a test
+ * context, which the live suite depends on (it asserts getAllYearsForGroup
+ * *returns* 9988/9989 under LIVE_E2E). `yearSegment` itself stays exactly as
+ * strict as it is for caller-supplied years.
+ */
+function isEnumerableYearId(id) {
+  try {
+    yearSegment(id);
+    return true;
+  } catch (err) {
+    if (!(err instanceof ValidationError)) throw err;
+    Logger.warn(`Skipping unusable tournaments doc id: ${id}`);
+    return false;
+  }
+}
+
 /** Returns a subcollection ref under tournaments/{year} */
 function yearCol(year, sub) {
-  return db
-    .collection('tournaments')
-    .doc(String(toNum(year)))
-    .collection(sub);
+  return db.collection('tournaments').doc(yearSegment(year)).collection(sub);
 }
 
 /** Direct doc ref inside a year-scoped subcollection */
@@ -135,6 +243,128 @@ function _buildRegionNameMap(regions) {
   return m;
 }
 
+// ─── Bracket-creation document builders ───────────────────────────
+// Pure "shape the doc" functions, factored out of the insert* methods below
+// so createBracketAtomic can share the exact same document construction
+// instead of duplicating it. None of these read or write Firestore.
+
+function _buildRegionDoc(region) {
+  return { ...region };
+}
+
+function _buildGameWithoutTeamsDoc(game) {
+  const [gameID, regionID, , , , , round, nextGameID, nextGameSpot] = game;
+  return {
+    gameID,
+    regionID,
+    round,
+    team1ID: null,
+    team2ID: null,
+    winner: null,
+    nextGameID: nextGameID ?? null,
+    nextGameSpot: nextGameSpot ?? null,
+  };
+}
+
+function _buildGameWithTeamsDoc(game, schoolsMap) {
+  const [
+    gameID,
+    regionID,
+    ,
+    team1ID,
+    team2ID,
+    ,
+    round,
+    nextGameID,
+    nextGameSpot,
+    seed1,
+    seed2,
+  ] = game;
+  const school1 = team1ID != null ? schoolsMap.get(String(team1ID)) || {} : {};
+  const school2 = team2ID != null ? schoolsMap.get(String(team2ID)) || {} : {};
+  return {
+    gameID,
+    regionID,
+    team1ID: team1ID ?? null,
+    team2ID: team2ID ?? null,
+    round,
+    team1Name: school1.nameNick || school1.name || null,
+    team1Seed: seed1 ?? null,
+    team2Name: school2.nameNick || school2.name || null,
+    team2Seed: seed2 ?? null,
+    winner: null,
+    nextGameID: nextGameID ?? null,
+    nextGameSpot: nextGameSpot ?? null,
+  };
+}
+
+function _buildSchoolRecordDoc(record, schoolsMap, regionsMap, confNameMap) {
+  const school = schoolsMap.get(String(record.sID)) || {};
+  const regionName = regionsMap.get(String(record.regionID)) || null;
+  const espn = school.espn || {};
+  return {
+    sID: toNum(record.sID),
+    seed: record.seed,
+    regionID: record.regionID,
+    points: null,
+    gameStatus: [],
+    schoolName: school.name || null,
+    nameNick: school.nameNick || null,
+    mascot: school.mascot || null,
+    regionName,
+    espnID: espn.espnID ?? null,
+    logoUrl: espn.logoURL ?? null,
+    primaryColor: espn.primaryColor ?? null,
+    conferenceName: confNameMap.get(school.confID) ?? null,
+  };
+}
+
+function _buildFirstFourGameDoc(game, schoolsMap) {
+  const school1 = schoolsMap.get(String(game.team1ID)) || {};
+  const school2 = schoolsMap.get(String(game.team2ID)) || {};
+  return {
+    gameID: game.gameID,
+    regionID: 7,
+    round: 0,
+    team1ID: game.team1ID,
+    team1Name: school1.nameNick || school1.name || null,
+    team1Seed: game.seed ?? null,
+    team2ID: game.team2ID,
+    team2Name: school2.nameNick || school2.name || null,
+    team2Seed: game.seed ?? null,
+    winner: null,
+    nextGameID: game.nextGameID,
+    nextGameSpot: game.nextGameSpot,
+  };
+}
+
+function _buildFirstFourSchoolRecordDoc(
+  record,
+  schoolsMap,
+  regionsMap,
+  confNameMap,
+) {
+  const school = schoolsMap.get(String(record.sID)) || {};
+  const espn = school.espn || {};
+  const regionName = regionsMap.get(String(record.r1RegionID)) || null;
+  return {
+    sID: toNum(record.sID),
+    seed: record.seed,
+    regionID: record.r1RegionID,
+    canonicalDocId: `${record.r1RegionID}_${record.seed}`,
+    points: null,
+    gameStatus: [],
+    schoolName: school.name || null,
+    nameNick: school.nameNick || null,
+    mascot: school.mascot || null,
+    regionName,
+    espnID: espn.espnID ?? null,
+    logoUrl: espn.logoURL ?? null,
+    primaryColor: espn.primaryColor ?? null,
+    conferenceName: confNameMap.get(school.confID) ?? null,
+  };
+}
+
 async function _getCachedGroupNames() {
   const cacheKey = 'allGroups';
   const cached = cacheGet(cacheKey);
@@ -155,14 +385,12 @@ export class EntryRepository {
   async updateMultipleEntryPoints(pointsChunk, year = thisYear) {
     Logger.debug('DB CALL: H.EntryRepository.updateMultipleEntryPoints');
     try {
-      const updates = pointsChunk.map(({ entryID, points, possPoints }) => ({
-        ref: yearDoc(year, 'entries', toNum(entryID)),
-        data: { totalPoints: points, possPoints },
-      }));
       try {
         const batch = db.batch();
-        for (const { ref, data } of updates) {
-          batch.update(ref, data);
+        for (let i = 0; i < pointsChunk.length; i++) {
+          const { entryID, points, possPoints } = pointsChunk[i];
+          const ref = yearDoc(year, 'entries', toNum(entryID));
+          batch.update(ref, { totalPoints: points, possPoints });
         }
         await batch.commit();
       } catch (error) {
@@ -173,18 +401,22 @@ export class EntryRepository {
         Logger.warn(
           `updateMultipleEntryPoints: batch commit failed (${error.message}); retrying with existence check`,
         );
-        const snapshots = await db.getAll(...updates.map((u) => u.ref));
+        const refs = pointsChunk.map(({ entryID }) =>
+          yearDoc(year, 'entries', toNum(entryID)),
+        );
+        const snapshots = await db.getAll(...refs);
         const retryBatch = db.batch();
         let retried = 0;
         snapshots.forEach((snap, i) => {
           if (snap.exists) {
-            retryBatch.update(updates[i].ref, updates[i].data);
+            const { points, possPoints } = pointsChunk[i];
+            retryBatch.update(refs[i], { totalPoints: points, possPoints });
             retried++;
           }
         });
         if (retried > 0) await retryBatch.commit();
         Logger.info(
-          `updateMultipleEntryPoints: retried ${retried}/${updates.length} entries (skipped ${updates.length - retried} missing)`,
+          `updateMultipleEntryPoints: retried ${retried}/${pointsChunk.length} entries (skipped ${pointsChunk.length - retried} missing)`,
         );
       }
       // Bust standings caches so targeted points updates (ESPN poll path,
@@ -337,6 +569,7 @@ export class EntryRepository {
     invalidateCache('entriesForGroup_');
     cacheDel(`allEntries_${year}`);
     cacheDel(`entriesByNameRaw_${year}`);
+    cacheDel(`deletedEntries_${year}`);
     invalidateCache('entriesByEmail_');
   }
 
@@ -366,6 +599,7 @@ export class EntryRepository {
     invalidateCache('entriesForGroup_');
     cacheDel(`allEntries_${year}`);
     cacheDel(`entriesByNameRaw_${year}`);
+    cacheDel(`deletedEntries_${year}`);
     invalidateCache('entriesByEmail_');
     return true;
   }
@@ -400,14 +634,34 @@ export class EntryRepository {
     invalidateCache('entriesForGroup_');
     cacheDel(`allEntries_${year}`);
     cacheDel(`entriesByNameRaw_${year}`);
+    cacheDel(`deletedEntries_${year}`);
     invalidateCache('entriesByEmail_');
   }
 
-  /** Lists soft-deleted entries for the admin "Recently Deleted" UI. */
+  /**
+   * Lists soft-deleted entries for the admin "Recently Deleted" UI.
+   *
+   * Cached (300s, matching the sibling full-collection reads) because this
+   * scans every entry in the year and filters for `deletedAt` in memory:
+   * uncached, each open/refresh of the modal costs a full read of the year's
+   * entries subcollection to surface the handful of deleted ones, so the cost
+   * scales with total entries rather than deleted ones (#478). Unlike
+   * findEntriesByName there's no per-call filter argument, so the finished
+   * list is what gets cached rather than an unfiltered raw list.
+   *
+   * Busted by the paths that can change this list: delete/restore/purge
+   * (membership) and updateEntry (the person/teamName/email/groups fields
+   * rendered here). Pick/points writes don't appear in this shape, so they
+   * deliberately leave it alone.
+   */
   async getDeletedEntries(year = thisYear) {
+    const cacheKey = `deletedEntries_${year}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+
     Logger.debug('DB CALL: H.EntryRepository.getDeletedEntries');
     const snapshot = await yearCol(year, 'entries').get();
-    return snapshot.docs
+    const result = snapshot.docs
       .map((doc) => doc.data())
       .filter((data) => isDeletedEntry(data))
       .sort((a, b) => Date.parse(b.deletedAt) - Date.parse(a.deletedAt))
@@ -420,6 +674,8 @@ export class EntryRepository {
         groups: data.groups || [data.group].filter(Boolean),
         deletedAt: data.deletedAt,
       }));
+    cacheSet(cacheKey, result, 300);
+    return result;
   }
 
   async updateEntryPicks(entryId, newPicks, year) {
@@ -560,6 +816,16 @@ export class ViewRepository {
    * Groups stay top-level — same as flat repo.
    */
   async findGroupByName(name) {
+    // Every caller reaches here with a raw, unauthenticated request param
+    // (`req.body['game']`, `req.query['gameName']`) via verifyGroupExists, and
+    // a caller-side `if (!name)` is not a type check: express.urlencoded parses
+    // a repeated key to an array, which is truthy and has no `.toLowerCase`, so
+    // it 500s on the cache-key line below (#589). Guard once at this shared
+    // choke point instead of at each of the four call sites, and answer with
+    // `null` — that is already this method's "not found" result, so every
+    // caller's existing `if (!verifiedGroupName)` branch handles it correctly.
+    if (typeof name !== 'string' || name.trim() === '') return null;
+
     Logger.debug('DB CALL: H.ViewRepository.findGroupByName');
     const cacheKey = `groupByName_${name.toLowerCase()}`;
     const cached = cacheGet(cacheKey);
@@ -816,7 +1082,7 @@ export class GameRepository {
     if (numericSIDs.length === 0) return;
     await db
       .collection('tournaments')
-      .doc(String(toNum(year)))
+      .doc(yearSegment(year))
       .set(
         { pendingRecalcSIDs: FieldValue.arrayUnion(...numericSIDs) },
         { merge: true },
@@ -825,10 +1091,7 @@ export class GameRepository {
 
   async getPendingRecalcSIDs(year) {
     Logger.debug('DB CALL: H.GameRepository.getPendingRecalcSIDs');
-    const doc = await db
-      .collection('tournaments')
-      .doc(String(toNum(year)))
-      .get();
+    const doc = await db.collection('tournaments').doc(yearSegment(year)).get();
     if (!doc.exists) return [];
     return (doc.data().pendingRecalcSIDs || []).map(Number);
   }
@@ -841,7 +1104,7 @@ export class GameRepository {
     // run after our read survive for that run's own recalc.
     await db
       .collection('tournaments')
-      .doc(String(toNum(year)))
+      .doc(yearSegment(year))
       .set(
         { pendingRecalcSIDs: FieldValue.arrayRemove(...numericSIDs) },
         { merge: true },
@@ -924,7 +1187,7 @@ export class GameRepository {
 
   async deleteGamesByYear(year) {
     Logger.debug('DB CALL: H.GameRepository.deleteGamesByYear');
-    const snapshot = await yearCol(year, 'games').get();
+    const snapshot = await yearCol(bulkDeleteYearSegment(year), 'games').get();
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
@@ -938,7 +1201,10 @@ export class GameRepository {
 
   async deleteSchoolRecordsByYear(year) {
     Logger.debug('DB CALL: H.GameRepository.deleteSchoolRecordsByYear');
-    const snapshot = await yearCol(year, 'schoolRecords').get();
+    const snapshot = await yearCol(
+      bulkDeleteYearSegment(year),
+      'schoolRecords',
+    ).get();
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
@@ -1132,13 +1398,14 @@ export class GameRepository {
       regionsMap.set(data.regionID, data);
     });
 
-    // Build sID → { nameNick, seed } so games missing denormalized fields still show names
+    // Build sID → { nameNick, seed, logoUrl } so games missing denormalized fields still show names
     const schoolMap = new Map();
     recordsSnap.docs.forEach((doc) => {
       const d = doc.data();
       schoolMap.set(d.sID, {
         nameNick: d.nameNick || null,
         seed: d.seed ?? null,
+        logoUrl: d.logoUrl ?? null,
       });
     });
 
@@ -1155,6 +1422,8 @@ export class GameRepository {
           team1Seed: g.team1Seed ?? t1.seed,
           team2Name: g.team2Name ?? t2.nameNick,
           team2Seed: g.team2Seed ?? t2.seed,
+          team1LogoUrl: t1.logoUrl ?? null,
+          team2LogoUrl: t2.logoUrl ?? null,
         };
       })
       .sort((a, b) => {
@@ -1268,22 +1537,24 @@ export class GameRepository {
     // Run a single Filter.or query to check both the new `groups` array field
     // and the old singular `group` string field (legacy entries) in one pass.
     await Promise.all(
-      tournamentsSnap.docs.map(async (doc) => {
-        const year = doc.id;
-        const snap = await yearCol(year, 'entries')
-          .where(
-            Filter.or(
-              Filter.where('groups', 'array-contains', groupName),
-              Filter.where('group', '==', groupName),
-            ),
-          )
-          .limit(1)
-          .get();
+      tournamentsSnap.docs
+        .map((doc) => doc.id)
+        .filter(isEnumerableYearId)
+        .map(async (year) => {
+          const snap = await yearCol(year, 'entries')
+            .where(
+              Filter.or(
+                Filter.where('groups', 'array-contains', groupName),
+                Filter.where('group', '==', groupName),
+              ),
+            )
+            .limit(1)
+            .get();
 
-        if (!snap.empty) {
-          years.push(toNum(year));
-        }
-      }),
+          if (!snap.empty) {
+            years.push(toNum(year));
+          }
+        }),
     );
 
     const result = years.sort((a, b) => b - a).map((year) => ({ year }));
@@ -1302,12 +1573,12 @@ export class GameRepository {
    * Mirrors getAllYearsForGroup: reads the small top-level `tournaments`
    * collection first, then queries each year's `entries` subcollection in
    * parallel — avoiding collectionGroup (and its manually-created index).
-   * Single-field `where('email','==')` uses Firestore's automatic index.
+   * The `where('email','in',...)` query uses Firestore's automatic index.
    *
    * Firestore equality is byte-exact. New registrations are stored lowercased
    * (see createNewEntry), but to stay robust against any legacy un-normalized
-   * rows we query both the raw input and its lowercased form, de-dupe by doc
-   * id, and filter in memory as a final ownership guard.
+   * rows we query both the raw input and its lowercased form, and filter in
+   * memory as a final ownership guard.
    *
    * Pass `year` to scope to a single tournament year — this skips the
    * `tournaments` read and avoids scanning every year (used by the per-request
@@ -1333,23 +1604,19 @@ export class GameRepository {
     const years =
       year != null
         ? [String(year)]
-        : (await db.collection('tournaments').get()).docs.map((doc) => doc.id);
+        : (await db.collection('tournaments').get()).docs
+            .map((doc) => doc.id)
+            .filter(isEnumerableYearId);
 
     const perYear = await Promise.all(
       years.map(async (yr) => {
-        const snaps = await Promise.all(
-          variants.map((value) =>
-            yearCol(yr, 'entries').where('email', '==', value).get(),
-          ),
-        );
-        const byId = new Map();
-        for (const snap of snaps) {
-          for (const d of snap.docs) {
-            const data = d.data();
-            byId.set(d.id, { ...data, id: data.id ?? d.id, year: toNum(yr) });
-          }
-        }
-        return [...byId.values()];
+        const snap = await yearCol(yr, 'entries')
+          .where('email', 'in', variants)
+          .get();
+        return snap.docs.map((d) => {
+          const data = d.data();
+          return { ...data, id: data.id ?? d.id, year: toNum(yr) };
+        });
       }),
     );
 
@@ -1404,6 +1671,9 @@ export class GameRepository {
     invalidateCache('entriesForGroup_');
     cacheDel(`allEntries_${entry.year}`);
     cacheDel(`entriesByNameRaw_${entry.year}`);
+    // An admin can edit an entry that is currently soft-deleted; the Recently
+    // Deleted list renders person/teamName/email/groups, all writable here.
+    cacheDel(`deletedEntries_${entry.year}`);
     // email can change here (updatePayload.email above), and we cache getEntriesByEmail
     // per-email — a per-key bust would need the OLD email too, which this method doesn't
     // read, so clear the whole entriesByEmail_ cache rather than risk serving either the
@@ -1449,9 +1719,10 @@ export class TourneyRepository {
     regionIDs.forEach((id, index) => {
       const region = masterMap.get(Number(id));
       if (region) {
-        batch.set(yearDoc(year, 'regions', String(index + 1)), {
-          ...region,
-        });
+        batch.set(
+          yearDoc(year, 'regions', String(index + 1)),
+          _buildRegionDoc(region),
+        );
       }
     });
     await batch.commit();
@@ -1461,11 +1732,197 @@ export class TourneyRepository {
     cacheDel(`allRegions_${year}`);
   }
 
+  /**
+   * Read-only precheck before an atomic bracket create. Checks the parent doc
+   * AND every subcollection a prior partial/interrupted creation could have
+   * left behind — a parent-less orphan (legacy or from a failure before this
+   * atomic path existed) wouldn't be caught by createBracketAtomic's
+   * batch.create() alone, since that only guards the specific doc paths it's
+   * about to write, not the collection generally.
+   */
+  async getYearOccupancy(year) {
+    Logger.debug('DB CALL: H.TourneyRepository.getYearOccupancy');
+    const yearStr = yearSegment(year);
+    const [parentSnap, gamesSnap, regionsSnap, schoolRecordsSnap, entriesSnap] =
+      await Promise.all([
+        db.collection('tournaments').doc(yearStr).get(),
+        yearCol(year, 'games').limit(1).get(),
+        yearCol(year, 'regions').limit(1).get(),
+        yearCol(year, 'schoolRecords').limit(1).get(),
+        yearCol(year, 'entries').limit(1).get(),
+      ]);
+    const hasParent = parentSnap.exists;
+    const hasGames = !gamesSnap.empty;
+    const hasRegions = !regionsSnap.empty;
+    const hasSchoolRecords = !schoolRecordsSnap.empty;
+    const hasEntries = !entriesSnap.empty;
+    return {
+      occupied:
+        hasParent || hasGames || hasRegions || hasSchoolRecords || hasEntries,
+      hasParent,
+      hasGames,
+      hasRegions,
+      hasSchoolRecords,
+      hasEntries,
+    };
+  }
+
+  /**
+   * Creates an entire bracket — regions, every game, every school record,
+   * and (if given) First Four games/records — in one atomic Firestore batch.
+   * Every document uses batch.create(), so if ANY target already exists the
+   * whole commit is rejected and nothing partial is left behind; this is the
+   * final race guard behind getYearOccupancy's earlier, friendlier check.
+   *
+   * Builds this year's region-name map from the in-memory `regionIDs` list
+   * being written in *this* batch, never from a read of the year's own
+   * `regions` subcollection (that would read back data this same batch
+   * hasn't committed yet, so it would see nothing — see the plan doc's note
+   * on the 24h-cache trap this specifically avoids).
+   *
+   * Callers (createNewBracket) build gamesWithoutTeams/gamesWithTeams via
+   * createNewBracketStructure and firstFourGames/firstFourSchoolRecords with
+   * the same shape createFirstFourGames uses for the existing
+   * add-First-Four-to-an-existing-bracket path — this method shares document
+   * construction with both via the _build*Doc helpers, not a third copy.
+   */
+  async createBracketAtomic({
+    year,
+    regionIDs,
+    gamesWithoutTeams,
+    gamesWithTeams,
+    schoolRecords,
+    firstFourGames = [],
+    firstFourSchoolRecords = [],
+    tournamentDocExtra = {},
+  }) {
+    Logger.debug('DB CALL: H.TourneyRepository.createBracketAtomic');
+    const yearStr = yearSegment(year);
+
+    const [schools, conferences, masterRegionTypes] = await Promise.all([
+      _getCachedSchools(),
+      _getCachedConferences(),
+      this.getAllRegionTypes(),
+    ]);
+    const schoolsMap = _buildSchoolsBySid(schools);
+    const confNameMap = _buildConfNameMap(conferences);
+
+    const masterRegionMap = new Map(
+      masterRegionTypes.map((r) => [Number(r.regionID), r]),
+    );
+    const yearRegions = regionIDs
+      .map((id) => masterRegionMap.get(Number(id)))
+      .filter(Boolean);
+    const regionsMap = _buildRegionNameMap(yearRegions);
+
+    const totalWrites =
+      1 +
+      yearRegions.length +
+      gamesWithoutTeams.length +
+      gamesWithTeams.length +
+      schoolRecords.length +
+      firstFourGames.length +
+      firstFourSchoolRecords.length;
+    // Firestore caps a batch at 500 operations. The plan's own count (134 +
+    // 2N, 142-150 for N=4-8) stays far under that, so this should never
+    // trip — it exists so a future change that adds more writes fails loudly
+    // here instead of with a cryptic Firestore error mid-commit.
+    if (totalWrites > 500) {
+      throw new Error(
+        `createBracketAtomic: ${totalWrites} writes exceeds Firestore's 500-operation batch limit for year ${year}`,
+      );
+    }
+
+    const batch = db.batch();
+
+    batch.create(db.collection('tournaments').doc(yearStr), {
+      year: Number(yearStr),
+      ...tournamentDocExtra,
+    });
+
+    regionIDs.forEach((id, index) => {
+      const region = masterRegionMap.get(Number(id));
+      if (region) {
+        batch.create(
+          yearDoc(year, 'regions', String(index + 1)),
+          _buildRegionDoc(region),
+        );
+      }
+    });
+
+    for (const game of gamesWithoutTeams) {
+      const [gameID] = game;
+      batch.create(
+        yearDoc(year, 'games', gameID),
+        _buildGameWithoutTeamsDoc(game),
+      );
+    }
+    for (const game of gamesWithTeams) {
+      const [gameID] = game;
+      batch.create(
+        yearDoc(year, 'games', gameID),
+        _buildGameWithTeamsDoc(game, schoolsMap),
+      );
+    }
+    for (const record of schoolRecords) {
+      batch.create(
+        yearDoc(
+          record.year,
+          'schoolRecords',
+          `${record.regionID}_${record.seed}`,
+        ),
+        _buildSchoolRecordDoc(record, schoolsMap, regionsMap, confNameMap),
+      );
+    }
+    for (const game of firstFourGames) {
+      batch.create(
+        yearDoc(year, 'games', game.gameID),
+        _buildFirstFourGameDoc(game, schoolsMap),
+      );
+    }
+    for (const record of firstFourSchoolRecords) {
+      const docId = `ff_${record.gameID}_${record.slot}`;
+      batch.create(
+        yearDoc(year, 'schoolRecords', docId),
+        _buildFirstFourSchoolRecordDoc(
+          record,
+          schoolsMap,
+          regionsMap,
+          confNameMap,
+        ),
+      );
+    }
+
+    // Nothing below this line runs unless the commit fully succeeds — no
+    // cache invalidation, no return — so a failed/rejected batch leaves
+    // every cache exactly as it was, which is correct since Firestore itself
+    // guarantees the batch wrote nothing either.
+    await batch.commit();
+
+    cacheDel(`tournamentDetails_${year}`);
+    cacheDel(`activeGames_${year}`);
+    cacheDel(`activeFutureGames_${year}`);
+    cacheDel(`allTeamNames_${year}`);
+    cacheDel(`allRegions_${year}`);
+
+    return { writeCount: totalWrites };
+  }
+
   async getAllTeams() {
     Logger.debug('DB CALL: H.TourneyRepository.getAllTeams');
     return _getCachedSchools();
   }
 
+  /**
+   * Returns every schoolRecords doc for a year — canonical R1 records
+   * (doc id `${regionID}_${seed}`) and First Four/play-in records (doc id
+   * `ff_{gameID}_{slot}`, carrying `canonicalDocId` back to the R1 slot they
+   * feed) alike. Both `docId` and `canonicalDocId` are returned so a caller
+   * that needs only canonical R1 records (updateBracket's balanced
+   * add/remove diff) can partition on `docId` shape rather than treating
+   * every record as an R1 slot occupant — see the plan doc's editor-
+   * compatibility section for why that distinction matters.
+   */
   async getSchoolRecordsForYear(year) {
     Logger.debug('DB CALL: H.TourneyRepository.getSchoolRecordsForYear');
     const snapshot = await yearCol(year, 'schoolRecords').get();
@@ -1477,6 +1934,8 @@ export class TourneyRepository {
           year: toNum(year),
           seed: d.seed,
           regionID: d.regionID,
+          docId: doc.id,
+          canonicalDocId: d.canonicalDocId ?? null,
         };
       })
       .sort((a, b) =>
@@ -1486,7 +1945,7 @@ export class TourneyRepository {
 
   async deleteGamesByYear(year) {
     Logger.debug('DB CALL: H.TourneyRepository.deleteGamesByYear');
-    const snapshot = await yearCol(year, 'games').get();
+    const snapshot = await yearCol(bulkDeleteYearSegment(year), 'games').get();
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
@@ -1497,7 +1956,10 @@ export class TourneyRepository {
 
   async deleteSchoolRecordsByYear(year) {
     Logger.debug('DB CALL: H.TourneyRepository.deleteSchoolRecordsByYear');
-    const snapshot = await yearCol(year, 'schoolRecords').get();
+    const snapshot = await yearCol(
+      bulkDeleteYearSegment(year),
+      'schoolRecords',
+    ).get();
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
@@ -1507,7 +1969,10 @@ export class TourneyRepository {
 
   async deleteRegionsByYear(year) {
     Logger.debug('DB CALL: H.TourneyRepository.deleteRegionsByYear');
-    const snapshot = await yearCol(year, 'regions').get();
+    const snapshot = await yearCol(
+      bulkDeleteYearSegment(year),
+      'regions',
+    ).get();
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
@@ -1519,20 +1984,24 @@ export class TourneyRepository {
 
   async deleteTournamentDoc(year) {
     Logger.debug('DB CALL: H.TourneyRepository.deleteTournamentDoc');
-    await db.collection('tournaments').doc(String(year)).delete();
+    await db
+      .collection('tournaments')
+      .doc(bulkDeleteYearSegment(year))
+      .delete();
   }
 
   async upsertTournamentDoc(year, options = {}) {
     Logger.debug('DB CALL: H.TourneyRepository.upsertTournamentDoc');
-    const data = { year: Number(year) };
+    // Validate before building the payload: this is the one caller that
+    // *creates* the tournament doc, so an unguarded year wrote a real
+    // `tournaments/undefined` holding `{ year: NaN }`.
+    const yearStr = yearSegment(year);
+    const data = { year: Number(yearStr) };
     if (options.hasFirstFour !== undefined)
       data.hasFirstFour = options.hasFirstFour;
     if (options.firstFourGameCount !== undefined)
       data.firstFourGameCount = options.firstFourGameCount;
-    await db
-      .collection('tournaments')
-      .doc(String(year))
-      .set(data, { merge: true });
+    await db.collection('tournaments').doc(yearStr).set(data, { merge: true });
   }
 
   async insertFirstFourGames(games, year) {
@@ -1543,22 +2012,10 @@ export class TourneyRepository {
 
     const batch = db.batch();
     for (const game of games) {
-      const school1 = schoolsMap.get(String(game.team1ID)) || {};
-      const school2 = schoolsMap.get(String(game.team2ID)) || {};
-      batch.set(yearDoc(year, 'games', game.gameID), {
-        gameID: game.gameID,
-        regionID: 7,
-        round: 0,
-        team1ID: game.team1ID,
-        team1Name: school1.nameNick || school1.name || null,
-        team1Seed: game.seed ?? null,
-        team2ID: game.team2ID,
-        team2Name: school2.nameNick || school2.name || null,
-        team2Seed: game.seed ?? null,
-        winner: null,
-        nextGameID: game.nextGameID,
-        nextGameSpot: game.nextGameSpot,
-      });
+      batch.set(
+        yearDoc(year, 'games', game.gameID),
+        _buildFirstFourGameDoc(game, schoolsMap),
+      );
     }
     await batch.commit();
     cacheDel(`tournamentDetails_${year}`);
@@ -1584,26 +2041,16 @@ export class TourneyRepository {
 
     const batch = db.batch();
     for (const record of records) {
-      const school = schoolsMap.get(String(record.sID)) || {};
-      const espn = school.espn || {};
-      const regionName = regionsMap.get(String(record.r1RegionID)) || null;
       const docId = `ff_${record.gameID}_${record.slot}`;
-      batch.set(yearDoc(year, 'schoolRecords', docId), {
-        sID: toNum(record.sID),
-        seed: record.seed,
-        regionID: record.r1RegionID,
-        canonicalDocId: `${record.r1RegionID}_${record.seed}`,
-        points: null,
-        gameStatus: [],
-        schoolName: school.name || null,
-        nameNick: school.nameNick || null,
-        mascot: school.mascot || null,
-        regionName,
-        espnID: espn.espnID ?? null,
-        logoUrl: espn.logoURL ?? null,
-        primaryColor: espn.primaryColor ?? null,
-        conferenceName: confNameMap.get(school.confID) ?? null,
-      });
+      batch.set(
+        yearDoc(year, 'schoolRecords', docId),
+        _buildFirstFourSchoolRecordDoc(
+          record,
+          schoolsMap,
+          regionsMap,
+          confNameMap,
+        ),
+      );
     }
     await batch.commit();
     cacheDel(`tournamentDetails_${year}`);
@@ -1635,7 +2082,7 @@ export class TourneyRepository {
     );
     if (gamesWithoutTeams.length === 0) return;
 
-    const yearStr = String(gamesWithoutTeams[0][2]);
+    const yearStr = yearSegment(gamesWithoutTeams[0][2]);
 
     const batch = db.batch();
     // Ensure the tournament parent doc exists so years are queryable
@@ -1646,18 +2093,11 @@ export class TourneyRepository {
     );
 
     for (const game of gamesWithoutTeams) {
-      const [gameID, regionID, year, , , , round, nextGameID, nextGameSpot] =
-        game;
-      batch.set(yearDoc(year, 'games', gameID), {
-        gameID,
-        regionID,
-        round,
-        team1ID: null,
-        team2ID: null,
-        winner: null,
-        nextGameID: nextGameID ?? null,
-        nextGameSpot: nextGameSpot ?? null,
-      });
+      const [gameID, , year] = game;
+      batch.set(
+        yearDoc(year, 'games', gameID),
+        _buildGameWithoutTeamsDoc(game),
+      );
     }
     await batch.commit();
     if (gamesWithoutTeams.length > 0) {
@@ -1672,7 +2112,7 @@ export class TourneyRepository {
     Logger.debug('DB CALL: H.TourneyRepository.insertMultipleGamesWithTeams');
     if (gamesWithTeams.length === 0) return;
 
-    const yearStr = String(gamesWithTeams[0][2]);
+    const yearStr = yearSegment(gamesWithTeams[0][2]);
 
     const schoolsMap = _buildSchoolsBySid(await _getCachedSchools());
 
@@ -1685,39 +2125,11 @@ export class TourneyRepository {
     );
 
     for (const game of gamesWithTeams) {
-      const [
-        gameID,
-        regionID,
-        year,
-        team1ID,
-        team2ID,
-        ,
-        round,
-        nextGameID,
-        nextGameSpot,
-        seed1,
-        seed2,
-      ] = game;
-
-      const school1 =
-        team1ID != null ? schoolsMap.get(String(team1ID)) || {} : {};
-      const school2 =
-        team2ID != null ? schoolsMap.get(String(team2ID)) || {} : {};
-
-      batch.set(yearDoc(year, 'games', gameID), {
-        gameID,
-        regionID,
-        team1ID: team1ID ?? null,
-        team2ID: team2ID ?? null,
-        round,
-        team1Name: school1.nameNick || school1.name || null,
-        team1Seed: seed1 ?? null,
-        team2Name: school2.nameNick || school2.name || null,
-        team2Seed: seed2 ?? null,
-        winner: null,
-        nextGameID: nextGameID ?? null,
-        nextGameSpot: nextGameSpot ?? null,
-      });
+      const [gameID, , year] = game;
+      batch.set(
+        yearDoc(year, 'games', gameID),
+        _buildGameWithTeamsDoc(game, schoolsMap),
+      );
     }
     await batch.commit();
     if (gamesWithTeams.length > 0) {
@@ -1796,34 +2208,13 @@ export class TourneyRepository {
 
     const batch = db.batch();
     for (const record of schoolRecords) {
-      const school = schoolsMap.get(String(record.sID)) || {};
-      const regionName = regionsMap.get(String(record.regionID)) || null;
-      // ESPN data is stored nested under school.espn by enrichEspnData.js
-      const espn = school.espn || {};
       batch.set(
         yearDoc(
           record.year,
           'schoolRecords',
           `${record.regionID}_${record.seed}`,
         ),
-        {
-          sID: toNum(record.sID),
-          seed: record.seed,
-          regionID: record.regionID,
-          points: null,
-          gameStatus: [],
-          // Denormalized school identity
-          schoolName: school.name || null,
-          nameNick: school.nameNick || null,
-          mascot: school.mascot || null,
-          regionName,
-          // Denormalized ESPN / conference fields (eliminates allSchools + allConferences
-          // fetches from the game view render path)
-          espnID: espn.espnID ?? null,
-          logoUrl: espn.logoURL ?? null, // ESPN stores as logoURL; normalize to logoUrl
-          primaryColor: espn.primaryColor ?? null,
-          conferenceName: confNameMap.get(school.confID) ?? null,
-        },
+        _buildSchoolRecordDoc(record, schoolsMap, regionsMap, confNameMap),
       );
     }
     await batch.commit();
@@ -2038,8 +2429,15 @@ export class TeamRepository {
 
   async getMaxSchoolId() {
     Logger.debug('DB CALL: H.TeamRepository.getMaxSchoolId');
+    // Ignore the reserved live-E2E block (#502): test schools are inserted into
+    // this same global `school` collection, so a leaked fixture would otherwise
+    // become the max and push the next real school to 1000000 — permanently, and
+    // into a range a later test run could collide with. Bounding the read below
+    // the block keeps test and production id space separate even when cleanup
+    // fails. Range + orderBy on the same field, so no new index and still one read.
     const snapshot = await db
       .collection('school')
+      .where('sid', '<', RESERVED_TEST_SID_MIN)
       .orderBy('sid', 'desc')
       .limit(1)
       .get();
@@ -2114,7 +2512,47 @@ export class ConferenceRepository {
 
 // ─── SessionRepository ────────────────────────────────────────────
 
+const SESSION_COLLECTION = 'express-sessions';
+
 export class SessionRepository {
+  /**
+   * Read one session document. Returns the raw stored shape
+   * (`{ session, expires }`) or null when the document is absent.
+   *
+   * The express-session store adapter (`FirestoreStore`) delegates here rather
+   * than holding its own collection handle, so this class is the single owner
+   * of the `express-sessions` collection — `clearAuthenticatedSessions` below
+   * depends on the document shape, and two independent owners could drift.
+   */
+  async getSession(sid) {
+    Logger.debug('DB CALL: H.SessionRepository.getSession');
+    const doc = await db.collection(SESSION_COLLECTION).doc(sid).get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  /**
+   * Write one session document. `expires` is an epoch-millis number; the
+   * mirrored `expireAt` timestamp lets a Firestore TTL policy reap dead
+   * sessions for free (same pattern as the rateLimits store).
+   */
+  async setSession(sid, { session, expires }) {
+    Logger.debug('DB CALL: H.SessionRepository.setSession');
+    await db
+      .collection(SESSION_COLLECTION)
+      .doc(sid)
+      .set({
+        session,
+        expires,
+        expireAt: Firestore.Timestamp.fromMillis(expires),
+      });
+  }
+
+  /** Delete one session document. */
+  async deleteSession(sid) {
+    Logger.debug('DB CALL: H.SessionRepository.deleteSession');
+    await db.collection(SESSION_COLLECTION).doc(sid).delete();
+  }
+
   /**
    * Clears Google-authenticated sessions. Default scope (`includeAdmins: false`,
    * the "Clear Google Sign-Ins" admin button) deletes participant-only docs
@@ -2142,7 +2580,7 @@ export class SessionRepository {
    */
   async clearAuthenticatedSessions({ includeAdmins = false } = {}) {
     Logger.debug('DB CALL: H.SessionRepository.clearAuthenticatedSessions');
-    const snapshot = await db.collection('express-sessions').get();
+    const snapshot = await db.collection(SESSION_COLLECTION).get();
 
     const toDelete = [];
     const toStripUserEmail = [];
@@ -2191,5 +2629,66 @@ export class SessionRepository {
       deleted: toDelete.length,
       strippedAdminDocs: toStripUserEmail.length,
     };
+  }
+}
+
+// ─── RateLimitRepository ──────────────────────────────────────────
+
+const RATE_LIMIT_COLLECTION = 'rateLimits';
+
+/**
+ * Collapse a rate-limit bucket key to a safe Firestore document id.
+ *
+ * Firestore rejects ids containing `/` and caps them at 1500 bytes; callers
+ * pass IP- or email-derived keys, so encode first and then truncate.
+ */
+function safeDocId(key) {
+  return encodeURIComponent(String(key)).slice(0, 256);
+}
+
+export class RateLimitRepository {
+  /**
+   * Atomic fixed-window counter shared across all Cloud Run instances.
+   *
+   * Once the window count has reached `max`, the write is skipped: the request
+   * is already blocked, the block decision needs no further state (resetTime is
+   * fixed), and skipping avoids hammering a single doc past Firestore's
+   * ~1 write/s soft limit.
+   *
+   * @param {{ key: string, windowMs: number, max: number, now?: number }} params
+   * @returns {Promise<{ count: number, resetTime: number }>}
+   */
+  async incrementWindow({ key, windowMs, max, now = Date.now() }) {
+    Logger.debug('DB CALL: H.RateLimitRepository.incrementWindow');
+    const ref = db.collection(RATE_LIMIT_COLLECTION).doc(safeDocId(key));
+
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? snap.data() : null;
+
+      let count;
+      let resetTime;
+      if (!data || data.resetTime <= now) {
+        count = 1;
+        resetTime = now + windowMs;
+      } else {
+        // Already at/over the cap: return a blocking count without writing.
+        if (data.count >= max) {
+          return { count: data.count + 1, resetTime: data.resetTime };
+        }
+        count = data.count + 1;
+        resetTime = data.resetTime;
+      }
+
+      tx.set(ref, {
+        count,
+        resetTime,
+        // Lets an optional Firestore TTL policy on `expireAt` reap abandoned keys
+        // for free. Not required for correctness (windows reset in place).
+        expireAt: Firestore.Timestamp.fromMillis(resetTime + windowMs),
+      });
+
+      return { count, resetTime };
+    });
   }
 }

@@ -7,7 +7,7 @@
  * @requires @google-cloud/firestore
  *
  * @version 1.1.0
- * @copyright 2025
+ * @copyright 2026
  */
 
 import express from 'express';
@@ -35,7 +35,7 @@ import Logger from './src/utils/logger.js';
 import { safeJsonForScript } from './src/utils/htmlSafe.js';
 import { verifyDatabaseAccess } from './src/utils/startupChecks.js';
 import { cacheDebugMiddleware } from './src/utils/cacheUtils.js';
-import { db } from './src/config/firestore.js';
+import { APP_CONFIG } from './src/config/app.js';
 
 // Ensure required environment variables are set before starting
 if (!process.env.SESSION_SECRET) {
@@ -86,10 +86,7 @@ app.use(express.static('public'));
 
 app.use(
   session({
-    store: new FirestoreStore({
-      dataset: db,
-      kind: 'express-sessions',
-    }),
+    store: new FirestoreStore(),
     // `__Host-` is a browser-enforced prefix: the cookie must be Secure, host-only
     // (no Domain) and path=/, and no subdomain or non-HTTPS page can set or
     // overwrite it — closing subdomain cookie-injection / fixation. The cookie
@@ -112,8 +109,23 @@ app.use(
     },
   }),
 );
-app.use(express.json()); // for parsing application/json
-app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+// Bounded rather than left at Express's 100kb default (#573). The limit is
+// measured against the real bulk path, not picked from the round number — see
+// APP_CONFIG.http.jsonBodyLimit for the numbers and tests/jsonBodyLimit.test.js
+// for the round-trip guard that keeps a future tightening from silently 413ing
+// tournament creation. Same shape as the CSP sink's own limit further down.
+app.use(express.json({ limit: APP_CONFIG.http.jsonBodyLimit })); // for parsing application/json
+// #573 bounded only the JSON parser, leaving this one at 100kb — and this is
+// the parser carrying the bulk traffic (every form POST, including the two
+// tournament-seeding forms; only /createTournament posts JSON). Limits measured
+// the same way, see APP_CONFIG.http.
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: APP_CONFIG.http.urlencodedBodyLimit,
+    parameterLimit: APP_CONFIG.http.urlencodedParameterLimit,
+  }),
+); // for parsing application/x-www-form-urlencoded
 
 // Per-session CSRF token for the admin console (res.locals.csrfToken).
 // Admin sessions only — never creates a session for anonymous traffic, so

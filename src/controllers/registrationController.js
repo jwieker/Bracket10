@@ -9,7 +9,14 @@ import {
 } from '../services/index.js';
 import { APP_CONFIG, thisYear, isRegistrationOpen } from '../config/app.js';
 import { teamRepository, conferenceRepository } from '../repositories/index.js';
-import { controllerWrapper, saveSession } from '../utils/controllerUtils.js';
+import {
+  controllerWrapper,
+  homeErrorRedirect,
+  saveSession,
+  validateEntryTextField,
+  MAX_ENTRY_TEXT_LEN,
+  MAX_EMAIL_LEN,
+} from '../utils/controllerUtils.js';
 import { ValidationError } from '../utils/errors.js';
 import { extractPicks } from '../utils/entryPicksUtils.js';
 
@@ -34,16 +41,29 @@ async function fetchRegistrationPageData(groupName) {
   });
 
   const conferenceStats = {};
-  registrationData.teamData.forEach((team) => {
+  // teamData is `[...seenSIDs.values(), ...combinedFFOptions]`, and the
+  // seenSIDs values are references into the 300s `tournamentDetails_` cache —
+  // shared by reference with every other concurrent request, including the
+  // results page, which reads `conferenceName` off these same objects to build
+  // its conferenceStats. Stamping the name on directly (the previous `team.
+  // conferenceName = confName`) wrote per-request derived state onto shared
+  // documents; copy before deriving instead, per addPickCount's invariant.
+  //
+  // The write itself is kept rather than dropped: conferenceName is already
+  // denormalized onto school records, so it is redundant for ordinary teams —
+  // but the combined First Four options are built by hand in
+  // getGroupRegistrationData without one, so the registration page's
+  // conference filter still depends on this line for those.
+  registrationData.teamData = registrationData.teamData.map((team) => {
     const confID = schoolConfMap[team.sID];
-    if (confID) {
-      const confName = confMap[confID] || confID;
-      team.conferenceName = confName;
-      if (!conferenceStats[confName]) {
-        conferenceStats[confName] = { total: 0, picked: 0 };
-      }
-      conferenceStats[confName].total++;
+    if (!confID) return team;
+
+    const confName = confMap[confID] || confID;
+    if (!conferenceStats[confName]) {
+      conferenceStats[confName] = { total: 0, picked: 0 };
     }
+    conferenceStats[confName].total++;
+    return { ...team, conferenceName: confName };
   });
 
   return { verifiedGroupName, registrationData, conferenceStats };
@@ -59,10 +79,20 @@ const groupVerifyfornewEntry = controllerWrapper(async (req, res) => {
   }
 
   const input = req.body['game'];
+  // This was the one of the four group-name entry points with no guard at all,
+  // so an omitted or repeated `game` field went straight into the repository
+  // (#589). findGroupByName now rejects both, but check here too so the
+  // rejection is this route's own decision rather than a side effect of
+  // repository behaviour. Redirect rather than throw ValidationError: this is a
+  // browser form POST, and controllerWrapper answers a ValidationError with a
+  // JSON 400 body — the same wrong-content-type failure #549 fixed.
+  if (!input || typeof input !== 'string' || !input.trim()) {
+    return res.redirect(homeErrorRedirect('createError=true'));
+  }
 
   const data = await fetchRegistrationPageData(input);
   if (!data) {
-    return res.redirect('/?createError=true');
+    return res.redirect(homeErrorRedirect('createError=true'));
   }
 
   res.render('registration', {
@@ -87,7 +117,7 @@ const entryVerify = controllerWrapper(async (req, res) => {
 
   const reRenderWithError = async (errorMessage) => {
     const data = await fetchRegistrationPageData(groupName);
-    if (!data) return res.redirect('/?createError=true');
+    if (!data) return res.redirect(homeErrorRedirect('createError=true'));
     return res.render('registration', {
       teamData: data.registrationData.teamData,
       gameData: data.registrationData.gameData,
@@ -104,11 +134,30 @@ const entryVerify = controllerWrapper(async (req, res) => {
     });
   };
 
-  if (!personName || !personName.trim())
-    return reRenderWithError('Name is required.');
-  if (!team || !team.trim()) return reRenderWithError('Team name is required.');
-  if (!email || !email.trim()) return reRenderWithError('Email is required.');
-  if (!groupName || !groupName.trim())
+  // Same rule as the self-service update path (#548 triage): type-check before
+  // trimming, and cap the two publicly-rendered fields. The previous
+  // `!x || !x.trim()` guards were a truthiness check standing in for a type
+  // check — a repeated form key parses to a truthy *array* under
+  // express.urlencoded({ extended: true }), so `.trim` threw a TypeError and
+  // the branch whose whole job is "tell the user this field is wrong" answered
+  // with a 500 JSON body instead (#549).
+  //
+  // Caught and re-rendered rather than allowed to throw: reRenderWithError is
+  // this route's established shape (the user is looking at a form, not a fetch
+  // response), matching how the extractPicks failure below is handled.
+  let validName, validTeam, validEmail;
+  try {
+    validName = validateEntryTextField(personName, 'Name', MAX_ENTRY_TEXT_LEN);
+    validTeam = validateEntryTextField(team, 'Team name', MAX_ENTRY_TEXT_LEN);
+    validEmail = validateEntryTextField(email, 'Email', MAX_EMAIL_LEN);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return reRenderWithError(error.message);
+    }
+    throw error;
+  }
+
+  if (!groupName || typeof groupName !== 'string' || !groupName.trim())
     throw new ValidationError('Group name is required.');
 
   // #429: nothing downstream checks the group actually exists — pick
@@ -126,7 +175,8 @@ const entryVerify = controllerWrapper(async (req, res) => {
   // redirect anyway. Doing the redirect here directly says what actually
   // happens instead of routing through a call that can't do anything else.
   const verifiedGroupName = await verifyGroupExists(groupName);
-  if (!verifiedGroupName) return res.redirect('/?createError=true');
+  if (!verifiedGroupName)
+    return res.redirect(homeErrorRedirect('createError=true'));
 
   let picksIds, picksNames;
   try {
@@ -187,19 +237,43 @@ const entryVerify = controllerWrapper(async (req, res) => {
   // the user sees the error and the stale token expires in 10 minutes.
   const token = randomBytes(16).toString('hex');
   if (!req.session.pendingConfirmations) req.session.pendingConfirmations = {};
+
+  // #592: expiry was written and checked but never enforced — entryConfirm only
+  // deletes a token on a *successful* confirmation, so every abandoned
+  // registration stranded ~200-300 bytes in the session document forever. The
+  // session lives in Firestore and FirestoreStore.set() rewrites the whole doc
+  // on every save, so dead payloads are re-serialized on every later request,
+  // and enough of them walk the doc into the 1 MiB cap and make the session
+  // unwritable. Sweep here rather than on a timer: this request is already
+  // saving the session, so the sweep is free — the same lazy-sweep-on-write
+  // shape as pruneExpired (cacheUtils.js) and sweepExpiredClients (rateLimit.js).
+  // A payload with no expiresAt is swept too: it can only be a malformed or
+  // pre-#511 leftover, and it would never expire on its own.
+  const nowMs = Date.now();
+  for (const [staleToken, payload] of Object.entries(
+    req.session.pendingConfirmations,
+  )) {
+    if (!payload?.expiresAt || payload.expiresAt < nowMs) {
+      delete req.session.pendingConfirmations[staleToken];
+    }
+  }
+
   req.session.pendingConfirmations[token] = {
-    name: req.body['name'],
-    team: req.body['team'],
+    name: validName,
+    team: validTeam,
     groupName: verifiedGroupName,
     picksNames,
     expiresAt: Date.now() + 10 * 60 * 1000,
   };
   await saveSession(req);
 
+  // Persist the validated (trimmed) values rather than re-reading req.body, so
+  // what's stored is what was checked — and so create and update agree on the
+  // stored shape now that applyEntryUpdate writes trimmed values too.
   await createNewEntry(
-    req.body['email'],
-    req.body['team'],
-    req.body['name'],
+    validEmail,
+    validTeam,
+    validName,
     verifiedGroupName,
     normalizedPicksIds,
     year,
@@ -209,9 +283,23 @@ const entryVerify = controllerWrapper(async (req, res) => {
   res.redirect(`/entryConfirm?token=${token}`);
 }, 'entryVerify');
 
+// Confirmation tokens are minted as randomBytes(16).toString('hex') above, so a
+// real one is always 32 hex chars. Both halves of this guard are load-bearing
+// (#511): the token is used as a raw object key, so `?token=__proto__` used to
+// resolve to Object.prototype — truthy, with an `undefined` expiresAt that also
+// slipped past `< Date.now()` — and the request fell through to render with an
+// empty payload, 500ing in confirm.ejs instead of returning the intended 404.
+const CONFIRM_TOKEN_RE = /^[0-9a-f]{32}$/;
+
 const entryConfirm = controllerWrapper(async (req, res) => {
   const { token } = req.query;
-  const payload = req.session.pendingConfirmations?.[token];
+  const pending = req.session.pendingConfirmations;
+  const payload =
+    typeof token === 'string' &&
+    CONFIRM_TOKEN_RE.test(token) &&
+    Object.prototype.hasOwnProperty.call(pending ?? {}, token)
+      ? pending[token]
+      : null;
   if (!payload || payload.expiresAt < Date.now()) {
     return res.status(404).render('confirmExpired');
   }

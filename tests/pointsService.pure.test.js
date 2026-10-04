@@ -733,51 +733,49 @@ describe('findNextGameId', () => {
     { gameID: 9, team1ID: 5, team2ID: 6, winner: 5 }, // already decided
   ];
 
+  const map = new Map([
+    [1, activeGames[0]],
+    [2, activeGames[0]],
+    [3, activeGames[1]],
+    [4, activeGames[1]],
+    [5, activeGames[2]],
+    [6, activeGames[2]],
+  ]);
+
   it('returns the gameID when the team is team1ID of an unplayed game', () => {
-    expect(findNextGameId(1, activeGames)).toBe(5);
+    expect(findNextGameId(1, map)).toBe(5);
   });
 
   it('returns the gameID when the team is team2ID of an unplayed game', () => {
-    expect(findNextGameId(4, activeGames)).toBe(6);
+    expect(findNextGameId(4, map)).toBe(6);
   });
 
   it('returns -1 when the team has no unplayed game (already decided)', () => {
     // team 5 is in game 9 but it already has a winner
-    expect(findNextGameId(5, activeGames)).toBe(-1);
+    expect(findNextGameId(5, map)).toBe(-1);
   });
 
   it('returns -1 when the team is not in any game', () => {
-    expect(findNextGameId(99, activeGames)).toBe(-1);
-  });
-
-  it('returns -1 for an empty games list', () => {
-    expect(findNextGameId(1, [])).toBe(-1);
-  });
-
-  it('supports O(1) lookups when passed a precomputed Map', () => {
-    const map = new Map([
-      [1, activeGames[0]],
-      [2, activeGames[0]],
-      [3, activeGames[1]],
-      [4, activeGames[1]],
-      [5, activeGames[2]],
-      [6, activeGames[2]],
-    ]);
-    expect(findNextGameId(1, map)).toBe(5);
-    expect(findNextGameId(4, map)).toBe(6);
-    expect(findNextGameId(5, map)).toBe(-1); // already decided
     expect(findNextGameId(99, map)).toBe(-1);
   });
 
-  it('reflects in-place array mutations on subsequent calls (no stale cache)', () => {
-    const games = [{ gameID: 10, team1ID: 20, team2ID: 21, winner: null }];
-    expect(findNextGameId(20, games)).toBe(10);
+  it('returns -1 for an empty games map', () => {
+    expect(findNextGameId(1, new Map())).toBe(-1);
+  });
+
+  it('reflects in-place mutations on subsequent calls (no stale cache)', () => {
+    const game = { gameID: 10, team1ID: 20, team2ID: 21, winner: null };
+    const gamesMap = new Map([
+      [20, game],
+      [21, game],
+    ]);
+    expect(findNextGameId(20, gamesMap)).toBe(10);
 
     // Mutate the game to simulate it finishing
-    games[0].winner = 20;
+    game.winner = 20;
 
     // Should immediately reflect the change and return -1
-    expect(findNextGameId(20, games)).toBe(-1);
+    expect(findNextGameId(20, gamesMap)).toBe(-1);
   });
 });
 

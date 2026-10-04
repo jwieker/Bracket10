@@ -1,0 +1,7 @@
+<span class="admin-team-logo" aria-hidden="true">
+    <% if (logoUrl) { %>
+        <img src="<%= logoUrl %>" alt="" loading="lazy">
+    <% } else { %>
+        <span class="admin-team-logo-fallback"><%= String(name || '').substring(0, 2).toUpperCase() %></span>
+    <% } %>
+</span>

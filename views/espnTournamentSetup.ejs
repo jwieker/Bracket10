@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <%- include('partials/admin-header') %>
+        <title>Create from ESPN — Admin</title>
+</head>
+
+<% const adminSection='tournament' ; %>
+
+    <body>
+        <%- include('partials/admin-nav', { year, adminSection }) %>
+
+            <div class="container-xl pt-1 pb-5" id="espnSetupCont">
+                <h1 class="h3 mb-3">Create <%= year %> Bracket from ESPN</h1>
+
+                <!-- ── 1. Configure ─────────────────────────────────────────── -->
+                <div class="card mb-3" id="configCard">
+                    <div class="card-body">
+                        <h2 class="h5">1. Configure</h2>
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-auto">
+                                <label class="form-label" for="espnYear">Year</label>
+                                <input type="number" class="form-control" id="espnYear" value="<%= year %>" min="1980">
+                            </div>
+                        </div>
+
+                        <label class="form-label">First Four dates &amp; daily play-in counts</label>
+                        <div id="playInRows"></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="addPlayInRow">+ Add
+                            date</button>
+
+                        <div class="row g-2 mt-3">
+                            <div class="col-auto">
+                                <label class="form-label" for="r1Date1">1st Round date 1</label>
+                                <input type="date" class="form-control" id="r1Date1">
+                            </div>
+                            <div class="col-auto">
+                                <label class="form-label" for="r1Date2">1st Round date 2</label>
+                                <input type="date" class="form-control" id="r1Date2">
+                            </div>
+                        </div>
+
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" id="ignoreResolvedPlayIns">
+                            <label class="form-check-label" for="ignoreResolvedPlayIns">
+                                Ignore resolved play-in results (test mode)
+                            </label>
+                            <div class="form-text">
+                                Check this when testing historical dates to replace known play-in
+                                winners with unresolved “Play-in winner: A / B” slots.
+                                Applies to both Preview and Create; results are not imported.
+                            </div>
+                        </div>
+
+                        <fieldset class="mt-3">
+                            <legend class="h6">Final Four pairings</legend>
+                            <div class="row g-2">
+                                <% bracketRegions.forEach((region, position) => { %>
+                                    <div class="col-12 col-md-6 col-lg-3">
+                                        <label class="form-label" for="regionSlot<%= position %>">Semifinal <%= Math.floor(position / 2) + 1 %>, region <%= position % 2 + 1 %></label>
+                                        <select class="form-select region-order" id="regionSlot<%= position %>" data-previous-value="<%= region.regionID %>">
+                                            <% bracketRegions.forEach(option => { %>
+                                                <option value="<%= option.regionID %>" <%- Number(option.regionID) === Number(region.regionID) ? 'selected' : '' %>><%= option.regionName %></option>
+                                            <% }); %>
+                                        </select>
+                                    </div>
+                                <% }); %>
+                            </div>
+                        </fieldset>
+
+                        <button type="button" class="btn btn-primary mt-3" id="previewBtn">Fetch &amp; Preview</button>
+                    </div>
+                </div>
+
+                <!-- ── 2/3. Preview + Resolve exceptions ────────────────────── -->
+                <div class="card mb-3 d-none" id="previewCard">
+                    <div class="card-body">
+                        <h2 class="h5">2. Preview</h2>
+                        <div id="fetchSummary" class="mb-2 small text-muted"></div>
+                        <div id="diagnostics" class="mb-2"></div>
+                        <div id="infoDiagnostics" class="mb-2 small text-muted"></div>
+                        <div id="regionPreview" class="row g-3"></div>
+                    </div>
+                </div>
+
+                <!-- ── 4. Confirm pairings ───────────────────────────────────── -->
+                <div class="card mb-3 d-none" id="pairingCard">
+                    <div class="card-body">
+                        <h2 class="h5">4. Confirm semifinal pairings</h2>
+                        <p class="mb-2" id="pairingSummary"></p>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="confirmPairings">
+                            <label class="form-check-label" for="confirmPairings">
+                                I confirm this year's semifinal pairings are correct.
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── 5. Create ─────────────────────────────────────────────── -->
+                <button type="button" class="btn btn-success d-none" id="createBtn" disabled>Create Tournament</button>
+                <div id="createResult" class="mt-2"></div>
+            </div>
+
+            <script nonce="<%= cspNonce %>">
+                (function () {
+                    const csrfToken = '<%= csrfToken %>';
+                    const bracketRegionNames = <%- safeJson(Object.fromEntries((bracketRegions || []).map(r => [r.regionID, r.regionName]))) %>;
+
+                    const makeSpan = (cls, text) => {
+                        const s = document.createElement('span');
+                        if (cls) s.className = cls;
+                        s.textContent = text;
+                        return s;
+                    };
+
+                    let lastReady = false;
+                    let configVersion = 0;
+                    function invalidatePreview() {
+                        configVersion++;
+                        lastReady = false;
+                        document.getElementById('confirmPairings').checked = false;
+                        document.getElementById('createBtn').disabled = true;
+                        document.getElementById('pairingCard').classList.add('d-none');
+                        document.getElementById('previewCard').classList.add('d-none');
+                    }
+                    document.getElementById('configCard').addEventListener('input', invalidatePreview);
+                    document.getElementById('configCard').addEventListener('change', invalidatePreview);
+                    document.querySelectorAll('.region-order').forEach((select) => {
+                        select.addEventListener('change', () => {
+                            const previousValue = select.dataset.previousValue;
+                            document.querySelectorAll('.region-order').forEach((other) => {
+                                if (other !== select && other.value === select.value) {
+                                    other.value = previousValue;
+                                    other.dataset.previousValue = previousValue;
+                                }
+                            });
+                            select.dataset.previousValue = select.value;
+                        });
+                    });
+
+                    // ── Play-in date/count rows ──────────────────────────────
+                    const playInRows = document.getElementById('playInRows');
+                    function addPlayInRow(dateVal, countVal) {
+                        const row = document.createElement('div');
+                        row.className = 'row g-2 align-items-end mb-1 play-in-row';
+                        const dateCol = document.createElement('div');
+                        dateCol.className = 'col-auto';
+                        const dateInput = document.createElement('input');
+                        dateInput.type = 'date';
+                        dateInput.className = 'form-control play-in-date';
+                        if (dateVal) dateInput.value = dateVal;
+                        dateInput.addEventListener('change', updateR1DateDefaults);
+                        dateCol.appendChild(dateInput);
+
+                        const countCol = document.createElement('div');
+                        countCol.className = 'col-auto';
+                        const countInput = document.createElement('input');
+                        countInput.type = 'number';
+                        countInput.className = 'form-control play-in-count';
+                        countInput.min = '1';
+                        countInput.max = '8';
+                        countInput.value = countVal ?? 2;
+                        countCol.appendChild(countInput);
+
+                        const removeCol = document.createElement('div');
+                        removeCol.className = 'col-auto';
+                        const removeBtn = document.createElement('button');
+                        removeBtn.type = 'button';
+                        removeBtn.className = 'btn btn-sm btn-outline-danger';
+                        removeBtn.textContent = 'Remove';
+                        removeBtn.addEventListener('click', () => {
+                            row.remove();
+                            updateR1DateDefaults();
+                            invalidatePreview();
+                        });
+                        removeCol.appendChild(removeBtn);
+
+                        row.append(dateCol, countCol, removeCol);
+                        playInRows.appendChild(row);
+                    }
+                    document.getElementById('addPlayInRow').addEventListener('click', () => { addPlayInRow(); invalidatePreview(); });
+                    addPlayInRow();
+                    addPlayInRow();
+
+                    // Prefills R1 dates with the 2 days after the LAST configured play-in
+                    // day — still freely editable, per the plan's admin-flow step 2.
+                    function updateR1DateDefaults() {
+                        const dates = [...document.querySelectorAll('.play-in-date')]
+                            .map((el) => el.value)
+                            .filter(Boolean)
+                            .sort();
+                        if (dates.length === 0) return;
+                        const last = new Date(dates[dates.length - 1] + 'T00:00:00Z');
+                        const r1Date1 = document.getElementById('r1Date1');
+                        const r1Date2 = document.getElementById('r1Date2');
+                        const fmt = (d) => d.toISOString().slice(0, 10);
+                        const plus1 = new Date(last);
+                        plus1.setUTCDate(plus1.getUTCDate() + 1);
+                        const plus2 = new Date(last);
+                        plus2.setUTCDate(plus2.getUTCDate() + 2);
+                        if (!r1Date1.dataset.userEdited) r1Date1.value = fmt(plus1);
+                        if (!r1Date2.dataset.userEdited) r1Date2.value = fmt(plus2);
+                    }
+                    document.getElementById('r1Date1').addEventListener('input', (e) => { e.target.dataset.userEdited = '1'; });
+                    document.getElementById('r1Date2').addEventListener('input', (e) => { e.target.dataset.userEdited = '1'; });
+
+                    // ── Request body shared by preview + create ──────────────
+                    function toYyyymmdd(dateStr) {
+                        return dateStr ? dateStr.replace(/-/g, '') : null;
+                    }
+                    function buildRequestBody() {
+                        const playInDates = [];
+                        const playInCounts = [];
+                        document.querySelectorAll('.play-in-row').forEach((row) => {
+                            const d = toYyyymmdd(row.querySelector('.play-in-date').value);
+                            const c = Number(row.querySelector('.play-in-count').value);
+                            if (d) { playInDates.push(d); playInCounts.push(c); }
+                        });
+                        const r1Dates = [toYyyymmdd(document.getElementById('r1Date1').value), toYyyymmdd(document.getElementById('r1Date2').value)].filter(Boolean);
+                        return {
+                            year: Number(document.getElementById('espnYear').value),
+                            playInDates,
+                            r1Dates,
+                            playInCounts,
+                            ignoreResolvedPlayIns: document.getElementById('ignoreResolvedPlayIns').checked,
+                            regionOrder: [...document.querySelectorAll('.region-order')].map(select => Number(select.value)),
+                        };
+                    }
+
+                    // ── Preview rendering ────────────────────────────────────
+                    function renderDiagnostics(container, items, cls) {
+                        container.replaceChildren();
+                        if (!items || items.length === 0) return;
+                        const ul = document.createElement('ul');
+                        ul.className = 'mb-0';
+                        items.forEach((d) => {
+                            const li = document.createElement('li');
+                            li.className = cls;
+                            li.textContent = d.message;
+                            ul.appendChild(li);
+                        });
+                        container.appendChild(ul);
+                    }
+
+                    function renderRegionPreview(preview) {
+                        const container = document.getElementById('regionPreview');
+                        container.replaceChildren();
+                        if (!preview || !preview.regions) return;
+                        preview.regions.forEach((region) => {
+                            const col = document.createElement('div');
+                            col.className = 'col-12 col-md-6 col-lg-3';
+                            const heading = document.createElement('h3');
+                            heading.className = 'h6';
+                            heading.textContent = bracketRegionNames[region.regionID] ?? `Region ${region.regionID}`;
+                            col.appendChild(heading);
+
+                            const list = document.createElement('ul');
+                            list.className = 'list-unstyled small';
+                            region.games.forEach((game) => {
+                                [game.team1, game.team2].forEach((slot) => {
+                                    const li = document.createElement('li');
+                                    li.className = 'mb-1';
+                                    if (slot.sID) {
+                                        li.append(makeSpan(null, `Seed ${slot.seed} — ${slot.displayName || `school #${slot.sID}`}`));
+                                    } else if (slot.playIn) {
+                                        // text-wrap overrides .badge's white-space:nowrap, and mw-100 caps
+                                        // it at the column width — otherwise a long pair of team names
+                                        // runs past the column and overlaps its neighbor.
+                                        li.append(makeSpan('badge text-bg-warning text-wrap text-start mw-100', `Seed ${slot.seed} — Play-in winner: ${slot.playIn.team1.displayName} / ${slot.playIn.team2.displayName}`));
+                                    } else {
+                                        li.append(makeSpan('text-danger', `Seed ${slot.seed} — unresolved`));
+                                    }
+                                    list.appendChild(li);
+                                });
+                            });
+                            col.appendChild(list);
+                            container.appendChild(col);
+                        });
+                    }
+
+                    document.getElementById('previewBtn').addEventListener('click', async () => {
+                        const previewBtn = document.getElementById('previewBtn');
+                        previewBtn.disabled = true;
+                        previewBtn.textContent = 'Fetching...';
+                        const requestedVersion = configVersion;
+                        lastReady = false;
+                        document.getElementById('createBtn').disabled = true;
+                        try {
+                            const body = buildRequestBody();
+                            const response = await fetch('/admin/tournament/espn-plan', {
+                                method: 'POST',
+                                headers: { 'x-csrf-token': csrfToken, 'Content-Type': 'application/json' },
+                                body: JSON.stringify(body),
+                            });
+                            const data = await response.json();
+                            if (requestedVersion !== configVersion) return;
+
+                            document.getElementById('previewCard').classList.remove('d-none');
+                            const summary = document.getElementById('fetchSummary');
+                            summary.replaceChildren();
+                            (data.fetchSummary || []).forEach((s) => {
+                                summary.appendChild(makeSpan(null, s.expectedPlayIns === undefined
+                                        ? `${s.date}: ${s.found} found, ${s.excluded} excluded  `
+                                        : `${s.date}: ${s.foundPlayIns} play-ins found / ${s.expectedPlayIns} expected  `));
+                            });
+
+                            if (!response.ok) {
+                                renderDiagnostics(document.getElementById('diagnostics'), [{ message: data.message || 'Request failed.' }], 'text-danger');
+                                document.getElementById('pairingCard').classList.add('d-none');
+                                document.getElementById('createBtn').classList.add('d-none');
+                                return;
+                            }
+
+                            renderDiagnostics(document.getElementById('diagnostics'), data.diagnostics, 'text-danger');
+                            renderDiagnostics(document.getElementById('infoDiagnostics'), data.infoDiagnostics, 'text-muted');
+                            renderRegionPreview(data.preview);
+                            document.getElementById('pairingSummary').textContent = (data.preview?.semifinalPairings || [])
+                                .map((pair, index) => `Semifinal ${index + 1}: ${pair.regions.map(id => bracketRegionNames[id]).join(' vs ')}.`).join(' ');
+
+                            lastReady = data.ready === true;
+                            document.getElementById('pairingCard').classList.toggle('d-none', !lastReady);
+                            document.getElementById('createBtn').classList.toggle('d-none', !lastReady);
+                            document.getElementById('confirmPairings').checked = false;
+                            document.getElementById('createBtn').disabled = true;
+                        } catch (err) {
+                            renderDiagnostics(document.getElementById('diagnostics'), [{ message: 'Failed to reach server.' }], 'text-danger');
+                        } finally {
+                            previewBtn.disabled = false;
+                            previewBtn.textContent = 'Fetch & Preview';
+                        }
+                    });
+
+                    document.getElementById('confirmPairings').addEventListener('change', (e) => {
+                        document.getElementById('createBtn').disabled = !(lastReady && e.target.checked);
+                    });
+
+                    document.getElementById('createBtn').addEventListener('click', async () => {
+                        const createBtn = document.getElementById('createBtn');
+                        if (!lastReady || !document.getElementById('confirmPairings').checked) return;
+                        createBtn.disabled = true;
+                        createBtn.textContent = 'Creating...';
+                        const resultEl = document.getElementById('createResult');
+                        resultEl.replaceChildren();
+                        try {
+                            const body = { ...buildRequestBody(), confirmPairings: true };
+                            const response = await fetch('/createTournamentFromEspn', {
+                                method: 'POST',
+                                headers: { 'x-csrf-token': csrfToken, 'Content-Type': 'application/json' },
+                                body: JSON.stringify(body),
+                            });
+                            const data = await response.json();
+                            if (!response.ok) {
+                                resultEl.appendChild(makeSpan('text-danger', data.message || 'Create failed.'));
+                                createBtn.disabled = false;
+                                createBtn.textContent = 'Create Tournament';
+                                return;
+                            }
+                            resultEl.appendChild(makeSpan('text-success', 'Created! Redirecting...'));
+                            window.location.href = `/admin/tournament?year=${body.year}`;
+                        } catch (err) {
+                            resultEl.appendChild(makeSpan('text-danger', 'Failed to reach server.'));
+                            createBtn.disabled = false;
+                            createBtn.textContent = 'Create Tournament';
+                        }
+                    });
+                }());
+            </script>
+    </body>
+
+</html>

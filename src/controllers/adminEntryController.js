@@ -19,6 +19,7 @@ import {
   controllerWrapper,
   validateRequest,
   successResponse,
+  parseYear,
   parseYearOrDefault,
   validateEntryId,
 } from '../utils/controllerUtils.js';
@@ -26,8 +27,14 @@ import { ValidationError } from '../utils/errors.js';
 import { extractPicks } from '../utils/entryPicksUtils.js';
 
 const viewEntry = controllerWrapper(async (req, res) => {
-  const { entryId, year } = req.query;
+  const { entryId } = req.query;
   validateEntryId(entryId);
+  // Parse once, up front (#491). This used to pass `year` through raw to
+  // getEntryById and `Number(year)` to getGroupRegistrationData, so "abc"
+  // reached the repository as a string in one call and NaN in the other.
+  // Defaulting also matters for the view: `year` is rendered into hidden
+  // inputs on editEntry.ejs, and an omitted year used to post back empty.
+  const year = parseYearOrDefault(req.query.year, thisYear);
 
   const nameFound =
     APP_CONFIG.tournament.paymentCollectorGroup ||
@@ -36,7 +43,7 @@ const viewEntry = controllerWrapper(async (req, res) => {
   const PRIORITY_GROUPS = APP_CONFIG.tournament.priorityGroups;
   const [entryData, registrationData, allGroups] = await Promise.all([
     gameRepository.getEntryById(entryId, year),
-    getGroupRegistrationData(nameFound, Number(year)),
+    getGroupRegistrationData(nameFound, year),
     viewRepository.getAllGroups(),
   ]);
 
@@ -117,7 +124,13 @@ const entryUpdate = controllerWrapper(async (req, res) => {
   const entryPayload = {
     id: req.body['entryId'],
     email: req.body['email'],
-    year: req.body['year'],
+    // #590: write the parsed `year`, not the raw body field. Every read above
+    // already uses the parsed value, so the raw one diverges exactly where
+    // parseYearOrDefault earns its keep: '' becomes Number('') === 0 and an
+    // omitted field stays undefined, and neither is caught by the NaN guard in
+    // hierarchicalRepository (#477) — so the write lands on
+    // tournaments/0/... or tournaments/undefined/... and busts the wrong caches.
+    year,
     teamName: req.body['team'],
     person: req.body['name'],
     groups,
@@ -223,7 +236,7 @@ const addGroup = controllerWrapper(async (req, res) => {
 const getUnsentEmails = controllerWrapper(async (req, res) => {
   const { year } = req.query;
   if (!year) throw new ValidationError('Year is required.');
-  const entries = await getUnsentEmailEntries(Number(year));
+  const entries = await getUnsentEmailEntries(parseYear(year));
   return successResponse(
     res,
     { entries, count: entries.length },
@@ -240,7 +253,7 @@ const markEmailsSentController = controllerWrapper(async (req, res) => {
   // Firestore `id` field round-tripped through a JSON POST (adminEntries.ejs),
   // so they arrive as Numbers, not strings — coerce before validating shape (#335).
   entryIds.forEach((id) => validateEntryId(String(id)));
-  await markEmailsSent(entryIds, Number(year));
+  await markEmailsSent(entryIds, parseYear(year));
   return successResponse(
     res,
     { marked: entryIds.length },
@@ -254,7 +267,7 @@ const deleteEntry = controllerWrapper(async (req, res) => {
   if (!entryId || !year) {
     return res.status(400).send('Missing entryId or year');
   }
-  await entryRepository.deleteEntry(Number(entryId), Number(year));
+  await entryRepository.deleteEntry(Number(entryId), parseYear(year));
   res.redirect('/updates');
 }, 'deleteEntry');
 
@@ -267,7 +280,7 @@ const restoreEntry = controllerWrapper(async (req, res) => {
     return res.status(400).send('Missing entryId or year');
   }
   const numericEntryId = Number(entryId);
-  const numericYear = Number(year);
+  const numericYear = parseYear(year);
   const wasRestored = await entryRepository.restoreEntry(
     numericEntryId,
     numericYear,
@@ -305,11 +318,12 @@ const purgeEntry = controllerWrapper(async (req, res) => {
   if (!entryId || !year) {
     return res.status(400).send('Missing entryId or year');
   }
-  await entryRepository.purgeEntry(Number(entryId), Number(year));
+  const numericYear = parseYear(year);
+  await entryRepository.purgeEntry(Number(entryId), numericYear);
   if (req.is('json')) {
     return successResponse(
       res,
-      { entryId: Number(entryId), year: Number(year) },
+      { entryId: Number(entryId), year: numericYear },
       'Entry permanently deleted.',
     );
   }
@@ -321,7 +335,12 @@ const getDeletedEntriesController = controllerWrapper(async (req, res) => {
   if (!year) {
     throw new ValidationError('Year is a required parameter.');
   }
-  const entries = await entryRepository.getDeletedEntries(Number(year));
+  // parseYear, not Number(): a non-numeric year is truthy, so it cleared the
+  // check above and reached the repository as NaN, where yearCol built the real
+  // (always-empty) path tournaments/NaN/entries and the endpoint answered
+  // 200 [] — "no deleted entries" — instead of 400 (#477). This was the one
+  // year-accepting controller bypassing the shared parseYear helper.
+  const entries = await entryRepository.getDeletedEntries(parseYear(year));
   res.json(entries);
 }, 'getDeletedEntriesController');
 

@@ -11,6 +11,7 @@ import {
 import { APP_CONFIG } from '../src/config/app.js';
 import { ValidationError } from '../src/utils/errors.js';
 import { FieldValue } from '@google-cloud/firestore';
+import Logger from '../src/utils/logger.js';
 
 // ── Mock harness ──────────────────────────────────────────────────────────
 // One shared docRef / collectionRef pair links circularly so any chained
@@ -31,6 +32,7 @@ const {
   batchMock,
   batchUpdateMock,
   batchSetMock,
+  batchCreateMock,
   batchDeleteMock,
   batchCommitMock,
   cacheGet,
@@ -80,11 +82,13 @@ const {
 
   const batchUpdateMock = vi.fn();
   const batchSetMock = vi.fn();
+  const batchCreateMock = vi.fn();
   const batchDeleteMock = vi.fn();
   const batchCommitMock = vi.fn().mockResolvedValue({});
   const batchRef = {
     update: batchUpdateMock,
     set: batchSetMock,
+    create: batchCreateMock,
     delete: batchDeleteMock,
     commit: batchCommitMock,
   };
@@ -128,6 +132,7 @@ const {
     batchMock,
     batchUpdateMock,
     batchSetMock,
+    batchCreateMock,
     batchDeleteMock,
     batchCommitMock,
     cacheGet,
@@ -169,6 +174,230 @@ beforeEach(() => {
   cacheGet.mockReturnValue(undefined);
 });
 
+// ─── Path helpers ─────────────────────────────────────────────────────────
+// #477: String(NaN) is the valid path segment "NaN", so an unvalidated year
+// silently produced a real, always-empty tournaments/NaN/{sub} ref.
+// #598: testing only Number.isNaN caught 'abc' but missed the shapes a
+// forgetful caller actually produces — '' coerces to 0, and undefined/null
+// pass toNum unchanged — each building tournaments/0, tournaments/undefined,
+// or tournaments/null. The guard now requires a positive integer, so an empty
+// result can only mean actually empty.
+describe('year path guard', () => {
+  const repo = new EntryRepository();
+  const tourneyRepo = new TourneyRepository();
+  const gameRepo = new GameRepository();
+
+  test.each([
+    ['abc', 'non-numeric string'],
+    ['NaN', 'the literal string NaN'],
+    [{}, 'an object'],
+    ['', 'empty string, which Number() coerces to 0 (#598)'],
+    [0, 'zero (#598)'],
+    [null, 'null, which toNum passes through unchanged (#598)'],
+    [-2024, 'a negative year'],
+    [2024.5, 'a non-integer year'],
+  ])('rejects %s (%s) instead of building a real path', async (year) => {
+    await expect(repo.getDeletedEntries(year)).rejects.toThrow(ValidationError);
+    expect(queryGetMock).not.toHaveBeenCalled();
+    expect(docMock).not.toHaveBeenCalled();
+  });
+
+  test('undefined still falls back to thisYear where the method declares a default', async () => {
+    // Deliberate, not an oversight: a JS default parameter fires on undefined,
+    // so `year = thisYear` absorbs it before the guard ever sees it. Pinned so
+    // nobody "fixes" the guard into rejecting a documented default.
+    queryGetMock.mockResolvedValue({ docs: [] });
+
+    await repo.getDeletedEntries(undefined);
+
+    expect(docMock).toHaveBeenCalledWith(
+      String(APP_CONFIG.tournament.currentYear),
+    );
+  });
+
+  test('undefined is rejected where the method has no default', async () => {
+    // deleteGamesByYear takes a bare `year`, so undefined used to address
+    // tournaments/undefined and "succeed" against an empty collection — the
+    // caller believing it had cleared a year it never touched.
+    await expect(tourneyRepo.deleteGamesByYear(undefined)).rejects.toThrow(
+      ValidationError,
+    );
+    expect(queryGetMock).not.toHaveBeenCalled();
+  });
+
+  test('the doc-level writers are guarded too, not just the subcollection helper', async () => {
+    // upsertTournamentDoc addresses tournaments/{year} directly rather than
+    // through yearCol, so before #598 it *created* a real tournaments/undefined
+    // document holding { year: NaN } — a write, not merely an empty read.
+    await expect(tourneyRepo.upsertTournamentDoc(undefined)).rejects.toThrow(
+      ValidationError,
+    );
+    await expect(tourneyRepo.deleteTournamentDoc('')).rejects.toThrow(
+      ValidationError,
+    );
+    expect(setMock).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  test('reserved live-E2E years are still addressable', async () => {
+    // The guard is deliberately narrower than parseYear, which bounds years to
+    // 1980..currentYear+1. The live suites address these reserved years through
+    // this layer, so mirroring parseYear's range here would break them.
+    queryGetMock.mockResolvedValue({ docs: [] });
+
+    for (const year of [9996, 9997, 9999]) {
+      await repo.getDeletedEntries(year);
+    }
+
+    expect(docMock.mock.calls.map((c) => c[0])).toEqual([
+      '9996',
+      '9997',
+      '9999',
+    ]);
+  });
+
+  test('numeric and numeric-string years still resolve to the same path', async () => {
+    queryGetMock.mockResolvedValue({ docs: [] });
+
+    await repo.getDeletedEntries(2024);
+    await repo.getDeletedEntries('2024');
+
+    expect(docMock.mock.calls.map((c) => c[0])).toEqual(['2024', '2024']);
+  });
+
+  // The reserved block cuts both ways: the deployed app must not be able to
+  // reach the sentinel years, and a live-E2E run must not be able to bulk-delete
+  // a real season. testing.md stated the second rule; nothing enforced it.
+  describe('reserved test-year block', () => {
+    const ORIGINAL_ENV = { ...process.env };
+    afterEach(() => {
+      process.env.NODE_ENV = ORIGINAL_ENV.NODE_ENV;
+      process.env.LIVE_E2E = ORIGINAL_ENV.LIVE_E2E;
+    });
+
+    test('production cannot address a reserved year', async () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.LIVE_E2E;
+
+      await expect(repo.getDeletedEntries(9999)).rejects.toThrow(
+        ValidationError,
+      );
+      expect(docMock).not.toHaveBeenCalled();
+    });
+
+    test('production can still address a real season', async () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.LIVE_E2E;
+      queryGetMock.mockResolvedValue({ docs: [] });
+
+      await repo.getDeletedEntries(2026);
+
+      expect(docMock).toHaveBeenCalledWith('2026');
+    });
+
+    test('a live-E2E run refuses a year-scoped delete of a real season', async () => {
+      process.env.LIVE_E2E = 'true';
+
+      // The exact shape that made targeted-updates.live.test.js unsafe: a live
+      // suite seeded into a real-looking year, whose teardown wipes every
+      // document for it rather than only the ones it created.
+      //
+      // All six bulkDeleteYearSegment call sites are asserted here, and adding
+      // a seventh belongs in this loop: the guard is inert under plain
+      // `npm test` (LIVE_E2E unset), so an unpinned destructive call site can
+      // be swapped back to a raw String(year) with the suite staying green.
+      // GameRepository carries its own deleteGamesByYear /
+      // deleteSchoolRecordsByYear, distinct from TourneyRepository's twins.
+      for (const year of [2019, 2022, 2026]) {
+        await expect(tourneyRepo.deleteGamesByYear(year)).rejects.toThrow(
+          ValidationError,
+        );
+        await expect(
+          tourneyRepo.deleteSchoolRecordsByYear(year),
+        ).rejects.toThrow(ValidationError);
+        await expect(tourneyRepo.deleteRegionsByYear(year)).rejects.toThrow(
+          ValidationError,
+        );
+        await expect(tourneyRepo.deleteTournamentDoc(year)).rejects.toThrow(
+          ValidationError,
+        );
+        await expect(gameRepo.deleteGamesByYear(year)).rejects.toThrow(
+          ValidationError,
+        );
+        await expect(gameRepo.deleteSchoolRecordsByYear(year)).rejects.toThrow(
+          ValidationError,
+        );
+      }
+      expect(queryGetMock).not.toHaveBeenCalled();
+      expect(deleteMock).not.toHaveBeenCalled();
+    });
+
+    test('a live-E2E run may still delete the reserved years', async () => {
+      process.env.LIVE_E2E = 'true';
+      queryGetMock.mockResolvedValue({ docs: [] });
+
+      await tourneyRepo.deleteGamesByYear(9995);
+      await tourneyRepo.deleteRegionsByYear(9999);
+
+      expect(docMock.mock.calls.map((c) => c[0])).toEqual(['9995', '9999']);
+    });
+
+    test('production may still delete a real season — the admin flow depends on it', async () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.LIVE_E2E;
+      queryGetMock.mockResolvedValue({ docs: [] });
+
+      await tourneyRepo.deleteGamesByYear(2022);
+
+      expect(docMock).toHaveBeenCalledWith('2022');
+    });
+  });
+
+  // Wiring tests. The guard itself is covered above via getDeletedEntries and
+  // the delete methods; these pin that each remaining call site is actually
+  // routed through it, so swapping one back to a raw String(year) fails here
+  // rather than silently reopening the hole at that one path builder.
+  describe('every tournaments path builder is wired to the guard', () => {
+    test.each([0, '', null, -2024, 2024.5])(
+      'the pendingRecalcSIDs trio rejects an invalid year (%s)',
+      async (year) => {
+        await expect(gameRepo.addPendingRecalcSIDs(year, [1])).rejects.toThrow(
+          ValidationError,
+        );
+        await expect(gameRepo.getPendingRecalcSIDs(year)).rejects.toThrow(
+          ValidationError,
+        );
+        await expect(
+          gameRepo.clearPendingRecalcSIDs(year, [1]),
+        ).rejects.toThrow(ValidationError);
+
+        expect(setMock).not.toHaveBeenCalled();
+        expect(docGetMock).not.toHaveBeenCalled();
+      },
+    );
+
+    // The one shape the guard suite above can't reach: the year is pulled out
+    // of row position [2] rather than passed as an argument, so a malformed row
+    // is the failure mode rather than a malformed call.
+    test.each([undefined, 0, '', null])(
+      'the batch inserts reject a bad year embedded in the row (%s)',
+      async (year) => {
+        const row = [1, 1, year, 67, 307, null, 1, 9, 1, 1, 16];
+
+        await expect(
+          tourneyRepo.insertMultipleGamesWithoutTeams([row]),
+        ).rejects.toThrow(ValidationError);
+        await expect(
+          tourneyRepo.insertMultipleGamesWithTeams([row]),
+        ).rejects.toThrow(ValidationError);
+
+        expect(batchSetMock).not.toHaveBeenCalled();
+        expect(batchCommitMock).not.toHaveBeenCalled();
+      },
+    );
+  });
+});
+
 // ─── EntryRepository ──────────────────────────────────────────────────────
 describe('EntryRepository', () => {
   const repo = new EntryRepository();
@@ -207,6 +436,34 @@ describe('EntryRepository', () => {
       '2024',
       '2',
     ]);
+  });
+
+  test('writes extreme point values through unchanged, without clamping', async () => {
+    // The points engine owns the arithmetic; this method is a pass-through
+    // writer. Pinned so a "sanitize the payload" change here has to be
+    // deliberate — silently clamping a negative (possible mid-correction) or a
+    // large value would corrupt standings with no error anywhere.
+    await repo.updateMultipleEntryPoints(
+      [
+        { entryID: 1, points: -10, possPoints: -5 },
+        {
+          entryID: 2,
+          points: Number.MAX_SAFE_INTEGER,
+          possPoints: Number.MAX_SAFE_INTEGER,
+        },
+      ],
+      2024,
+    );
+
+    expect(batchUpdateMock).toHaveBeenNthCalledWith(1, expect.anything(), {
+      totalPoints: -10,
+      possPoints: -5,
+    });
+    expect(batchUpdateMock).toHaveBeenNthCalledWith(2, expect.anything(), {
+      totalPoints: Number.MAX_SAFE_INTEGER,
+      possPoints: Number.MAX_SAFE_INTEGER,
+    });
+    expect(batchCommitMock).toHaveBeenCalledTimes(1);
   });
 
   test('createEntry writes full entry doc and busts per-group + allEntries caches', async () => {
@@ -678,6 +935,70 @@ describe('EntryRepository', () => {
     ]);
   });
 
+  // #478: the Recently Deleted modal used to pay a full scan of the year's
+  // entries on every open/refresh, unlike every sibling full-collection read.
+  test('getDeletedEntries caches its result under deletedEntries_{year} with a 300s TTL', async () => {
+    queryGetMock.mockResolvedValue({
+      docs: [
+        makeDoc('1', {
+          id: 1,
+          person: 'Alice',
+          teamName: 'T1',
+          email: 'a@x',
+          groups: ['G'],
+          deletedAt: '2024-03-01T00:00:00.000Z',
+        }),
+      ],
+    });
+
+    const results = await repo.getDeletedEntries(2024);
+
+    expect(cacheSet).toHaveBeenCalledWith('deletedEntries_2024', results, 300);
+  });
+
+  test('getDeletedEntries serves a warm cache hit without touching Firestore', async () => {
+    const cached = [
+      {
+        id: 9,
+        teamName: 'T9',
+        person: 'Zoe',
+        email: 'z@x',
+        year: 2024,
+        groups: ['G'],
+        deletedAt: '2024-03-09T00:00:00.000Z',
+      },
+    ];
+    cacheGet.mockReturnValue(cached);
+
+    const results = await repo.getDeletedEntries(2024);
+
+    expect(cacheGet).toHaveBeenCalledWith('deletedEntries_2024');
+    expect(queryGetMock).not.toHaveBeenCalled();
+    expect(results).toBe(cached);
+  });
+
+  test('delete/restore/purge bust deletedEntries_{year}', async () => {
+    docGetMock.mockResolvedValueOnce({ exists: true, data: () => ({}) });
+    await repo.deleteEntry('42', 2024);
+    expect(cacheDel).toHaveBeenCalledWith('deletedEntries_2024');
+
+    cacheDel.mockClear();
+    docGetMock.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ deletedAt: '2024-03-01T00:00:00.000Z' }),
+    });
+    await repo.restoreEntry('42', 2024);
+    expect(cacheDel).toHaveBeenCalledWith('deletedEntries_2024');
+
+    cacheDel.mockClear();
+    docGetMock.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ deletedAt: '2024-03-01T00:00:00.000Z' }),
+    });
+    await repo.purgeEntry('42', 2024);
+    expect(cacheDel).toHaveBeenCalledWith('deletedEntries_2024');
+  });
+
   test('updateEntryPicks writes picks-only update and invalidates relevant caches', async () => {
     await repo.updateEntryPicks('5', [10, 20], 2024);
 
@@ -989,6 +1310,30 @@ describe('ViewRepository', () => {
     expect(cacheSet).toHaveBeenCalledWith('groupByName_nope', null, 86400);
   });
 
+  // #589: the four public routes that reach this method pass a raw request
+  // param, so a repeated form key arrives as an array and an omitted one as
+  // undefined. Both used to throw out of the `name.toLowerCase()` cache-key
+  // line and surface as an unhandled 500.
+  test.each([
+    ['an array (repeated form key)', ['a', 'b']],
+    ['undefined (field omitted)', undefined],
+    ['null', null],
+    ['a number', 42],
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+  ])(
+    'findGroupByName returns null without touching the DB when name is %s',
+    async (_label, name) => {
+      const res = await repo.findGroupByName(name);
+
+      expect(res).toBeNull();
+      expect(docGetMock).not.toHaveBeenCalled();
+      expect(queryGetMock).not.toHaveBeenCalled();
+      // Nothing is cached either: the key itself is what could not be built.
+      expect(cacheSet).not.toHaveBeenCalled();
+    },
+  );
+
   test('getGroupTeams maps to slim shape, excludes soft-deleted entries, and caches for 5 minutes', async () => {
     queryGetMock.mockResolvedValue({
       docs: [
@@ -1105,11 +1450,74 @@ describe('GameRepository', () => {
 
       // Filtered the entries subcollection by the email field, and read the
       // small top-level tournaments collection first (getAllYearsForGroup pattern).
-      expect(whereMock).toHaveBeenCalledWith('email', '==', 'u@g.com');
+      expect(whereMock).toHaveBeenCalledWith('email', 'in', ['u@g.com']);
       expect(collectionMock).toHaveBeenCalledWith('tournaments');
       // Tagged with year + sorted newest-year first.
       expect(result.map((e) => e.year)).toEqual([2026, 2025]);
       expect(result.map((e) => e.id)).toEqual(['b', 'a']);
+    });
+
+    // #634 — a live run that crashed mid-teardown leaves a real
+    // tournaments/9999 parent doc in the same Firestore the deployed app
+    // reads. Enumerating it fed '9999' back into yearSegment, whose reserved
+    // block rejects it outside a test context; Promise.all turned that one bad
+    // id into a rejected call and a 400 on /my-brackets for every signed-in
+    // user. A legacy tournaments/0 does the same.
+    describe('unusable stored year ids (#634)', () => {
+      const ORIGINAL_ENV = { ...process.env };
+      afterEach(() => {
+        process.env.NODE_ENV = ORIGINAL_ENV.NODE_ENV;
+        process.env.LIVE_E2E = ORIGINAL_ENV.LIVE_E2E;
+      });
+
+      test('production skips them instead of failing the whole read', async () => {
+        process.env.NODE_ENV = 'production';
+        delete process.env.LIVE_E2E;
+        const warnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => {});
+
+        queryGetMock
+          .mockResolvedValueOnce({
+            docs: ['2024', '2025', '9999', '0', 'metadata'].map((y) =>
+              makeDoc(y, {}),
+            ),
+          })
+          .mockResolvedValueOnce({
+            docs: [makeDoc('a', { id: 'a', email: 'u@g.com' })],
+          })
+          .mockResolvedValueOnce({
+            docs: [makeDoc('b', { id: 'b', email: 'u@g.com' })],
+          });
+
+        const result = await repo.getEntriesByEmail('u@g.com');
+
+        // Only the two real years were fanned out on: 1 tournaments read + 2.
+        expect(queryGetMock).toHaveBeenCalledTimes(3);
+        expect(result.map((e) => e.year)).toEqual([2025, 2024]);
+        // Both the numeric-invalid and non-numeric garbage ids were logged and skipped.
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('9999'));
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('0'));
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('metadata'),
+        );
+      });
+
+      test('a live-E2E run still enumerates the reserved years', async () => {
+        process.env.LIVE_E2E = 'true';
+
+        queryGetMock
+          .mockResolvedValueOnce({
+            docs: ['2025', '9999'].map((y) => makeDoc(y, {})),
+          })
+          .mockResolvedValueOnce({ docs: [] })
+          .mockResolvedValueOnce({
+            docs: [makeDoc('r', { id: 'r', email: 'u@g.com' })],
+          });
+
+        const result = await repo.getEntriesByEmail('u@g.com');
+
+        expect(queryGetMock).toHaveBeenCalledTimes(3);
+        expect(result.map((e) => e.year)).toEqual([9999]);
+      });
     });
 
     test('drops entries whose stored email does not match (defense-in-depth)', async () => {
@@ -1127,40 +1535,23 @@ describe('GameRepository', () => {
     });
 
     // #327 — every earlier test passes an already-lowercase email, collapsing
-    // `variants` to one element, so the dual-query + doc-id dedup path (the
-    // legacy un-normalized-row safety net) was never exercised.
+    // `variants` to one element, so the single-query 'in' array matching
+    // (the legacy un-normalized-row safety net) was never exercised.
     test('mixed-case input queries both the raw and lowercased variants', async () => {
       queryGetMock.mockResolvedValue({ docs: [] });
 
       await repo.getEntriesByEmail('User@G.com', 2026);
 
-      expect(whereMock).toHaveBeenCalledWith('email', '==', 'User@G.com');
-      expect(whereMock).toHaveBeenCalledWith('email', '==', 'user@g.com');
-      expect(queryGetMock).toHaveBeenCalledTimes(2); // one get per variant
-    });
-
-    test('dedupes by doc id when both variant queries return the same doc', async () => {
-      // Overlapping snapshots (a doc matched by both the raw and lowercased
-      // query) must collapse to one row — a regression here shows the same
-      // bracket twice in "My Brackets".
-      const doc = makeDoc('a', {
-        id: 'a',
-        email: 'user@g.com',
-        teamName: 'T26',
-      });
-      queryGetMock
-        .mockResolvedValueOnce({ docs: [doc] }) // raw-variant query
-        .mockResolvedValueOnce({ docs: [doc] }); // lowercased-variant query
-
-      const result = await repo.getEntriesByEmail('User@G.com', 2026);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('a');
+      expect(whereMock).toHaveBeenCalledWith('email', 'in', [
+        'User@G.com',
+        'user@g.com',
+      ]);
+      expect(queryGetMock).toHaveBeenCalledTimes(1); // one 'in' query
     });
 
     test('drops soft-deleted entries even when the email matches', async () => {
       queryGetMock
-        .mockResolvedValueOnce({ docs: [makeDoc('2026', {})] })
+        .mockResolvedValueOnce({ docs: [makeDoc('2026', {})] }) // tournaments
         .mockResolvedValueOnce({
           docs: [
             makeDoc('a', { id: 'a', email: 'u@g.com' }),
@@ -1170,20 +1561,19 @@ describe('GameRepository', () => {
               deletedAt: '2024-03-01T00:00:00.000Z',
             }),
           ],
-        });
+        }); // 2026 entries
 
       const result = await repo.getEntriesByEmail('u@g.com');
       expect(result.map((e) => e.id)).toEqual(['a']);
     });
 
     test('drops docs whose stored email lowercases to a different address', async () => {
-      queryGetMock
-        .mockResolvedValueOnce({
-          docs: [makeDoc('a', { id: 'a', email: 'USER@g.com' })],
-        })
-        .mockResolvedValueOnce({
-          docs: [makeDoc('x', { id: 'x', email: 'OTHER@g.com' })],
-        });
+      queryGetMock.mockResolvedValueOnce({
+        docs: [
+          makeDoc('a', { id: 'a', email: 'USER@g.com' }),
+          makeDoc('x', { id: 'x', email: 'OTHER@g.com' }),
+        ],
+      }); // 2026 entries (single year query)
 
       const result = await repo.getEntriesByEmail('User@G.com', 2026);
 
@@ -1202,7 +1592,7 @@ describe('GameRepository', () => {
       const result = await repo.getEntriesByEmail('u@g.com', 2026);
 
       expect(queryGetMock).toHaveBeenCalledTimes(1);
-      expect(whereMock).toHaveBeenCalledWith('email', '==', 'u@g.com');
+      expect(whereMock).toHaveBeenCalledWith('email', 'in', ['u@g.com']);
       expect(result.map((e) => e.year)).toEqual([2026]);
       expect(result.map((e) => e.id)).toEqual(['a']);
     });
@@ -1237,7 +1627,9 @@ describe('GameRepository', () => {
     });
 
     test("caches the all-years query under a distinct '_all' key from a year-scoped one", async () => {
-      queryGetMock.mockResolvedValueOnce({ docs: [] }); // tournaments.get()
+      queryGetMock
+        .mockResolvedValueOnce({ docs: [makeDoc('2026', {})] }) // tournaments.get()
+        .mockResolvedValueOnce({ docs: [] });
 
       await repo.getEntriesByEmail('u@g.com');
 
@@ -1310,6 +1702,52 @@ describe('GameRepository', () => {
       const result = await repo.getAllYearsForGroup('Ghost');
       expect(result).toEqual([]);
     });
+
+    // #634 — same leftover-parent-doc failure as getEntriesByEmail above; this
+    // is the group year list rather than /my-brackets.
+    describe('unusable stored year ids (#634)', () => {
+      const ORIGINAL_ENV = { ...process.env };
+      afterEach(() => {
+        process.env.NODE_ENV = ORIGINAL_ENV.NODE_ENV;
+        process.env.LIVE_E2E = ORIGINAL_ENV.LIVE_E2E;
+      });
+
+      test('production skips them instead of failing the whole read', async () => {
+        process.env.NODE_ENV = 'production';
+        delete process.env.LIVE_E2E;
+
+        queryGetMock
+          .mockResolvedValueOnce({
+            docs: ['2024', '2025', '9999', '0'].map((y) => makeDoc(y, {})),
+          })
+          .mockResolvedValueOnce({ empty: false })
+          .mockResolvedValueOnce({ empty: false });
+
+        const result = await repo.getAllYearsForGroup('G');
+
+        expect(queryGetMock).toHaveBeenCalledTimes(3);
+        expect(result).toEqual([{ year: 2025 }, { year: 2024 }]);
+      });
+
+      // Pins the context-awareness the live suite depends on: e2e-v4 seeds
+      // 9988/9989 and asserts getAllYearsForGroup returns them, so a filter
+      // that unconditionally dropped the reserved block would land green in CI
+      // and only break on the next live run.
+      test('a live-E2E run still enumerates the reserved years', async () => {
+        process.env.LIVE_E2E = 'true';
+
+        queryGetMock
+          .mockResolvedValueOnce({
+            docs: ['9988', '9989'].map((y) => makeDoc(y, {})),
+          })
+          .mockResolvedValueOnce({ empty: false })
+          .mockResolvedValueOnce({ empty: false });
+
+        const result = await repo.getAllYearsForGroup('G');
+
+        expect(result).toEqual([{ year: 9989 }, { year: 9988 }]);
+      });
+    });
   });
 
   // #340 — the read path the admin game-management flow (and pointsService.
@@ -1371,6 +1809,23 @@ describe('GameRepository', () => {
         team2Name: 'UNC',
         team2Seed: 2,
       });
+    });
+
+    test('attaches team logo URLs from schoolRecords, null when a school has none', async () => {
+      mockReads({
+        games: [
+          { gameID: 1, team1ID: 5, team2ID: 6, winner: null, regionID: 1 },
+        ],
+        records: [
+          { sID: 5, nameNick: 'FDU', seed: 16, logoUrl: 'https://x/fdu.png' },
+          { sID: 6, nameNick: 'TxSo', seed: 16 },
+        ],
+      });
+
+      const [game] = await repo.getActiveGames(2024);
+
+      expect(game.team1LogoUrl).toBe('https://x/fdu.png');
+      expect(game.team2LogoUrl).toBeNull();
     });
 
     test('excludes games with a null team slot (FF-fed R1 games before their slot fills)', async () => {
@@ -2058,6 +2513,9 @@ describe('GameRepository', () => {
     // updateEntry can change `email` itself, so a per-email bust isn't safe here —
     // the whole entriesByEmail_ cache is cleared instead (#370).
     expect(invalidateCache).toHaveBeenCalledWith('entriesByEmail_');
+    // An admin can edit an entry while it sits soft-deleted, and the Recently
+    // Deleted list renders person/teamName/email/groups — all written here (#478).
+    expect(cacheDel).toHaveBeenCalledWith('deletedEntries_2024');
   });
 
   test('updateEntry omits hasPaid/emailSent when not provided (no accidental clobbering)', async () => {
@@ -2130,20 +2588,336 @@ describe('TourneyRepository', () => {
     expect(cacheDel).toHaveBeenCalledWith('allRegions_2024');
   });
 
-  test('getSchoolRecordsForYear sorts by seed then regionID and returns minimal shape', async () => {
+  describe('getYearOccupancy', () => {
+    test('reports unoccupied when the parent doc and every subcollection are empty', async () => {
+      docGetMock.mockResolvedValueOnce({ exists: false }); // parent
+      queryGetMock
+        .mockResolvedValueOnce({ empty: true }) // games
+        .mockResolvedValueOnce({ empty: true }) // regions
+        .mockResolvedValueOnce({ empty: true }) // schoolRecords
+        .mockResolvedValueOnce({ empty: true }); // entries
+
+      const result = await repo.getYearOccupancy(2027);
+
+      expect(result).toEqual({
+        occupied: false,
+        hasParent: false,
+        hasGames: false,
+        hasRegions: false,
+        hasSchoolRecords: false,
+        hasEntries: false,
+      });
+    });
+
+    test('reports occupied when the parent doc exists', async () => {
+      docGetMock.mockResolvedValueOnce({ exists: true });
+      queryGetMock
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true });
+
+      const result = await repo.getYearOccupancy(2027);
+
+      expect(result.occupied).toBe(true);
+      expect(result.hasParent).toBe(true);
+    });
+
+    test('reports occupied from an orphaned games subcollection even with no parent doc', async () => {
+      docGetMock.mockResolvedValueOnce({ exists: false });
+      queryGetMock
+        .mockResolvedValueOnce({ empty: false }) // games — orphaned data
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true });
+
+      const result = await repo.getYearOccupancy(2027);
+
+      expect(result.occupied).toBe(true);
+      expect(result.hasParent).toBe(false);
+      expect(result.hasGames).toBe(true);
+    });
+
+    test('reports occupied from existing entries even with no other bracket data', async () => {
+      docGetMock.mockResolvedValueOnce({ exists: false });
+      queryGetMock
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: true })
+        .mockResolvedValueOnce({ empty: false }); // entries
+
+      const result = await repo.getYearOccupancy(2027);
+
+      expect(result.occupied).toBe(true);
+      expect(result.hasEntries).toBe(true);
+    });
+  });
+
+  describe('createBracketAtomic', () => {
+    function mockReferenceData() {
+      cacheGet.mockImplementation(
+        (k) =>
+          ({
+            allSchools: [
+              { sid: 101, name: 'Alpha', nameNick: 'Alpha', espn: {} },
+              { sid: 102, name: 'Beta', nameNick: 'Beta', espn: {} },
+              { sid: 201, name: 'Gamma', nameNick: 'Gamma', espn: {} },
+              { sid: 202, name: 'Delta', nameNick: 'Delta', espn: {} },
+            ],
+            allConferences: [],
+            allRegionTypes: [
+              { regionID: 1, regionName: 'East' },
+              { regionID: 2, regionName: 'West' },
+              { regionID: 3, regionName: 'South' },
+              { regionID: 4, regionName: 'Midwest' },
+              { regionID: 5, regionName: 'Final Four' },
+              { regionID: 6, regionName: 'Championship' },
+            ],
+          })[k],
+      );
+    }
+
+    test('writes every document with batch.create, never batch.set, in one commit', async () => {
+      mockReferenceData();
+
+      const result = await repo.createBracketAtomic({
+        year: 2027,
+        regionIDs: [1, 2, 5, 6],
+        gamesWithoutTeams: [[9, 1, 2027, null, null, null, 2, 13, 1]],
+        gamesWithTeams: [[1, 1, 2027, 101, 102, null, 1, 9, 1, 1, 16]],
+        schoolRecords: [
+          { sID: 101, year: 2027, seed: 1, regionID: 1 },
+          { sID: 102, year: 2027, seed: 16, regionID: 1 },
+        ],
+      });
+
+      // parent + 4 regions + 1 gameWithoutTeams + 1 gameWithTeams + 2 schoolRecords = 9
+      expect(batchCreateMock).toHaveBeenCalledTimes(9);
+      expect(batchSetMock).not.toHaveBeenCalled();
+      expect(batchCommitMock).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ writeCount: 9 });
+
+      // Parent doc payload
+      expect(batchCreateMock.mock.calls[0][1]).toEqual({ year: 2027 });
+    });
+
+    test('includes First Four games/records in the same atomic batch', async () => {
+      mockReferenceData();
+
+      await repo.createBracketAtomic({
+        year: 2027,
+        regionIDs: [1, 2, 5, 6],
+        gamesWithoutTeams: [],
+        gamesWithTeams: [],
+        schoolRecords: [],
+        firstFourGames: [
+          {
+            gameID: 64,
+            team1ID: 201,
+            team2ID: 202,
+            seed: 16,
+            nextGameID: 1,
+            nextGameSpot: 2,
+          },
+        ],
+        firstFourSchoolRecords: [
+          { sID: 201, seed: 16, gameID: 64, slot: 1, r1RegionID: 1 },
+          { sID: 202, seed: 16, gameID: 64, slot: 2, r1RegionID: 1 },
+        ],
+        tournamentDocExtra: { hasFirstFour: true, firstFourGameCount: 1 },
+      });
+
+      // parent + 4 regions + 1 FF game + 2 FF school records = 8
+      expect(batchCreateMock).toHaveBeenCalledTimes(8);
+      expect(batchCreateMock.mock.calls[0][1]).toEqual({
+        year: 2027,
+        hasFirstFour: true,
+        firstFourGameCount: 1,
+      });
+      expect(docMock).toHaveBeenCalledWith('ff_64_1');
+      expect(docMock).toHaveBeenCalledWith('ff_64_2');
+    });
+
+    test('builds regionName from the in-memory regionIDs list, never by reading back the year regions subcollection', async () => {
+      mockReferenceData();
+
+      await repo.createBracketAtomic({
+        year: 2027,
+        regionIDs: [1, 2, 5, 6],
+        gamesWithoutTeams: [],
+        gamesWithTeams: [],
+        schoolRecords: [{ sID: 101, year: 2027, seed: 1, regionID: 1 }],
+      });
+
+      // The one non-parent, non-region create is the school record; its
+      // regionName must come from the regionIDs param, not a read-back —
+      // queryGetMock/docGetMock are never called by this method at all.
+      const schoolRecordCall = batchCreateMock.mock.calls.find(
+        (call) => call[1]?.sID === 101,
+      );
+      expect(schoolRecordCall[1].regionName).toBe('East');
+      expect(queryGetMock).not.toHaveBeenCalled();
+      expect(docGetMock).not.toHaveBeenCalled();
+    });
+
+    test('invalidates every affected cache key only after a successful commit', async () => {
+      mockReferenceData();
+
+      await repo.createBracketAtomic({
+        year: 2027,
+        regionIDs: [1, 2, 5, 6],
+        gamesWithoutTeams: [],
+        gamesWithTeams: [],
+        schoolRecords: [],
+      });
+
+      expect(cacheDel).toHaveBeenCalledWith('tournamentDetails_2027');
+      expect(cacheDel).toHaveBeenCalledWith('activeGames_2027');
+      expect(cacheDel).toHaveBeenCalledWith('activeFutureGames_2027');
+      expect(cacheDel).toHaveBeenCalledWith('allTeamNames_2027');
+      expect(cacheDel).toHaveBeenCalledWith('allRegions_2027');
+    });
+
+    test('invalidates no cache and leaves the error to propagate when the commit fails', async () => {
+      mockReferenceData();
+      const boom = new Error('commit failed');
+      batchCommitMock.mockRejectedValueOnce(boom);
+
+      await expect(
+        repo.createBracketAtomic({
+          year: 2027,
+          regionIDs: [1, 2, 5, 6],
+          gamesWithoutTeams: [],
+          gamesWithTeams: [],
+          schoolRecords: [],
+        }),
+      ).rejects.toBe(boom);
+
+      expect(cacheDel).not.toHaveBeenCalled();
+    });
+
+    test('refuses to build a batch over the 500-write Firestore cap', async () => {
+      mockReferenceData();
+      const tooManySchoolRecords = Array.from({ length: 500 }, (_, i) => ({
+        sID: 101,
+        year: 2027,
+        seed: 1,
+        regionID: 1,
+        _i: i,
+      }));
+
+      await expect(
+        repo.createBracketAtomic({
+          year: 2027,
+          regionIDs: [1, 2, 5, 6],
+          gamesWithoutTeams: [],
+          gamesWithTeams: [],
+          schoolRecords: tooManySchoolRecords,
+        }),
+      ).rejects.toThrow(/500-operation batch limit/);
+      expect(batchCommitMock).not.toHaveBeenCalled();
+    });
+
+    // Plan's own count: 63+N games, (64-N)+2N school records, 6 regions, 1
+    // parent = 134+2N (142 at N=4, 150 at N=8). Build realistically-sized
+    // input (63 total games, 64-N canonical school records) rather than
+    // hand-typing every row.
+    test.each([
+      [4, 142],
+      [8, 150],
+    ])('writeCount is 134+2N for N=%i play-ins (%i)', async (n, expected) => {
+      mockReferenceData();
+      const gamesWithoutTeams = Array.from({ length: 31 }, (_, i) => [9 + i]);
+      const gamesWithTeams = Array.from({ length: 32 }, (_, i) => [i + 1]);
+      const schoolRecords = Array.from({ length: 64 - n }, (_, i) => ({
+        sID: 101,
+        year: 2027,
+        seed: (i % 16) + 1,
+        regionID: 1,
+      }));
+      const firstFourGames = Array.from({ length: n }, (_, i) => ({
+        gameID: 64 + i,
+        team1ID: 201,
+        team2ID: 202,
+        seed: 16,
+        nextGameID: 1,
+        nextGameSpot: 2,
+      }));
+      const firstFourSchoolRecords = Array.from({ length: n * 2 }, (_, i) => ({
+        sID: 201,
+        seed: 16,
+        gameID: 64 + Math.floor(i / 2),
+        slot: (i % 2) + 1,
+        r1RegionID: 1,
+      }));
+
+      const result = await repo.createBracketAtomic({
+        year: 2027,
+        regionIDs: [1, 2, 3, 4, 5, 6], // the 4 bracket regions + Final Four + Championship
+        gamesWithoutTeams,
+        gamesWithTeams,
+        schoolRecords,
+        firstFourGames,
+        firstFourSchoolRecords,
+      });
+
+      expect(result.writeCount).toBe(expected);
+    });
+  });
+
+  test('getSchoolRecordsForYear sorts by seed then regionID and returns docId/canonicalDocId', async () => {
     queryGetMock.mockResolvedValue({
       docs: [
-        makeDoc('a', { sID: 1, seed: 2, regionID: 5 }),
-        makeDoc('b', { sID: 2, seed: 1, regionID: 8 }),
-        makeDoc('c', { sID: 3, seed: 1, regionID: 3 }),
+        makeDoc('5_2', { sID: 1, seed: 2, regionID: 5 }),
+        makeDoc('8_1', { sID: 2, seed: 1, regionID: 8 }),
+        makeDoc('3_1', { sID: 3, seed: 1, regionID: 3 }),
       ],
     });
     const records = await repo.getSchoolRecordsForYear(2024);
     expect(records).toEqual([
-      { sID: 3, year: 2024, seed: 1, regionID: 3 },
-      { sID: 2, year: 2024, seed: 1, regionID: 8 },
-      { sID: 1, year: 2024, seed: 2, regionID: 5 },
+      {
+        sID: 3,
+        year: 2024,
+        seed: 1,
+        regionID: 3,
+        docId: '3_1',
+        canonicalDocId: null,
+      },
+      {
+        sID: 2,
+        year: 2024,
+        seed: 1,
+        regionID: 8,
+        docId: '8_1',
+        canonicalDocId: null,
+      },
+      {
+        sID: 1,
+        year: 2024,
+        seed: 2,
+        regionID: 5,
+        docId: '5_2',
+        canonicalDocId: null,
+      },
     ]);
+  });
+
+  test('getSchoolRecordsForYear passes through canonicalDocId for a First Four record', async () => {
+    queryGetMock.mockResolvedValue({
+      docs: [
+        makeDoc('ff_64_1', {
+          sID: 100,
+          seed: 16,
+          regionID: 1,
+          canonicalDocId: '1_16',
+        }),
+      ],
+    });
+    const records = await repo.getSchoolRecordsForYear(2024);
+    expect(records[0]).toMatchObject({
+      docId: 'ff_64_1',
+      canonicalDocId: '1_16',
+    });
   });
 
   test('deleteTournamentDoc deletes tournaments/{year}', async () => {
@@ -2922,6 +3696,28 @@ describe('TeamRepository', () => {
     expect(cacheDel).toHaveBeenCalledWith('allSchools');
   });
 
+  test('updateSchoolEspn writes exactly { espn } and busts allSchools', async () => {
+    await repo.updateSchoolEspn(101, { id: 'duke', slug: 'duke-blue-devils' });
+    expect(docMock).toHaveBeenCalledWith('101');
+    expect(updateMock).toHaveBeenCalledWith({
+      espn: { id: 'duke', slug: 'duke-blue-devils' },
+    });
+    expect(cacheDel).toHaveBeenCalledWith('allSchools');
+  });
+
+  // #483: unlike updateSchoolEspn/updateSchool, this one does NOT bust
+  // allSchools — conferenceHistory isn't part of the allSchools shape, so
+  // busting it would be a wasted cache invalidation. Documented here so a
+  // future refactor that "fixes" the asymmetry does so on purpose.
+  test('updateSchoolConferenceHistory writes exactly { conferenceHistory } and does not bust allSchools', async () => {
+    await repo.updateSchoolConferenceHistory(101, { acc: [2020, 2021] });
+    expect(docMock).toHaveBeenCalledWith('101');
+    expect(updateMock).toHaveBeenCalledWith({
+      conferenceHistory: { acc: [2020, 2021] },
+    });
+    expect(cacheDel).not.toHaveBeenCalled();
+  });
+
   test('getAllSchools orders by name asc so the cached list is alphabetical for admin <select> dropdowns', async () => {
     queryGetMock.mockResolvedValue({
       docs: [
@@ -3026,6 +3822,17 @@ describe('TeamRepository', () => {
 
     queryGetMock.mockResolvedValueOnce({ empty: true });
     expect(await repo.getMaxSchoolId()).toBe(0);
+  });
+
+  test('getMaxSchoolId excludes the reserved live-E2E sid block (#502)', async () => {
+    queryGetMock.mockResolvedValueOnce({
+      empty: false,
+      docs: [makeDoc('x', { sid: 400 })],
+    });
+    expect(await repo.getMaxSchoolId()).toBe(400);
+    // A leaked test school (999990–999999) must not become the max and push the
+    // next real allocation to 1000000.
+    expect(whereMock).toHaveBeenCalledWith('sid', '<', 999990);
   });
 
   test('insertSchool bootstraps conferenceHistory from confID when not provided', async () => {
@@ -3231,6 +4038,60 @@ describe('SessionRepository', () => {
 describe('EntryRepository.updateMultipleEntryPoints — missing-doc retry', () => {
   const repo = new EntryRepository();
 
+  // #780: the retry rebuilds `refs` from pointsChunk independently of the loop
+  // that built the failed batch, then pairs snapshots[i] with refs[i] and
+  // pointsChunk[i]. A misalignment there never throws — it writes one entry's
+  // totalPoints onto a different entry's document — so the refs have to be
+  // distinguishable for an assertion to catch it. The shared harness hands
+  // every path the same docRef object, so tag each ref with its doc id for
+  // this describe only and put the shared ref back afterwards.
+  let sharedDocRef;
+  beforeEach(() => {
+    sharedDocRef = docMock('probe');
+    docMock.mockImplementation((id) => ({ ...sharedDocRef, id: String(id) }));
+    docMock.mockClear(); // drop the probe call so call-order assertions still line up
+  });
+
+  afterEach(() => {
+    docMock.mockReset();
+    docMock.mockReturnValue(sharedDocRef);
+  });
+
+  test('pairs each surviving snapshot with its own chunk entry and ref', async () => {
+    batchCommitMock.mockRejectedValueOnce(new Error('NOT_FOUND'));
+    // The hole is in the middle: if the retry ever indexed by survivor
+    // position instead of chunk position, entry 30's points would land on
+    // entry 20's ref and nothing would fail.
+    getAllMock.mockResolvedValue([
+      { exists: true },
+      { exists: false },
+      { exists: true },
+    ]);
+
+    await repo.updateMultipleEntryPoints(
+      [
+        { entryID: 10, points: 1, possPoints: 11 },
+        { entryID: 20, points: 2, possPoints: 22 },
+        { entryID: 30, points: 3, possPoints: 33 },
+      ],
+      2024,
+    );
+
+    // 3 updates on the failed attempt, then exactly 2 on the retry.
+    expect(batchUpdateMock).toHaveBeenCalledTimes(5);
+    expect(batchUpdateMock.mock.calls.slice(3)).toEqual([
+      [
+        expect.objectContaining({ id: '10' }),
+        { totalPoints: 1, possPoints: 11 },
+      ],
+      [
+        expect.objectContaining({ id: '30' }),
+        { totalPoints: 3, possPoints: 33 },
+      ],
+    ]);
+    expect(batchCommitMock).toHaveBeenCalledTimes(2);
+  });
+
   test('retries with only the still-existing docs when the atomic batch fails', async () => {
     // First commit fails (one entry deleted between read and write → whole
     // batch rejected); the retry must update the survivor and skip the ghost.
@@ -3303,6 +4164,22 @@ describe('EntryRepository.updateMultipleEntryPoints — missing-doc retry', () =
         2024,
       ),
     ).rejects.toThrow('UNAVAILABLE');
+  });
+
+  // The year guard throws from inside the try, and the inner retry catch calls
+  // yearDoc again while rebuilding refs — so a bad year has two chances to be
+  // mistaken for a Firestore failure. It must still reach the caller as a
+  // ValidationError.
+  test('surfaces a bad year as ValidationError, not a batch failure', async () => {
+    const error = await repo
+      .updateMultipleEntryPoints(
+        [{ entryID: 1, points: 1, possPoints: 2 }],
+        'not-a-year',
+      )
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ValidationError);
+    expect(error.field).toBe('year');
   });
 });
 

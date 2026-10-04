@@ -15,6 +15,16 @@
             .sort((a, b) => a.gameID - b.gameID); // Sort to ensure consistent order
             });
             }
+            // Round-0 (First Four) games already carry the denormalized team1Name/
+            // team2Name and the nextGameID/nextGameSpot they feed — reuse that
+            // instead of a second query, per the plan's "no new persisted display
+            // field is needed". Keyed by "nextGameID-nextGameSpot" so a null R1
+            // slot can look up its play-in matchup directly.
+            const firstFourByDestination={}; if (typeof existingGames !=='undefined' && existingGames) {
+            existingGames.filter(g => g.round === 0).forEach(ffGame=> {
+            firstFourByDestination[`${ffGame.nextGameID}-${ffGame.nextGameSpot}`] = ffGame;
+            });
+            }
             %>
     </div>
     <div class="container-lg mt-2 pl-1 pr-1 border border-dark border-2 align-self-center" id="col2">
@@ -57,15 +67,23 @@
                                                 <option value="" disabled hidden>Select a Team
                                                 </option>
                                                 <!-- Option is regionID-gameID-seed-teamID -->
-                                                <% allTeams.forEach(team=> { %>
-                                                    <% const teamIdToMatch=(j===1) ? game.team1ID : game.team2ID; %>
-                                                        <option
-                                                            value="<%= regionId %>-<%= game.gameID %>-<%= seeds[(gameIndex * 2) + j - 1] %>-<%= team.sid %>"
-                                                            <%- team.sid==teamIdToMatch ? 'selected' : '' %>>
-                                                            <%= team.name %>
-                                                                <%= team.mascot %> sID: <%= team.sid %>
-                                                        </option>
-                                                        <% }); %>
+                                                <% const teamIdToMatch=(j===1) ? game.team1ID : game.team2ID; %>
+                                                    <% if (teamIdToMatch===null) { %>
+                                                        <% const ffGame=firstFourByDestination[`${game.gameID}-${j}`]; %>
+                                                            <option
+                                                                value="<%= regionId %>-<%= game.gameID %>-<%= seeds[(gameIndex * 2) + j - 1] %>-"
+                                                                selected data-play-in="true">
+                                                                <%= ffGame ? `Play-in winner: ${ffGame.team1Name} / ${ffGame.team2Name}` : 'Play-in winner (unresolved)' %>
+                                                            </option>
+                                                            <% } %>
+                                                                <% allTeams.forEach(team=> { %>
+                                                                    <option
+                                                                        value="<%= regionId %>-<%= game.gameID %>-<%= seeds[(gameIndex * 2) + j - 1] %>-<%= team.sid %>"
+                                                                        <%- team.sid==teamIdToMatch ? 'selected' : '' %>>
+                                                                        <%= team.name %>
+                                                                            <%= team.mascot %> sID: <%= team.sid %>
+                                                                    </option>
+                                                                    <% }); %>
                                             </select>
                                         </div>
                                     </div>
@@ -121,7 +139,9 @@
                 const teamId = valueParts[3];
 
                 if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                    if (selectedTeams.has(teamId) && !options[i].selected) {
+                    // An empty teamId is a play-in placeholder (regionID-gameID-seed-
+                    // with no sID), not a real team — never treat it as a duplicate.
+                    if (teamId && selectedTeams.has(teamId) && !options[i].selected) {
                         options[i].classList.add('disabled-option');
                     } else {
                         options[i].classList.remove('disabled-option');
@@ -139,6 +159,11 @@
             select.addEventListener('change', () => {
                 const selectedOption = select.value;
                 const selectedTeamId = selectedOption.split('-')[3]; // Extract teamID
+
+                // An empty teamId is the play-in-winner placeholder, not a real
+                // team — it's expected on more than one select at once, so it
+                // must never enter the duplicate-selection tracking below.
+                if (!selectedTeamId) return;
 
                 // Add to the selectedTeams Set if not already present
                 if (!selectedTeams.has(selectedTeamId)) {

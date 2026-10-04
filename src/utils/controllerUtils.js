@@ -1,30 +1,7 @@
 import Logger from './logger.js';
 import { ValidationError, ServiceError, debugErrorsEnabled } from './errors.js';
 
-const SENSITIVE_KEYS = new Set([
-  'email',
-  'password',
-  'name',
-  'team',
-  'teamName',
-  'person',
-  'picks',
-  'maxPoints',
-  'entryId',
-]);
-
-function redactBody(body) {
-  if (!body || typeof body !== 'object') return body;
-  const out = {};
-  for (const [k, v] of Object.entries(body)) {
-    out[k] = SENSITIVE_KEYS.has(k)
-      ? '[redacted]'
-      : typeof v === 'string' && v.length > 200
-        ? '[long]'
-        : v;
-  }
-  return out;
-}
+import { requestLogContext, requestErrorDetails } from './requestLogUtils.js';
 
 // Standardized controller response wrapper.
 //
@@ -40,12 +17,7 @@ export const controllerWrapper = (controllerFunction, operationName = '') => {
     const startTime = Date.now();
 
     try {
-      Logger.info(`${operationName} started`, {
-        method: req.method,
-        url: req.url,
-        bodyKeys: req.body ? Object.keys(req.body) : [],
-        body: redactBody(req.body),
-      });
+      Logger.info(`${operationName} started`, requestLogContext(req));
 
       const result = await controllerFunction(req, res);
 
@@ -55,7 +27,10 @@ export const controllerWrapper = (controllerFunction, operationName = '') => {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      Logger.error(`${operationName} failed after ${duration}ms`, error);
+      Logger.error(`${operationName} failed after ${duration}ms`, {
+        ...requestLogContext(req),
+        ...requestErrorDetails(error),
+      });
 
       // Handle different error types
       if (error instanceof ValidationError) {
@@ -184,8 +159,60 @@ export function validateEntryId(entryId) {
   }
 }
 
+// Participant-supplied free-text fields (`name`, `team`, `email`) on the entry
+// create and update paths. A truthiness check is not a type check: server.js
+// mounts express.urlencoded({ extended: true }), so a repeated key
+// (`team=a&team=b` or `team[]=a`) parses to an *array* — truthy, but `.trim` is
+// not a function on it, so the guard meant to say "this field is wrong" threw a
+// TypeError and the caller got a 500 (#549). Absent the field entirely,
+// `undefined` reached ref.update() and the Firestore SDK rejected it (no
+// ignoreUndefinedProperties in src/config/firestore.js) — the other 500 (#548).
+//
+// The cap exists because `teamName`/`person` are participant-writable and
+// rendered on the public results page and full grid for every visitor of the
+// group, with no bound on what could be stored. 128 is deliberately the same
+// number extractPicks already caps a team name at (entryPicksUtils.js) — create
+// and update enforcing different rules on the same field is how this drifted.
+export const MAX_ENTRY_TEXT_LEN = 128;
+// Email gets a bound too, but not 128: RFC 5321 caps an address at 254, and
+// `email` isn't the publicly-rendered field the tighter cap exists to protect,
+// so reusing 128 here would reject legitimate (if unusual) addresses.
+export const MAX_EMAIL_LEN = 254;
+
+export function validateEntryTextField(value, fieldName, maxLen) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new ValidationError(`${fieldName} is required.`, fieldName);
+  }
+  if (value.length > maxLen) {
+    throw new ValidationError(
+      `${fieldName} must be at most ${maxLen} characters.`,
+      fieldName,
+    );
+  }
+  return value.trim();
+}
+
 // Conference payload validator (V2). Validates slug shape and name length.
 const SLUG_RE = /^[a-z0-9-]+$/;
+
+// Same shape rule as validateConferencePayload's slug half, in predicate form
+// for read paths that answer with a plain-text 400 rather than throwing (#512).
+// Read paths need it for the same reason writes do: getConferenceBySlug does
+// `.doc(slug)`, and Firestore reads '/' in a document path as a path separator,
+// so an unvalidated `?slug=x/y/z` addresses a doc two subcollections deep
+// instead of the intended conference. Deliberately shares SLUG_RE with the
+// write validator — the drift between a validated write and an unvalidated
+// read is exactly what this closes, so a second copy of the regex would
+// reintroduce it.
+export function isValidSlug(slug) {
+  return (
+    typeof slug === 'string' &&
+    slug.length > 0 &&
+    slug.length <= 64 &&
+    SLUG_RE.test(slug)
+  );
+}
+
 export function validateConferencePayload({ slug, name, shortName, division }) {
   if (
     !slug ||
@@ -257,3 +284,7 @@ export const destroySession = (req) => {
     req.session.destroy((err) => (err ? reject(err) : resolve()));
   });
 };
+
+export function homeErrorRedirect(query) {
+  return `/?${query}`;
+}

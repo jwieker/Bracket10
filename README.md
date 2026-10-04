@@ -11,6 +11,14 @@ A self-hostable web app for running a march basketball bracket pool with your fr
 
 > **Status:** actively maintained by [@jwieker](https://github.com/jwieker). Designed for self-hosting — every personal/group-specific value is driven by environment variables (see [`.env.example`](./.env.example)). PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
+## Working with an AI coding assistant
+
+Open this checkout in Codex, Claude Code, Gemini CLI, or another repository-aware assistant.
+[AGENTS.md](./AGENTS.md) contains the shared instructions; committed tool entry files are
+designed to route these assistants to the same setup and checks. Fresh Claude, Gemini, and
+Copilot sessions have not been verified. See [AI onboarding](./docs/development/ai-onboarding.md)
+for validation details and chat-only usage.
+
 ## Getting Started
 
 New here? Read **[How it works](docs/how-it-works.html)** for a tour of what the app does before you set it up.
@@ -207,6 +215,7 @@ Only needed if ESPN IDs change or new teams are added.
 ```bash
 npm run dev      # auto-reload on file changes (uses node --watch)
 npm start        # one-shot production-style boot
+NODE_ENV=development npm run dev   # used for development (default)
 ```
 
 | `NODE_ENV`    | UI                        | Tournament year                                         |
@@ -281,7 +290,7 @@ Preserve these invariants when contributing:
 
 - OAuth uses a session-backed `state` parameter before exchanging the authorization code.
 - Public entry edits are keyed by `year:entryId`. Server re-reads the entry before writes and preserves server-owned fields (email, groups, payment, email-sent metadata).
-- Production `DatabaseError` and `ServiceError` payloads are generic. Full details stay in server logs.
+- Production `ServiceError` payloads are generic. Full details stay in server logs.
 
 Full security architecture: [docs/architecture/security.md](./docs/architecture/security.md).
 

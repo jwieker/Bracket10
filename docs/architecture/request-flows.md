@@ -1,6 +1,6 @@
 ---
 tags: [architecture, request-flows, trace, admin, user]
-updated: 2026-06-09
+updated: 2026-07-20
 ---
 
 # Request Flows — Full Architecture Trace

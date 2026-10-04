@@ -1,6 +1,6 @@
 ---
 tags: [architecture, security, csp]
-updated: 2026-06-09
+updated: 2026-09-18
 ---
 
 # Security Architecture
@@ -13,7 +13,7 @@ Helmet was removed in favour of a custom `securityHeaders` middleware that sets 
 |---|---|
 | `Content-Security-Policy` | Enforcing strict nonce policy — per-request `script-src 'self' 'nonce-…' 'strict-dynamic' https:`, no `'unsafe-inline'`. Built from `BASE_DIRECTIVES` + per-request `script-src` in `securityHeaders.js` |
 | `Content-Security-Policy-Report-Only` | Mirrors the enforcing policy + report routing — a regression-telemetry channel. Suppressed by `CSP_REPORT_ONLY=off` |
-| `Reporting-Endpoints` | `csp-endpoint="<origin>/csp-report"` — absolute URL (`APP_HOST`, else the request origin); only when report-only is enabled |
+| `Reporting-Endpoints` | `csp-endpoint="https://<APP_HOST>/csp-report"` — emitted only when report-only is enabled **and** `APP_HOST` is set. Never derived from the request's `Host` header (#514) |
 | `Referrer-Policy` | `same-origin` |
 | `X-Content-Type-Options` | `nosniff` |
 | `X-Frame-Options` | `DENY` |
@@ -61,6 +61,14 @@ regression-telemetry channel (H1 — nonce CSP, shipped).
 - The report-only header mirrors the enforcing policy, so a future un-nonced
   inline script/handler still gets reported via `POST /csp-report` even though
   it's also blocked — an early-warning signal for regressions.
+- **Report destination comes from `APP_HOST` only.** With it set, both channels
+  are emitted: an absolute `https://<APP_HOST>/csp-report` in
+  `Reporting-Endpoints` + `report-to`, and the same URL in `report-uri`. With it
+  unset (previews, tunnels, local), the middleware **fails closed** — `report-uri`
+  falls back to the relative `/csp-report`, and `Reporting-Endpoints` / `report-to`
+  are omitted. It is never derived from the request's `Host` header, which is
+  attacker-chosen and would let a caller aim a report-only policy's telemetry at
+  their own origin (#514).
 - **Violation sink:** `POST /csp-report` (`server.js`) logs each violation as a
   single compact line to **stdout** (Cloud Run logs) — no Firestore, no third
   party. It is rate-limited (30/min) and silenced entirely by the
@@ -83,13 +91,13 @@ Two backends, both in `src/middleware/rateLimit.js`:
 
 Limiters in use:
 - **Login limiter** (Firestore, keyed `login:<ip>`): 15 / 10 min on `GET /auth/google/start`, `GET /auth/google/user/start`, and the shared `GET /auth/google/callback` (`src/routes/pointsRoutes.js`).
-- **Verify limiter** (Firestore, keyed `verify:<entryId>`): 10 / 10 min on `POST /my-entry/verify`, layered after the public limiter. Keying on `entryId` blocks email brute-force even when the attacker rotates IPs. Tradeoff: someone who knows an `entryId` can exhaust that entry's budget, locking the owner out for up to 10 min — low impact, and the price of IP-rotation-proof protection.
+- **Verify limiter** (Firestore, keyed `verify:<entryId>`): `myEntryVerify` atomically reserves one of 5 attempts / 15 min before reading the entry or comparing emails, after the per-IP public limiter, same-origin request guard, and registration/input guards. Successful attempts also consume the budget, bounding concurrent guesses across instances. Exhaustion blocks even a correct email until the window expires; Google sign-in remains an independent ownership-verification path. A direct attacker who knows an entry ID can still exhaust its budget, temporarily denying fallback access; browser-driven cross-site submissions are rejected before reserving an attempt. Store errors stop verification rather than allowing unchecked guesses.
 - **Public limiter** (in-memory): 30 / min on the public POST routes in `src/routes/viewRoutes.js`.
 - **Create-entry limiter** (Firestore, keyed `createEntry:<ip>`): 30 / min on `POST /newEntry` and `POST /entryVerify`, layered after a synchronous `isRegistrationOpen()` check so the Firestore transaction only runs while registration is open. Unlike the routes above, entry creation is unauthenticated *and* writes to Firestore, so it gets the global Firestore-backed cap instead of the per-instance in-memory one (#334).
 
 Both backends key by a **normalized IP** via `normalizeIP` (exported from `rateLimit.js`). IPv6 addresses are collapsed to their `/64` prefix (e.g. `2001:db8:1:2::/64`) so that an attacker cycling through the 2^64 addresses in a single /64 block still hits one counter. IPv4 and IPv4-mapped IPv6 addresses are used host-exact. `req.socket.remoteAddress` is the fallback when `req.ip` is absent. Do not manually parse `x-forwarded-for`; Express's `req.ip` already applies the configured `trust proxy` policy.
 
-The Firestore limiter **fails open** on store errors (a Firestore outage must not lock users out of login) and has a kill switch: set `RATE_LIMIT_FIRESTORE_DISABLED=1` to bypass the store. Once a window has hit its cap, `incrementWindow` returns a blocking count **without writing** — so a flood against one key can't exceed Firestore's ~1 write/s/doc soft limit and trigger contention failures that (via fail-open) would otherwise let blocked requests through. This also bounds writes to `max` per window per key, protecting the cost contract. Counter docs live in the `rateLimits` collection; windows reset in place so the collection is bounded by distinct keys, and an optional Firestore TTL policy on the `expireAt` field reaps abandoned keys for free.
+The login/create-entry Firestore middleware **fails open** on store errors (a Firestore outage must not lock users out of login) and has a kill switch: set `RATE_LIMIT_FIRESTORE_DISABLED=1` to bypass the store. Once a window has hit its cap, `incrementWindow` returns a blocking count **without writing** — so a flood against one key can't exceed Firestore's ~1 write/s/doc soft limit and trigger contention failures that (via fail-open) would otherwise let blocked requests through. This also bounds writes to `max` per window per key, protecting the cost contract. Counter docs live in the `rateLimits` collection; windows reset in place so the collection is bounded by distinct keys, and an optional Firestore TTL policy on the `expireAt` field reaps abandoned keys for free.
 
 `trust proxy` is set to `1` in `server.js`, which is required when running behind Cloud Run / proxy infrastructure. If the app is deployed behind a different proxy chain, update `trust proxy` in `server.js` rather than changing the limiter to read raw forwarding headers.
 
@@ -172,8 +180,11 @@ Every state-changing admin POST (all 26 `requireSiteAdmin` POST routes, includin
 - **`verifyCsrf`**: mounted **after** `requireSiteAdmin` on each admin POST (unauthenticated callers still get the 401). Accepts the token from the `x-csrf-token` header (AJAX) or the `_csrf` body field (HTML forms); constant-time comparison; 403 JSON on mismatch.
 - **Templates:** admin forms carry `<input type="hidden" name="_csrf" value="<%= csrfToken %>">`; admin AJAX `fetch` calls send `'x-csrf-token': '<%= csrfToken %>'`. When adding a new admin POST route or form, add both the `verifyCsrf` guard and the token — `tests/routes.test.js` fails if an admin POST is registered without `verifyCsrf`.
 - `POST /admin/logout` is deliberately not CSRF-guarded (forcing a logout is equivalent to session expiry; a 403 there could strand a stale tab).
+- `POST /my-entry/verify` uses `verifyRequestOrigin` before its controller reserves an attempt. It requires an exact matching `Origin`, or a matching `Referer` origin only when `Origin` is absent. Missing, opaque (`null`), malformed, and mismatched sources receive 403 without accessing the attempt counter or entry. The target is `https://APP_HOST` when configured; otherwise it is the request protocol and Host (supporting local development and alternate deployments). Forwarded host headers are never used. This follows [OWASP's origin-check guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#using-standard-headers-to-verify-origin) without minting tokens or writing anonymous sessions. Clients that suppress both headers must reopen the lookup in a browser that sends one. This prevents drive-by browser submissions, not direct attackers who can forge headers, so the global attempt limit remains necessary. Successful verification still regenerates the session ID and restores coexisting admin/user identity, CSRF token, and cookie lifetime; old entry grants are dropped.
 - `GET /admin/cloud/budget` is the one admin GET with a side effect (a cache-bypassing read of the free Billing Budgets API via `getBudgetStatus({ force: true })`). It stays a GET deliberately: it changes no app state, the API is free, and `sameSite: lax` means a cross-site sub-resource fetch won't carry the session — the worst forgeable case is a tricked top-level navigation that refreshes a cache. If it ever gains a costlier or state-changing side effect, convert it to POST + `verifyCsrf`.
 - Tests: `tests/csrf.test.js` (token minting, admin-only attachment, header/body acceptance, rejection paths) and the route-composition assertions in `tests/routes.test.js`.
+
+**Standing constraint — a response that embeds the CSRF token must not also reflect a value an attacker can vary per request.** Every response is compressed (`compression({ level: 9, threshold: 0 })` in `server.js`, deliberate for the $0 egress budget), and a response carrying both the token and attacker-controlled variable text supplies the two ingredients of a BREACH-style compression side channel. That combination doesn't exist today, for two different reasons depending on the page: the `requireSiteAdmin`-gated admin pages render server-derived data only, alongside a token — no reflection at all. `views/myEditEntry.ejs` and `views/myBrackets.ejs` (`userEmail` / `verifiedEntries` sessions) are a second case the token *and* reflect request-derived values (`entryData.id`, `year`) back into hidden fields — but neither value is free for an attacker to vary per request the way a BREACH oracle needs: `year` is pinned to the single value `canEditYear()` allows, and `entryData.id` must already be a key in that session's `verifiedEntries` map — established once, by prior email verification — before the page will render it back at all. The public pages that reflect genuinely free-form input (`myEntryLookup.ejs`'s `entryId`/`year` query params, `registration.ejs`'s `formValues`) carry no token, because `attachCsrfToken` mints only for `siteAdmin` / `userEmail` / `verifiedEntries` sessions. Keep it that way — when a new page renders the token alongside reflected input, the reflected value must be similarly pinned or session-bound, not freely attacker-choosable per request. The remedy is to constrain or drop the reflection, never to weaken `compression`, whose `threshold: 0` is a measured cost lever, not an oversight (#517).
 
 Sessions persist in Firestore (`express-sessions` collection), surviving Cloud Run restarts. Each session doc carries an `expireAt` Firestore `Timestamp` (mirroring the `rateLimits` pattern) so a TTL policy can reap expired sessions — see the one-time setup in [deployment.md](./deployment.md#firestore-one-time-setup); the store also opportunistically deletes expired docs on read, so the collection stays bounded even if the TTL policy is missing (security audit 2026-06-09, finding 2). **Do not reintroduce `requireAdminReferrer`** — `Referer` is not a security control.
 
@@ -214,7 +225,7 @@ Pattern (used in `myEntryVerify` and both branches of `googleAuthCallback` — a
 The `/my-entry/*` flow uses a lightweight ownership check for public self-service edits:
 
 1. `POST /my-entry/verify` requires `entryId`, `year`, and email.
-2. The submitted email is compared case-insensitively against the stored entry email.
+2. A global per-entry attempt is reserved before reading the entry. An exhausted budget rejects the request without checking the email; otherwise the submitted email is compared case-insensitively against the stored entry email.
 3. On success, `req.session.regenerate()` is called, then `req.session.verifiedEntries["${year}:${entryId}"] = true` is saved.
 4. `GET /my-entry/edit` and `POST /my-entry/update` require that exact `year:entryId` session key.
 5. `myEntryUpdate` re-reads the stored entry before writing and preserves server-owned fields (`email`, `groups`, `hasPaid`, `paymentNote`, `payByCheck`, `emailSent`) instead of trusting hidden form values.
@@ -225,11 +236,9 @@ This prevents a session verified for one tournament year from updating the same 
 
 `ValidationError` responses can include user-correctable details.
 
-`DatabaseError` and `ServiceError` responses are environment-sensitive:
+`ServiceError` responses are generic by default in every environment. The explicit `DEBUG_ERRORS=1` or `DEBUG_ERRORS=true` flag enables the supported internal response fields; a non-production `NODE_ENV` alone does not.
 
-- **Production:** generic message only.
-- **Non-production:** `message`, `operation`, and `service` details included.
-- **All environments:** full detail logged via `Logger.error`.
+At the controller/global error boundary, logs in every environment retain the error type, recognized stack locations, and allowlisted validation field names. They omit raw messages and arbitrary error properties, which can contain request bodies or upstream credentials. Unrecognized stack formats are omitted rather than logged verbatim. This sanitization does not change logging within other services or repositories; see [request-log guidance](./utilities.md#pii-redaction-in-request-logs).
 
 ## Treating LLM / Model Output as Untrusted Input
 

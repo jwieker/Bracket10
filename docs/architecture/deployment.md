@@ -1,6 +1,6 @@
 ---
 tags: [architecture, deployment, gcp]
-updated: 2026-05-20
+updated: 2026-09-06
 ---
 
 # Deployment
@@ -185,7 +185,7 @@ One-time; the TTL policy itself is free to enable, and TTL deletions are billed 
 
 ## Dual PWA Architecture
 
-Two distinct Progressive Web Apps run on the same domain to isolate offline capabilities and caching:
+Two distinct Progressive Web Apps run on the same domain with separate static-asset caches. Both keep dynamic pages and API responses out of offline storage (see [Browser offline cache](./caching.md#browser-offline-cache)):
 
 1. **Main User App (`/`)**:
    - Header: `views/partials/header.ejs`

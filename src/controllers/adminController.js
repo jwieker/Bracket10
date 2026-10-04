@@ -19,21 +19,19 @@ const adminTournamentPage = controllerWrapper(async (req, res) => {
   const year = parseYearOrDefault(req.query.year, thisYear);
   const activeGames = await gameRepository.getActiveGames(year);
   if (activeGames.length > 0) {
-    const enhancedActiveGames = await Promise.all(
-      activeGames.map(async (game) => {
-        if (game.winner) {
-          const team1 = game.team1ID;
-          const team1Name = game.team1Name;
-          const team2Name = game.team2Name;
-          if (game.winner === team1) {
-            return { ...game, winnerName: team1Name };
-          } else {
-            return { ...game, winnerName: team2Name };
-          }
+    const enhancedActiveGames = activeGames.map((game) => {
+      if (game.winner) {
+        const team1 = game.team1ID;
+        const team1Name = game.team1Name;
+        const team2Name = game.team2Name;
+        if (game.winner === team1) {
+          return { ...game, winnerName: team1Name };
+        } else {
+          return { ...game, winnerName: team2Name };
         }
-        return game;
-      }),
-    );
+      }
+      return game;
+    });
     // Unresolved First Four (round 0) games pinned to the top; once complete
     // they sort like any other finished game. The sort is stable so the
     // repository ordering (unresolved first, then gameID) is kept otherwise.

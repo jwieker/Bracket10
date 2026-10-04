@@ -95,6 +95,8 @@ describe('TourneyService', () => {
       upsertTournamentDoc: vi.fn(),
       insertFirstFourGames: vi.fn(),
       insertFirstFourSchoolRecords: vi.fn(),
+      getYearOccupancy: vi.fn(),
+      createBracketAtomic: vi.fn(),
       deleteGamesByYear: vi.fn(),
       deleteSchoolRecordsByYear: vi.fn(),
       deleteRegionsByYear: vi.fn(),
@@ -1027,13 +1029,41 @@ describe('TourneyService', () => {
 
     describe('createNewBracket', () => {
       beforeEach(() => {
-        mockTourneyRepository.insertRegionsForYear.mockResolvedValue();
-        mockTourneyRepository.insertMultipleGamesWithoutTeams.mockResolvedValue();
-        mockTourneyRepository.insertMultipleGamesWithTeams.mockResolvedValue();
-        mockTourneyRepository.insertMultipleSchoolRecords.mockResolvedValue();
-        mockTourneyRepository.upsertTournamentDoc.mockResolvedValue();
-        mockTourneyRepository.insertFirstFourGames.mockResolvedValue();
-        mockTourneyRepository.insertFirstFourSchoolRecords.mockResolvedValue();
+        mockTourneyRepository.getYearOccupancy.mockResolvedValue({
+          occupied: false,
+        });
+        mockTourneyRepository.createBracketAtomic.mockResolvedValue({
+          writeCount: 0,
+        });
+      });
+
+      test('checks year occupancy before doing anything else', async () => {
+        await tourneyService.createNewBracket(
+          ['1-1-1-1', '1-1-16-16'],
+          2024,
+          [1, 2, 3, 4],
+        );
+        expect(mockTourneyRepository.getYearOccupancy).toHaveBeenCalledWith(
+          2024,
+        );
+      });
+
+      test('refuses to create into an occupied year and never calls createBracketAtomic', async () => {
+        mockTourneyRepository.getYearOccupancy.mockResolvedValue({
+          occupied: true,
+          hasParent: true,
+        });
+
+        await expect(
+          tourneyService.createNewBracket(
+            ['1-1-1-1', '1-1-16-16'],
+            2024,
+            [1, 2, 3, 4],
+          ),
+        ).rejects.toThrow(/already exists/);
+        expect(
+          mockTourneyRepository.createBracketAtomic,
+        ).not.toHaveBeenCalled();
       });
 
       test('should create new bracket successfully', async () => {
@@ -1043,33 +1073,30 @@ describe('TourneyService', () => {
 
         await tourneyService.createNewBracket(games, year, regionArray);
 
-        expect(mockTourneyRepository.insertRegionsForYear).toHaveBeenCalled();
-        expect(
-          mockTourneyRepository.insertMultipleGamesWithoutTeams,
-        ).toHaveBeenCalled();
-        expect(
-          mockTourneyRepository.insertMultipleGamesWithTeams,
-        ).toHaveBeenCalled();
-        expect(
-          mockTourneyRepository.insertMultipleSchoolRecords,
-        ).toHaveBeenCalled();
+        expect(mockTourneyRepository.createBracketAtomic).toHaveBeenCalledTimes(
+          1,
+        );
+        const [call] = mockTourneyRepository.createBracketAtomic.mock.calls[0];
+        expect(call.year).toBe(year);
+        expect(call.regionIDs).toEqual([1, 2, 3, 4, 5, 6]);
+        expect(call.gamesWithoutTeams.length).toBeGreaterThan(0);
+        expect(call.gamesWithTeams.length).toBeGreaterThan(0);
+        expect(call.schoolRecords.length).toBeGreaterThan(0);
       });
 
-      test('without FF: calls upsertTournamentDoc with no options', async () => {
+      test('without FF: passes no First Four data and no tournamentDocExtra', async () => {
         await tourneyService.createNewBracket(
           ['1-1-1-1', '1-1-16-16'],
           2024,
           [1, 2, 3, 4],
         );
-        expect(mockTourneyRepository.upsertTournamentDoc).toHaveBeenCalledWith(
-          2024,
-        );
-        expect(
-          mockTourneyRepository.insertFirstFourGames,
-        ).not.toHaveBeenCalled();
+        const [call] = mockTourneyRepository.createBracketAtomic.mock.calls[0];
+        expect(call.firstFourGames).toEqual([]);
+        expect(call.firstFourSchoolRecords).toEqual([]);
+        expect(call.tournamentDocExtra).toEqual({});
       });
 
-      test('with FF: calls insertFirstFourGames and upsertTournamentDoc with hasFirstFour', async () => {
+      test('with FF: passes First Four games/records and hasFirstFour in the same atomic call', async () => {
         const firstFourData = [
           {
             team1ID: 100,
@@ -1087,17 +1114,25 @@ describe('TourneyService', () => {
           firstFourData,
         );
 
-        expect(mockTourneyRepository.insertFirstFourGames).toHaveBeenCalled();
-        expect(
-          mockTourneyRepository.insertFirstFourSchoolRecords,
-        ).toHaveBeenCalled();
-        expect(mockTourneyRepository.upsertTournamentDoc).toHaveBeenCalledWith(
-          2024,
+        const [call] = mockTourneyRepository.createBracketAtomic.mock.calls[0];
+        expect(call.firstFourGames).toEqual([
           {
-            hasFirstFour: true,
-            firstFourGameCount: 1,
+            gameID: 64,
+            team1ID: 100,
+            team2ID: 200,
+            seed: 16,
+            nextGameID: 1,
+            nextGameSpot: 1,
           },
-        );
+        ]);
+        expect(call.firstFourSchoolRecords).toEqual([
+          { sID: 100, seed: 16, gameID: 64, slot: 1, r1RegionID: 1 },
+          { sID: 200, seed: 16, gameID: 64, slot: 2, r1RegionID: 1 },
+        ]);
+        expect(call.tournamentDocExtra).toEqual({
+          hasFirstFour: true,
+          firstFourGameCount: 1,
+        });
       });
 
       describe('FF-fed R1 slot: creation and winner propagation', () => {
@@ -1119,7 +1154,7 @@ describe('TourneyService', () => {
           },
         ];
 
-        test('R1 game with one FF-fed slot is passed to insertMultipleGamesWithTeams (not dropped)', async () => {
+        test('R1 game with one FF-fed slot is passed to createBracketAtomic gamesWithTeams (not dropped)', async () => {
           await tourneyService.createNewBracket(
             gamesData,
             year,
@@ -1127,9 +1162,9 @@ describe('TourneyService', () => {
             firstFourData,
           );
 
-          const gamesWithTeams =
-            mockTourneyRepository.insertMultipleGamesWithTeams.mock.calls[0][0];
-          const r1Game = gamesWithTeams.find((g) => g[0] === 1); // gameID 1
+          const [call] =
+            mockTourneyRepository.createBracketAtomic.mock.calls[0];
+          const r1Game = call.gamesWithTeams.find((g) => g[0] === 1); // gameID 1
           expect(r1Game).toBeDefined();
         });
 
@@ -1141,15 +1176,15 @@ describe('TourneyService', () => {
             firstFourData,
           );
 
-          const gamesWithTeams =
-            mockTourneyRepository.insertMultipleGamesWithTeams.mock.calls[0][0];
-          const r1Game = gamesWithTeams.find((g) => g[0] === 1);
+          const [call] =
+            mockTourneyRepository.createBracketAtomic.mock.calls[0];
+          const r1Game = call.gamesWithTeams.find((g) => g[0] === 1);
           const [, , , team1ID, team2ID] = r1Game;
           expect(team1ID).toBe(10); // slot 1: real team
           expect(team2ID).toBeNull(); // slot 2: FF-fed, not yet known
         });
 
-        test('R1 game with FF-fed slot is NOT in insertMultipleGamesWithoutTeams', async () => {
+        test('R1 game with FF-fed slot is NOT in createBracketAtomic gamesWithoutTeams', async () => {
           await tourneyService.createNewBracket(
             gamesData,
             year,
@@ -1157,10 +1192,9 @@ describe('TourneyService', () => {
             firstFourData,
           );
 
-          const gamesWithoutTeams =
-            mockTourneyRepository.insertMultipleGamesWithoutTeams.mock
-              .calls[0][0];
-          const r1Game = gamesWithoutTeams.find((g) => g[0] === 1);
+          const [call] =
+            mockTourneyRepository.createBracketAtomic.mock.calls[0];
+          const r1Game = call.gamesWithoutTeams.find((g) => g[0] === 1);
           expect(r1Game).toBeUndefined();
         });
 
@@ -1386,11 +1420,15 @@ describe('TourneyService', () => {
       // Two R1 games across two regions: region 1 game 1 (seeds 1/16) and
       // region 2 game 16 (seeds 1/16). Existing records are listed
       // seed-sorted, exactly as getSchoolRecordsForYear returns them.
+      // docId follows the real canonical `${regionID}_${seed}` convention —
+      // updateBracket partitions on it (excluding any `ff_*` doc) before
+      // diffing, so a fixture without a plausible docId no longer represents
+      // what the repository actually returns.
       const existingTwoRegions = [
-        { sID: 10, seed: 1, regionID: 1 },
-        { sID: 20, seed: 1, regionID: 2 },
-        { sID: 11, seed: 16, regionID: 1 },
-        { sID: 21, seed: 16, regionID: 2 },
+        { sID: 10, seed: 1, regionID: 1, docId: '1_1' },
+        { sID: 20, seed: 1, regionID: 2, docId: '2_1' },
+        { sID: 11, seed: 16, regionID: 1, docId: '1_16' },
+        { sID: 21, seed: 16, regionID: 2, docId: '2_16' },
       ];
 
       test('single swap pairs the new school with the removed school in its slot', async () => {
@@ -1432,10 +1470,10 @@ describe('TourneyService', () => {
       test('pairing is independent of the order existing records are returned in', async () => {
         // Same double swap, but existing records in bracket-form order
         mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
-          { sID: 10, seed: 1, regionID: 1 },
-          { sID: 11, seed: 16, regionID: 1 },
-          { sID: 20, seed: 1, regionID: 2 },
-          { sID: 21, seed: 16, regionID: 2 },
+          { sID: 10, seed: 1, regionID: 1, docId: '1_1' },
+          { sID: 11, seed: 16, regionID: 1, docId: '1_16' },
+          { sID: 20, seed: 1, regionID: 2, docId: '2_1' },
+          { sID: 21, seed: 16, regionID: 2, docId: '2_16' },
         ]);
 
         const result = await tourneyService.updateBracket(
@@ -1449,17 +1487,16 @@ describe('TourneyService', () => {
         expect(result).toContainEqual([66, 20]);
       });
 
-      test('multi-record slot (First Four pair) pairs FIFO within the slot', async () => {
-        // Both removed records share the slot key (like a First Four
-        // pair feeding one R1 slot), and both replacements arrive at
-        // the same key. Records in one slot carry no distinguishing
-        // data, so the pairing is FIFO over each list's arrival
-        // order: first add (55, form order) takes the first removed
-        // record (100, getSchoolRecordsForYear order), second add
-        // (66) takes the second (200).
+      test('multi-record slot (ordinary duplicate-slot records) still pairs FIFO within the slot', async () => {
+        // Two ordinary (non-ff_*) records sharing a slot key, and both
+        // replacements arrive at the same key. Records in one slot carry no
+        // distinguishing data, so the pairing is FIFO over each list's
+        // arrival order: first add (55, form order) takes the first removed
+        // record (100, getSchoolRecordsForYear order), second add (66)
+        // takes the second (200).
         mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
-          { sID: 100, seed: 16, regionID: 1 },
-          { sID: 200, seed: 16, regionID: 1 },
+          { sID: 100, seed: 16, regionID: 1, docId: 'dupe_1' },
+          { sID: 200, seed: 16, regionID: 1, docId: 'dupe_2' },
         ]);
 
         const result = await tourneyService.updateBracket(
@@ -1474,6 +1511,43 @@ describe('TourneyService', () => {
         ]);
       });
 
+      test('First Four (ff_*) records are excluded from the diff entirely — unchanged submission with unresolved play-ins is a no-op', async () => {
+        // Region 1 seed 16's R1 slot is unresolved (fed by a play-in), so the
+        // submitted form has no entry for it — only the resolved seed-1 team.
+        // getSchoolRecordsForYear still returns both First Four participants
+        // (ff_64_1/ff_64_2) alongside the canonical seed-1 record. Before the
+        // docId partition, this read as 0 additions vs 2 removals even though
+        // nothing changed; ff_* records must never enter this diff.
+        mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
+          { sID: 10, seed: 1, regionID: 1, docId: '1_1' },
+          {
+            sID: 100,
+            seed: 16,
+            regionID: 1,
+            docId: 'ff_64_1',
+            canonicalDocId: '1_16',
+          },
+          {
+            sID: 200,
+            seed: 16,
+            regionID: 1,
+            docId: 'ff_64_2',
+            canonicalDocId: '1_16',
+          },
+        ]);
+
+        const result = await tourneyService.updateBracket(
+          ['1-1-1-10', '1-1-16-'],
+          year,
+          regionArray,
+        );
+
+        expect(result).toEqual([]);
+        expect(
+          mockTourneyRepository.updateMultipleSchoolRecords,
+        ).toHaveBeenCalledWith([{ sID: 10, year, seed: 1, regionID: 1 }]);
+      });
+
       test("throws ValidationError when a slot's removed records are exhausted mid-edit", async () => {
         // Two adds land in region 1 / seed 16 but only one removed
         // school sits there (the other removal is in seed 15). The
@@ -1481,8 +1555,8 @@ describe('TourneyService', () => {
         // second must hit the exhausted-slot half of the guard and
         // fail loudly before any writes.
         mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
-          { sID: 11, seed: 16, regionID: 1 },
-          { sID: 12, seed: 15, regionID: 1 },
+          { sID: 11, seed: 16, regionID: 1, docId: '1_16' },
+          { sID: 12, seed: 15, regionID: 1, docId: '1_15' },
         ]);
 
         await expect(
@@ -1504,8 +1578,8 @@ describe('TourneyService', () => {
         // school sat in region 1 / seed 15. Pairing them would migrate
         // picks across slots — fail loudly instead.
         mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
-          { sID: 10, seed: 1, regionID: 1 },
-          { sID: 11, seed: 15, regionID: 1 },
+          { sID: 10, seed: 1, regionID: 1, docId: '1_1' },
+          { sID: 11, seed: 15, regionID: 1, docId: '1_15' },
         ]);
 
         await expect(
@@ -1524,8 +1598,8 @@ describe('TourneyService', () => {
       test('throws ValidationError when more schools are removed than added (C1 regression)', async () => {
         // Empty games → newSIDs = []. Two existing → sIDsToRemove = [201, 202], sIDsToAdd = []
         mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
-          { sID: 201 },
-          { sID: 202 },
+          { sID: 201, docId: 'x_201' },
+          { sID: 202, docId: 'x_202' },
         ]);
 
         await expect(
@@ -1554,8 +1628,8 @@ describe('TourneyService', () => {
 
       test('returns empty changes and writes nothing-new when add and remove sets are both empty', async () => {
         mockTourneyRepository.getSchoolRecordsForYear.mockResolvedValue([
-          { sID: 1 },
-          { sID: 16 },
+          { sID: 1, docId: 'x_1' },
+          { sID: 16, docId: 'x_16' },
         ]);
 
         const result = await tourneyService.updateBracket(

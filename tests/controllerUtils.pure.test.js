@@ -6,8 +6,10 @@ import {
   parseYear,
   parseYearOrDefault,
   parsePositiveInt,
+  isValidSlug,
   validateConferencePayload,
   validateEntryId,
+  homeErrorRedirect,
 } from '../src/utils/controllerUtils.js';
 import { ValidationError, ServiceError } from '../src/utils/errors.js';
 
@@ -29,6 +31,13 @@ function mockReq(overrides = {}) {
     ...overrides,
   };
 }
+
+describe('homeErrorRedirect', () => {
+  test('always redirects to / with the given query string', () => {
+    expect(homeErrorRedirect('error=true')).toBe('/?error=true');
+    expect(homeErrorRedirect('createError=true')).toBe('/?createError=true');
+  });
+});
 
 describe('successResponse', () => {
   test('returns 200 with success shape', () => {
@@ -218,6 +227,56 @@ describe('validateEntryId', () => {
     expect(() => validateEntryId(123)).toThrow(ValidationError);
     expect(() => validateEntryId(undefined)).toThrow(ValidationError);
     expect(() => validateEntryId(null)).toThrow(ValidationError);
+  });
+});
+
+describe('isValidSlug (#512)', () => {
+  test('accepts the slug shapes validateConferencePayload accepts', () => {
+    expect(isValidSlug('acc')).toBe(true);
+    expect(isValidSlug('big-12')).toBe(true);
+    expect(isValidSlug('a'.repeat(64))).toBe(true); // upper bound
+  });
+
+  test('rejects a path-shaped slug', () => {
+    expect(isValidSlug('x/y/z')).toBe(false);
+  });
+
+  test('rejects uppercase, spaces, dots, and over-long slugs', () => {
+    expect(isValidSlug('ACC')).toBe(false);
+    expect(isValidSlug('big 12')).toBe(false);
+    expect(isValidSlug('big.12')).toBe(false);
+    expect(isValidSlug('a'.repeat(65))).toBe(false);
+  });
+
+  test('rejects empty and non-string input', () => {
+    expect(isValidSlug('')).toBe(false);
+    expect(isValidSlug(['acc', 'sec'])).toBe(false);
+    expect(isValidSlug(undefined)).toBe(false);
+    expect(isValidSlug(null)).toBe(false);
+  });
+
+  // The point of sharing SLUG_RE is that the read predicate and the write
+  // validator can't drift apart; assert they actually agree.
+  test('agrees with validateConferencePayload on every slug shape', () => {
+    for (const slug of [
+      'acc',
+      'big-12',
+      'ACC',
+      'big 12',
+      'big.12',
+      'x/y/z',
+      '',
+      'a'.repeat(64),
+      'a'.repeat(65),
+    ]) {
+      let writeAccepts = true;
+      try {
+        validateConferencePayload({ slug, name: 'X' });
+      } catch {
+        writeAccepts = false;
+      }
+      expect(isValidSlug(slug)).toBe(writeAccepts);
+    }
   });
 });
 
