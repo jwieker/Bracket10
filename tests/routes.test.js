@@ -262,6 +262,45 @@ describe('Route registration', () => {
         });
       }
     });
+
+    test('ESPN tournament-creation routes are admin-guarded, CSRF-checked and rate-limited', () => {
+      expectRoute(r, 'GET /admin/tournament/espn-setup', {
+        handlerCount: 2,
+        protectedByAdmin: true,
+      });
+      const espnPosts = [
+        'POST /admin/tournament/espn-plan',
+        'POST /createTournamentFromEspn',
+      ];
+      for (const key of espnPosts) {
+        expectRoute(r, key, { handlerCount: 4, protectedByAdmin: true });
+      }
+      // espnPlanLimiter isn't exported; pin it as the shared third handler of
+      // both POSTs, i.e. mounted after verifyCsrf and before the controller.
+      const [plan, create] = espnPosts.map((key) => r[key].handlers);
+      expect(plan[2]).toBe(create[2]);
+      expect([requireSiteAdmin, verifyCsrf]).not.toContain(plan[2]);
+      expect(plan[3]).not.toBe(create[3]);
+    });
+
+    // Derived from the router rather than a hardcoded list, so a newly added
+    // tourney route without the admin guard (or CSRF on a write) fails here.
+    test('every registered tourney route is admin-guarded; writes carry verifyCsrf after it', () => {
+      const keys = Object.keys(r);
+      expect(keys.length).toBeGreaterThanOrEqual(12);
+      for (const key of keys) {
+        const { handlers } = r[key];
+        expect(handlers[0], `${key} must start with requireSiteAdmin`).toBe(
+          requireSiteAdmin,
+        );
+        if (!key.startsWith('GET ')) {
+          expect(
+            handlers.indexOf(verifyCsrf),
+            `${key} must include verifyCsrf after requireSiteAdmin`,
+          ).toBeGreaterThan(0);
+        }
+      }
+    });
   });
 
   describe('viewRoutes', () => {
@@ -273,9 +312,9 @@ describe('Route registration', () => {
         protectedByAdmin: false,
       });
       // verify's per-entryId brute-force guard moved into the controller (#161),
-      // so the route is just publicLimiter + handler.
+      // with an origin guard before it can reserve an attempt.
       expectRoute(r, 'POST /my-entry/verify', {
-        handlerCount: 2,
+        handlerCount: 3,
         protectedByAdmin: false,
       });
       expectRoute(r, 'GET /my-entry/edit', {

@@ -5,9 +5,10 @@ import {
   buildFullGridData,
   buildGameViewData,
 } from '../services/index.js';
-import { thisYear } from '../config/app.js';
+import { APP_CONFIG, thisYear } from '../config/app.js';
 import {
   controllerWrapper,
+  homeErrorRedirect,
   validateRequest,
   successResponse,
   parseYear,
@@ -24,6 +25,22 @@ const calculateMaxPoints = controllerWrapper(async (req, res) => {
     throw new ValidationError('teamSIDs must be an array', 'teamSIDs');
   }
 
+  // This is the only entry point into the points engine that takes a
+  // caller-supplied pick list directly — every other path is bounded to
+  // maxPicksPerEntry by normalizeAndValidateEntryPicks or extractPicks. Without
+  // a cap here, one anonymous request can drive a synchronous per-pick bracket
+  // walk (calculateEntryPointsAndPaths → getNextFutureGame → getFuturePoints)
+  // over thousands of elements and block the event loop for every other request
+  // on the instance; publicLimiter bounds the request rate, not the cost of one.
+  // Both browser callers only fire at exactly 10 picks (public/js/registration.js,
+  // public/js/editEntry.js), so the config cap rejects nothing legitimate.
+  if (teamSIDs.length > APP_CONFIG.tournament.maxPicksPerEntry) {
+    throw new ValidationError(
+      `teamSIDs must contain at most ${APP_CONFIG.tournament.maxPicksPerEntry} entries`,
+      'teamSIDs',
+    );
+  }
+
   const parsedYear = year ? parseYear(year) : undefined;
   const maxPoints = await calculateMaxPossiblePoints(teamSIDs, parsedYear);
 
@@ -36,16 +53,37 @@ const calculateMaxPoints = controllerWrapper(async (req, res) => {
 
 const getFullGrid = controllerWrapper(async (req, res) => {
   const groupName = req.body['gameName'];
-  const gameYear = req.body['gameYear'];
+  // Both callers (results.ejs, playground.ejs) always post gameName/gameYear, so
+  // a missing one means a hand-rolled request. Validate here — as getPlayground
+  // already does — instead of letting undefined params reach Firestore and
+  // surface as a generic 500 (#479). parseYear covers both missing and
+  // malformed years, and normalizes to a Number so the fullGridData_ cache key
+  // stays identical to the one the repository invalidation paths build.
+  if (!groupName) {
+    throw new ValidationError('Group name is required', 'gameName');
+  }
+  const gameYear = parseYear(req.body['gameYear']);
+
+  // Resolve to the stored group name before reading, the same way gameView
+  // does (#515). verifyGroupExists is the canonicalizer here, not an access
+  // check — group grids are public either way — so this is about not silently
+  // rendering an empty grid for a case variant (`default` vs `Default`), and
+  // about keeping callers on one `fullGridData_` cache key instead of minting
+  // a separate entry per casing. findGroupByName caches for 24h, so this adds
+  // no Firestore read on the common path.
+  const verifiedGroupName = await verifyGroupExists(groupName);
+  if (!verifiedGroupName) {
+    throw new ValidationError('Group not found', 'gameName');
+  }
 
   const { groupData, allTeamsWithPickCounts } = await buildFullGridData(
-    groupName,
+    verifiedGroupName,
     gameYear,
   );
 
   res.set('Cache-Control', 'private, max-age=300');
   res.render('fullGrid', {
-    groupName,
+    groupName: verifiedGroupName,
     groupData: groupData,
     allTeams: allTeamsWithPickCounts,
     gameYear: gameYear,
@@ -54,10 +92,21 @@ const getFullGrid = controllerWrapper(async (req, res) => {
 
 const getFullGridCSV = controllerWrapper(async (req, res) => {
   const groupName = req.query['gameName'];
+  // Same guard as getFullGrid: without it a missing gameName reaches the
+  // `groupName.replace(...)` filename step below as undefined and 500s (#479).
+  if (!groupName) {
+    throw new ValidationError('Group name is required', 'gameName');
+  }
   const gameYear = parseYear(req.query['gameYear']);
 
+  // Canonicalize before reading — same reasoning as getFullGrid above (#515).
+  const verifiedGroupName = await verifyGroupExists(groupName);
+  if (!verifiedGroupName) {
+    throw new ValidationError('Group not found', 'gameName');
+  }
+
   const { groupData, allTeamsWithPickCounts } = await buildFullGridData(
-    groupName,
+    verifiedGroupName,
     gameYear,
   );
 
@@ -109,7 +158,9 @@ const getFullGridCSV = controllerWrapper(async (req, res) => {
   });
 
   const csv = [headers, wlRow, ...rows].map(toCSVRow).join('\r\n');
-  const safeGroupName = groupName.replace(/[^a-zA-Z0-9\-_]/g, '_');
+  // Sanitizer unchanged (it is a separate defense); it just runs on the
+  // canonical name now, so the filename matches the data in the file.
+  const safeGroupName = verifiedGroupName.replace(/[^a-zA-Z0-9\-_]/g, '_');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader(
     'Content-Disposition',
@@ -125,12 +176,12 @@ const gameView = controllerWrapper(async (req, res) => {
     : thisYear;
 
   if (!groupNameInput) {
-    return res.redirect('/?error=true');
+    return res.redirect(homeErrorRedirect('error=true'));
   }
 
   const verifiedGroupName = await verifyGroupExists(groupNameInput);
   if (!verifiedGroupName) {
-    return res.redirect('/?error=true');
+    return res.redirect(homeErrorRedirect('error=true'));
   }
 
   const {

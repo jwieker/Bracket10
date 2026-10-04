@@ -1,12 +1,15 @@
+import {
+  requestLogContext,
+  requestErrorDetails,
+} from '../utils/requestLogUtils.js';
 import Logger from '../utils/logger.js';
 import {
   ValidationError,
   ServiceError,
-  DatabaseError,
   debugErrorsEnabled,
 } from '../utils/errors.js';
 
-// Verbose error fields (operation, service, internal messages) are exposed only
+// Verbose error fields (service, internal messages) are exposed only
 // when DEBUG_ERRORS is explicitly enabled (see debugErrorsEnabled in errors.js —
 // the single source of truth shared with controllerWrapper). Previously these
 // leaked for any non-production NODE_ENV — but "non-prod" isn't the same as
@@ -29,10 +32,10 @@ export function errorMiddleware(err, req, res, next) {
 
     // Map known error types to status codes and payloads
     if (err instanceof ValidationError) {
-      Logger.warn(`Validation error at ${req.method} ${req.originalUrl}`, {
-        field: err.field,
-        message: err.message,
-      });
+      Logger.warn(
+        `Validation error at ${req.method} ${requestLogContext(req).url}`,
+        requestErrorDetails(err),
+      );
       const payload = {
         error: 'Validation Error',
         message: err.message,
@@ -46,22 +49,11 @@ export function errorMiddleware(err, req, res, next) {
         : res.status(400).type('text/plain').send(payload.message);
     }
 
-    if (err instanceof DatabaseError) {
-      Logger.error(`Database error at ${req.method} ${req.originalUrl}`, err);
-      const payload = debugErrorsEnabled()
-        ? {
-            error: 'Database Error',
-            message: err.message,
-            operation: err.operation,
-          }
-        : { error: 'Database Error', message: 'A database error occurred.' };
-      return isJson
-        ? res.status(500).json(payload)
-        : res.status(500).type('text/plain').send('A database error occurred.');
-    }
-
     if (err instanceof ServiceError) {
-      Logger.error(`Service error at ${req.method} ${req.originalUrl}`, err);
+      Logger.error(
+        `Service error at ${req.method} ${requestLogContext(req).url}`,
+        requestErrorDetails(err),
+      );
       const payload = debugErrorsEnabled()
         ? { error: 'Service Error', message: err.message, service: err.service }
         : { error: 'Service Error', message: 'A service error occurred.' };
@@ -71,7 +63,10 @@ export function errorMiddleware(err, req, res, next) {
     }
 
     // Unknown error
-    Logger.error(`Unhandled error at ${req.method} ${req.originalUrl}`, err);
+    Logger.error(
+      `Unhandled error at ${req.method} ${requestLogContext(req).url}`,
+      requestErrorDetails(err),
+    );
     const payload = {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred',
@@ -81,7 +76,10 @@ export function errorMiddleware(err, req, res, next) {
       : res.status(500).type('text/plain').send(payload.message);
   } catch (middlewareError) {
     // Last resort: ensure the response is sent
-    Logger.error('Error in errorMiddleware:', middlewareError);
+    Logger.error(
+      'Error in errorMiddleware:',
+      requestErrorDetails(middlewareError),
+    );
     return res.status(500).send('Internal Server Error');
   }
 }

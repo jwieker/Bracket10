@@ -1,0 +1,84 @@
+{
+  "events": [
+    {
+      "id": "401745911",
+      "date": "2025-03-19T01:10Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - South Region - First Four"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": false,
+              "team": {
+                "id": "21",
+                "displayName": "San Diego State Aztecs"
+              },
+              "curatedRank": {
+                "current": 11
+              }
+            },
+            {
+              "winner": true,
+              "team": {
+                "id": "153",
+                "displayName": "North Carolina Tar Heels"
+              },
+              "curatedRank": {
+                "current": 11
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401745907",
+      "date": "2025-03-18T22:40Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - South Region - First Four"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "2011",
+                "displayName": "Alabama State Hornets"
+              },
+              "curatedRank": {
+                "current": 16
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2598",
+                "displayName": "Saint Francis Red Wolves"
+              },
+              "curatedRank": {
+                "current": 16
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

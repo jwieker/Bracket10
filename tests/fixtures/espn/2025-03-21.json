@@ -1,0 +1,644 @@
+{
+  "events": [
+    {
+      "id": "401746003",
+      "date": "2025-03-21T19:09Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "150",
+                "displayName": "Duke Blue Devils"
+              },
+              "curatedRank": {
+                "current": 1
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "116",
+                "displayName": "Mount St. Mary's Mountaineers"
+              },
+              "curatedRank": {
+                "current": 16
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746017",
+      "date": "2025-03-21T22:50Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - West Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "57",
+                "displayName": "Florida Gators"
+              },
+              "curatedRank": {
+                "current": 1
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2450",
+                "displayName": "Norfolk State Spartans"
+              },
+              "curatedRank": {
+                "current": 16
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746014",
+      "date": "2025-03-21T16:40Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "333",
+                "displayName": "Alabama Crimson Tide"
+              },
+              "curatedRank": {
+                "current": 2
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2523",
+                "displayName": "Robert Morris Colonials"
+              },
+              "curatedRank": {
+                "current": 15
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746001",
+      "date": "2025-03-22T02:12Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - South Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "127",
+                "displayName": "Michigan State Spartans"
+              },
+              "curatedRank": {
+                "current": 2
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2803",
+                "displayName": "Bryant Bulldogs"
+              },
+              "curatedRank": {
+                "current": 15
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401745997",
+      "date": "2025-03-21T17:30Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - South Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "66",
+                "displayName": "Iowa State Cyclones"
+              },
+              "curatedRank": {
+                "current": 3
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "288",
+                "displayName": "Lipscomb Bisons"
+              },
+              "curatedRank": {
+                "current": 14
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746016",
+      "date": "2025-03-21T23:20Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - Midwest Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "96",
+                "displayName": "Kentucky Wildcats"
+              },
+              "curatedRank": {
+                "current": 3
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2653",
+                "displayName": "Troy Trojans"
+              },
+              "curatedRank": {
+                "current": 14
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746021",
+      "date": "2025-03-21T20:35Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - West Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "120",
+                "displayName": "Maryland Terrapins"
+              },
+              "curatedRank": {
+                "current": 4
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2253",
+                "displayName": "Grand Canyon Lopes"
+              },
+              "curatedRank": {
+                "current": 13
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746009",
+      "date": "2025-03-21T23:48Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "12",
+                "displayName": "Arizona Wildcats"
+              },
+              "curatedRank": {
+                "current": 4
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2006",
+                "displayName": "Akron Zips"
+              },
+              "curatedRank": {
+                "current": 13
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746019",
+      "date": "2025-03-21T18:00Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - West Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": false,
+              "team": {
+                "id": "235",
+                "displayName": "Memphis Tigers"
+              },
+              "curatedRank": {
+                "current": 5
+              }
+            },
+            {
+              "winner": true,
+              "team": {
+                "id": "36",
+                "displayName": "Colorado State Rams"
+              },
+              "curatedRank": {
+                "current": 12
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746007",
+      "date": "2025-03-22T02:26Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "2483",
+                "displayName": "Oregon Ducks"
+              },
+              "curatedRank": {
+                "current": 5
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2335",
+                "displayName": "Liberty Flames"
+              },
+              "curatedRank": {
+                "current": 12
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401745995",
+      "date": "2025-03-21T20:05Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - South Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "145",
+                "displayName": "Ole Miss Rebels"
+              },
+              "curatedRank": {
+                "current": 6
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "153",
+                "displayName": "North Carolina Tar Heels"
+              },
+              "curatedRank": {
+                "current": 11
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746015",
+      "date": "2025-03-22T01:57Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - Midwest Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "356",
+                "displayName": "Illinois Fighting Illini"
+              },
+              "curatedRank": {
+                "current": 6
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "2752",
+                "displayName": "Xavier Musketeers"
+              },
+              "curatedRank": {
+                "current": 11
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746012",
+      "date": "2025-03-21T19:30Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "2608",
+                "displayName": "Saint Mary's Gaels"
+              },
+              "curatedRank": {
+                "current": 7
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "238",
+                "displayName": "Vanderbilt Commodores"
+              },
+              "curatedRank": {
+                "current": 10
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401745999",
+      "date": "2025-03-21T23:25Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - South Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": false,
+              "team": {
+                "id": "269",
+                "displayName": "Marquette Golden Eagles"
+              },
+              "curatedRank": {
+                "current": 7
+              }
+            },
+            {
+              "winner": true,
+              "team": {
+                "id": "167",
+                "displayName": "New Mexico Lobos"
+              },
+              "curatedRank": {
+                "current": 10
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746005",
+      "date": "2025-03-21T16:15Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - East Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": false,
+              "team": {
+                "id": "344",
+                "displayName": "Mississippi State Bulldogs"
+              },
+              "curatedRank": {
+                "current": 8
+              }
+            },
+            {
+              "winner": true,
+              "team": {
+                "id": "239",
+                "displayName": "Baylor Bears"
+              },
+              "curatedRank": {
+                "current": 9
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401746018",
+      "date": "2025-03-22T01:32Z",
+      "status": {
+        "type": {
+          "completed": true
+        }
+      },
+      "competitions": [
+        {
+          "notes": [
+            {
+              "headline": "Men's Basketball Championship - West Region - 1st Round"
+            }
+          ],
+          "competitors": [
+            {
+              "winner": true,
+              "team": {
+                "id": "41",
+                "displayName": "UConn Huskies"
+              },
+              "curatedRank": {
+                "current": 8
+              }
+            },
+            {
+              "winner": false,
+              "team": {
+                "id": "201",
+                "displayName": "Oklahoma Sooners"
+              },
+              "curatedRank": {
+                "current": 9
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -38,7 +38,13 @@ export {
 } from './tourneyService.js';
 
 // ESPN Service
-export { fetchScheduledTournamentGames } from './espnService.js';
+export {
+  fetchScheduledTournamentGames,
+  fetchNormalizedTournamentEvents,
+} from './espnService.js';
+export { matchTeam, matchSchoolsForEvents } from './schoolMatchingService.js';
+export { assembleBracketPlan } from './bracketPlanService.js';
+export { buildEspnBracketPlan } from './espnTournamentPlanService.js';
 
 // Email Service
 export { getUnsentEmailEntries, markEmailsSent } from './emailService.js';

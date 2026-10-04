@@ -664,18 +664,28 @@
                 const rows = document.querySelectorAll('.ff-game-row');
                 body.firstFourCount = rows.length;
                 let missingFF = false;
+                let badSeed = false;
                 rows.forEach((row, i) => {
                     const t1 = row.querySelector('.ff-team-select[data-slot="1"]').value;
                     const t2 = row.querySelector('.ff-team-select[data-slot="2"]').value;
                     if (!t1 || !t2) { missingFF = true; return; }
+                    // The server validates this too (parsePositiveInt, max 16). Checking
+                    // here as well so a blank seed reads as a labelled message on the form
+                    // rather than a bare 400 from the POST.
+                    const seed = Number(row.querySelector('.ff-seed-input').value);
+                    if (!Number.isInteger(seed) || seed < 1 || seed > 16) { badSeed = true; return; }
                     body[`ff_team1_${i}`] = Number(t1);
                     body[`ff_team2_${i}`] = Number(t2);
-                    body[`ff_seed_${i}`] = Number(row.querySelector('.ff-seed-input').value) || 0;
+                    body[`ff_seed_${i}`] = seed;
                     body[`ff_nextGame_${i}`] = Number(row.querySelector('.ff-nextgame-select').value);
                     body[`ff_nextGameSpot_${i}`] = Number(row.querySelector('.ff-nextspot-select').value);
                 });
                 if (missingFF) {
                     setStatus(statusEl, '⚠ Please select both teams for all First Four games.');
+                    return;
+                }
+                if (badSeed) {
+                    setStatus(statusEl, '⚠ Please enter a seed between 1 and 16 for all First Four games.');
                     return;
                 }
             }

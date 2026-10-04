@@ -60,6 +60,12 @@ vi.mock('../src/services/index.js', () => ({
   deleteTournament: vi.fn(),
 }));
 
+vi.mock('../src/middleware/rateLimit.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  reserveVerificationAttempt: vi.fn(async () => false),
+}));
+
+import { reserveVerificationAttempt } from '../src/middleware/rateLimit.js';
 import viewRoutes from '../src/routes/viewRoutes.js';
 import { gameRepository } from '../src/repositories/index.js';
 import {
@@ -100,6 +106,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  vi.stubEnv('APP_HOST', '');
   session = undefined;
 });
 
@@ -187,4 +195,104 @@ describe('POST /my-entry/update — CSRF guard (#301)', () => {
       }),
     );
   });
+});
+
+describe('POST /my-entry/verify — origin guard (#747)', () => {
+  async function verify(headers = {}) {
+    const response = await fetch(`${baseUrl}/my-entry/verify`, {
+      method: 'POST',
+      headers,
+      body: new URLSearchParams({
+        entryId: ENTRY_ID,
+        year: YEAR,
+        email: 'a@b.c',
+      }),
+      redirect: 'manual',
+    });
+    await response.text();
+    return response;
+  }
+
+  test.each([
+    {},
+    { Origin: 'https://attacker.example' },
+    { Origin: 'null' },
+    { Origin: 'not a URL' },
+    { Referer: 'https://attacker.example/my-entry' },
+    { Referer: 'not a URL' },
+  ])(
+    'rejects untrusted source %j without any verification side effects',
+    async (headers) => {
+      expect((await verify(headers)).status).toBe(403);
+      expect(reserveVerificationAttempt).not.toHaveBeenCalled();
+      expect(gameRepository.getEntryById).not.toHaveBeenCalled();
+      expect(session).toBeUndefined();
+    },
+  );
+
+  test.each(['null', 'https://attacker.example', ''])(
+    'does not fall back to a trusted Referer when Origin is %j',
+    async (Origin) => {
+      expect(
+        (await verify({ Origin, Referer: `${baseUrl}/my-entry` })).status,
+      ).toBe(403);
+      expect(reserveVerificationAttempt).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(['origin', 'referer'])(
+    'accepts same-origin %s from an anonymous visitor and still reserves before reading',
+    async (header) => {
+      gameRepository.getEntryById.mockResolvedValue(null);
+      const response = await verify(
+        header === 'origin'
+          ? { Origin: baseUrl }
+          : { Referer: `${baseUrl}/my-entry` },
+      );
+      expect(response.status).toBe(302);
+      expect(reserveVerificationAttempt).toHaveBeenCalledExactlyOnceWith({
+        key: `verify:${ENTRY_ID}`,
+        windowMs: 900000,
+        max: 5,
+      });
+      expect(
+        reserveVerificationAttempt.mock.invocationCallOrder[0],
+      ).toBeLessThan(gameRepository.getEntryById.mock.invocationCallOrder[0]);
+      expect(session).toBeUndefined();
+    },
+  );
+
+  test('uses configured HTTPS origin behind the proxy and verifies successfully', async () => {
+    vi.stubEnv('APP_HOST', 'bracket.example');
+    session = {
+      cookie: {},
+      regenerate: vi.fn((cb) => cb()),
+      save: vi.fn((cb) => cb()),
+    };
+    gameRepository.getEntryById.mockResolvedValue({ email: 'a@b.c' });
+    const response = await verify({ Origin: 'https://bracket.example' });
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toContain('/my-entry/edit?');
+    expect(session.verifiedEntries).toEqual({ [SESSION_KEY]: true });
+  });
+
+  test.each([
+    'https://bracket.example.attacker.example',
+    'https://sub.bracket.example',
+    'http://bracket.example',
+    'https://bracket.example:8443',
+    'https://attacker@bracket.example',
+    'https://bracket.example/path',
+  ])(
+    'requires exact configured origin, rejecting %s and forwarded-host spoofing',
+    async (Origin) => {
+      vi.stubEnv('APP_HOST', 'bracket.example');
+      expect(
+        (await verify({ Origin, 'X-Forwarded-Host': new URL(Origin).host }))
+          .status,
+      ).toBe(403);
+      expect(reserveVerificationAttempt).not.toHaveBeenCalled();
+      expect(gameRepository.getEntryById).not.toHaveBeenCalled();
+    },
+  );
 });

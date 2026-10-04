@@ -16,6 +16,13 @@ You'll need Node.js **v20.6+** (for native `--env-file-if-exists` support). The 
 
 To exercise admin features locally, you'll need a Google OAuth client (free) and a Firestore database. See [`README.md`](./README.md) for the full setup walkthrough.
 
+## AI assistants
+
+[AGENTS.md](./AGENTS.md) is the shared instruction source for all coding agents. Keep
+project rules there and task details under `docs/`; tool entry files should import or point
+to them. See [AI onboarding](./docs/development/ai-onboarding.md) for the credential-free
+coding setup and the boundaries of automatic onboarding.
+
 ## Project layout
 
 See the **Project Structure** section of the [README](./README.md). Deeper architectural notes live in [`docs/architecture/`](./docs/architecture/); domain vocabulary is in [`docs/domain.md`](./docs/domain.md).
@@ -38,6 +45,8 @@ flow — EJS throws on undefined locals). Add or run a test that renders the rea
 ## Branching & commits
 
 - Branch off `main`. Use a descriptive branch name (`feature/...`, `fix/...`, `docs/...`).
+- Never commit or push changes directly to `main`. Push a task branch and open a PR against
+  `main`, or update its existing PR. This applies to small fixes and documentation changes too.
 - Keep commits focused. Squash trivia before opening the PR if you can.
 - Commit messages: imperative mood, short subject (≤ 72 chars), optional body explaining the _why_.
 - **Resolving conflicts:** rebase your own branch onto `main` and force-push _your_ branch only.

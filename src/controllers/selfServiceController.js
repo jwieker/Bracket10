@@ -13,20 +13,18 @@ import {
   saveSession,
   regenerateSession,
   validateEntryId,
+  validateEntryTextField,
+  MAX_ENTRY_TEXT_LEN,
 } from '../utils/controllerUtils.js';
 import { ValidationError } from '../utils/errors.js';
-import { registerFailedAttempt } from '../middleware/rateLimit.js';
+import { reserveVerificationAttempt } from '../middleware/rateLimit.js';
 import { extractPicks } from '../utils/entryPicksUtils.js';
 
-// Brute-force guard for /my-entry/verify. Counted per entryId (so it holds even
-// when an attacker rotates IPs to defeat the per-IP publicLimiter), but only on
-// FAILED verifications — a correct email never consumes the bucket, so an
-// attacker can't lock the legitimate owner out with garbage attempts (#161).
-// Tightened to 5 failures / 15 min as the interim hardening for the
-// email-as-password weakness (#166) while the emailed one-time-link ("magic
-// link") replacement remains pending email-delivery infrastructure.
-const VERIFY_FAIL_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const VERIFY_FAIL_MAX = 5;
+// Reserve every attempt globally before reading credentials, including successes.
+// Five attempts per entry per 15 minutes bounds guessing across IPs and instances.
+// Exhaustion requires waiting for expiry or using Google sign-in instead.
+const VERIFY_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const VERIFY_MAX = 5;
 
 // Constant-time, case-insensitive email equality. Both inputs are normalized
 // (trim + lowercase, matching how emails are canonicalized on write) and hashed
@@ -69,6 +67,23 @@ const myEntryVerify = controllerWrapper(async (req, res) => {
   }
   validateEntryId(entryId);
 
+  const blocked = await reserveVerificationAttempt({
+    key: `verify:${entryId}`,
+    windowMs: VERIFY_WINDOW_MS,
+    max: VERIFY_MAX,
+  });
+  if (blocked) {
+    // Keep the 429 + Retry-After semantics, but render the styled lookup page
+    // (like the other verify branches) instead of plain text for consistency.
+    res.set('Retry-After', String(Math.ceil(VERIFY_WINDOW_MS / 1000)));
+    return res.status(429).render('myEntryLookup', {
+      currentYear: thisYear,
+      error: 'ratelimited',
+      entryId,
+      year,
+    });
+  }
+
   const entryData = await gameRepository.getEntryById(entryId, year);
   // Constant-time comparison. Run the hash compare unconditionally (it normalizes
   // a missing stored email to '') so the not-found and email-mismatch paths do
@@ -87,28 +102,41 @@ const myEntryVerify = controllerWrapper(async (req, res) => {
     emailComparison && !!entryData?.email && !entryData?.deletedAt;
 
   if (!emailMatches) {
-    // Count this failure toward the per-entryId window; block once exhausted.
-    const blocked = await registerFailedAttempt({
-      key: `verify:${entryId}`,
-      windowMs: VERIFY_FAIL_WINDOW_MS,
-      max: VERIFY_FAIL_MAX,
-    });
-    if (blocked) {
-      // Keep the 429 + Retry-After semantics, but render the styled lookup page
-      // (like the other verify branches) instead of plain text for consistency.
-      res.set('Retry-After', String(Math.ceil(VERIFY_FAIL_WINDOW_MS / 1000)));
-      return res.status(429).render('myEntryLookup', {
-        currentYear: thisYear,
-        error: 'ratelimited',
-        entryId,
-        year,
-      });
-    }
     const params = new URLSearchParams({ entryId, year, error: 'invalid' });
     return res.redirect(`/my-entry?${params}`);
   }
 
+  // Preserve coexisting logins across session regeneration. The route's origin
+  // guard rejects cross-site submissions without minting anonymous CSRF tokens.
+  const existingSiteAdmin = req.session.siteAdmin;
+  const existingAdminEmail = req.session.adminEmail;
+  const existingUserEmail = req.session.userEmail;
+  const existingCsrfToken = req.session.csrfToken;
+  const existingMaxAge = req.session.cookie?.maxAge;
+
   await regenerateSession(req);
+
+  if (existingSiteAdmin) {
+    req.session.siteAdmin = existingSiteAdmin;
+    req.session.adminEmail = existingAdminEmail;
+  }
+  if (existingUserEmail) req.session.userEmail = existingUserEmail;
+  if (existingSiteAdmin || existingUserEmail) {
+    // Keep the prior CSRF token so a form the victim already had open still
+    // validates — rotating it would turn the forced logout into a forced
+    // "invalid CSRF token" on their next submit, which is the same denial in a
+    // different costume.
+    if (existingCsrfToken) req.session.csrfToken = existingCsrfToken;
+    // Restore the exact prior lifetime rather than letting the new session take
+    // the 8h default, which would silently truncate a remember-me admin (30d)
+    // or a signed-in participant (2 weeks). Restoring a snapshot can only
+    // preserve, never extend, so #426's "participant coexistence must never
+    // lengthen an admin session" still holds.
+    if (existingMaxAge && req.session.cookie) {
+      req.session.cookie.maxAge = existingMaxAge;
+    }
+  }
+
   if (!req.session.verifiedEntries) req.session.verifiedEntries = {};
   req.session.verifiedEntries[`${year}:${entryId}`] = true;
   await saveSession(req);
@@ -151,6 +179,23 @@ async function renderEntryEditor(res, entryData, year, updateAction) {
 /** Parses the submitted picks for an already-authorized entry, persists the
  *  update (preserving stored groups/payment fields), and renders confirmation. */
 async function applyEntryUpdate(req, res, storedEntry, year) {
+  // Validate the two free-text fields FIRST, ahead of pick parsing and the
+  // service calls below. #548's sketch put this just before the payload is
+  // built, but by then normalizeAndValidateEntryPicks, resolveConfirmedPickNames
+  // and calculateMaxPossiblePoints have all run and burned their Firestore reads
+  // on a request that was always going to be rejected — and the $0 cost contract
+  // is the reason to spend the check here instead.
+  const teamName = validateEntryTextField(
+    req.body['team'],
+    'Team name',
+    MAX_ENTRY_TEXT_LEN,
+  );
+  const person = validateEntryTextField(
+    req.body['name'],
+    'Name',
+    MAX_ENTRY_TEXT_LEN,
+  );
+
   const { picksIds, picksNames } = extractPicks(req.body);
 
   const storedGroups = Array.isArray(storedEntry.groups)
@@ -186,8 +231,8 @@ async function applyEntryUpdate(req, res, storedEntry, year) {
     id: storedEntry.id,
     email: storedEntry.email,
     year,
-    teamName: req.body['team'],
-    person: req.body['name'],
+    teamName,
+    person,
     groups: storedGroups,
     hasPaid: storedEntry.hasPaid,
     paymentNote: storedEntry.paymentNote,

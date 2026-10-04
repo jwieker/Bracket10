@@ -1,6 +1,7 @@
 import {
   fetchCompletedTournamentGames,
   fetchScheduledTournamentGames,
+  fetchNormalizedTournamentEvents,
   getDateStrDaysAgo,
 } from '../src/services/espnService.js';
 import Logger from '../src/utils/logger.js';
@@ -416,6 +417,212 @@ describe('fetchScheduledTournamentGames', () => {
 
       expect(result[0].regionName).toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchNormalizedTournamentEvents
+// ---------------------------------------------------------------------------
+
+function makeNormalizedEvent({
+  id = '300',
+  date = '2026-03-20T17:15Z',
+  completed = false,
+  headline = "Men's Basketball Championship - West Region - 1st Round",
+  competitors = null,
+} = {}) {
+  const defaultCompetitors = [
+    {
+      winner: completed,
+      team: { id: '150', displayName: 'Duke' },
+      curatedRank: { current: 5 },
+    },
+    {
+      winner: false,
+      team: { id: '52', displayName: 'Kansas' },
+      curatedRank: { current: 12 },
+    },
+  ];
+  return {
+    id,
+    date,
+    status: { type: { completed } },
+    competitions: [
+      {
+        competitors: competitors ?? defaultCompetitors,
+        notes: [{ headline }],
+      },
+    ],
+  };
+}
+
+describe('fetchNormalizedTournamentEvents', () => {
+  test('admits a 1st Round event with the full normalized shape', async () => {
+    mockFetch({ events: [makeNormalizedEvent({ id: '42', completed: true })] });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.excluded).toEqual([]);
+    expect(result.events).toEqual([
+      {
+        espnEventId: '42',
+        eventDate: '2026-03-20T17:15Z',
+        round: '1st Round',
+        regionName: 'West',
+        completed: true,
+        team1: { espnId: '150', displayName: 'Duke', seed: 5 },
+        team2: { espnId: '52', displayName: 'Kansas', seed: 12 },
+        winner: { espnId: '150', displayName: 'Duke', seed: 5 },
+      },
+    ]);
+  });
+
+  test('admits a First Four event', async () => {
+    mockFetch({
+      events: [
+        makeNormalizedEvent({
+          headline: "Men's Basketball Championship - South Region - First Four",
+        }),
+      ],
+    });
+
+    const result = await fetchNormalizedTournamentEvents('20260317');
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].round).toBe('First Four');
+    expect(result.events[0].regionName).toBe('South');
+  });
+
+  test('winner is null for a pregame event', async () => {
+    mockFetch({ events: [makeNormalizedEvent({ completed: false })] });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.events[0].winner).toBeNull();
+  });
+
+  test('retains a TBD/unresolved competitor rather than excluding the event', async () => {
+    const competitors = [
+      {
+        winner: false,
+        team: { id: '150', displayName: 'Duke' },
+        curatedRank: { current: 5 },
+      },
+      { winner: false, team: { displayName: 'TBD' } },
+    ];
+    mockFetch({ events: [makeNormalizedEvent({ competitors })] });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.excluded).toEqual([]);
+    expect(result.events[0].team2).toEqual({
+      espnId: null,
+      displayName: 'TBD',
+      seed: null,
+    });
+  });
+
+  test("excludes an event whose headline is not a men's championship round, with a reason", async () => {
+    mockFetch({
+      events: [makeNormalizedEvent({ id: '7', headline: 'NIT - First Round' })],
+    });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.events).toEqual([]);
+    expect(result.excluded).toEqual([
+      {
+        espnEventId: '7',
+        reason: "headline did not match the men's championship round format",
+      },
+    ]);
+  });
+
+  test('excludes a recognized-region event with an unrecognized round', async () => {
+    mockFetch({
+      events: [
+        makeNormalizedEvent({
+          id: '8',
+          headline: "Men's Basketball Championship - West Region - Elite 8",
+        }),
+      ],
+    });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.events).toEqual([]);
+    expect(result.excluded).toEqual([
+      { espnEventId: '8', reason: 'unrecognized round "Elite 8"' },
+    ]);
+  });
+
+  test('excludes events with != 2 competitors', async () => {
+    const oneCompetitor = [
+      { winner: false, team: { id: '150', displayName: 'Duke' } },
+    ];
+    mockFetch({
+      events: [makeNormalizedEvent({ id: '9', competitors: oneCompetitor })],
+    });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.events).toEqual([]);
+    expect(result.excluded).toEqual([
+      { espnEventId: '9', reason: 'not a two-competitor event' },
+    ]);
+  });
+
+  test('excludes an event with a missing id', async () => {
+    const event = makeNormalizedEvent();
+    delete event.id;
+    mockFetch({ events: [event] });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.events).toEqual([]);
+    expect(result.excluded).toEqual([
+      { espnEventId: null, reason: 'missing event id' },
+    ]);
+  });
+
+  test('deduplicates repeated event ids within one response', async () => {
+    mockFetch({
+      events: [
+        makeNormalizedEvent({ id: '11' }),
+        makeNormalizedEvent({ id: '11' }),
+      ],
+    });
+
+    const result = await fetchNormalizedTournamentEvents('20260320');
+
+    expect(result.events).toHaveLength(1);
+  });
+
+  test('includes the dateStr in the fetch URL', async () => {
+    mockFetch({ events: [] });
+
+    await fetchNormalizedTournamentEvents('20260320');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('dates=20260320'),
+      expect.any(Object),
+    );
+  });
+
+  test('throws on invalid dateStr and never fetches', async () => {
+    mockFetch({ events: [] });
+    await expect(fetchNormalizedTournamentEvents('bad')).rejects.toThrow(
+      /Invalid ESPN date format/,
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('throws when ESPN returns a non-ok HTTP status', async () => {
+    mockFetch({}, { ok: false, status: 503 });
+
+    await expect(fetchNormalizedTournamentEvents('20260320')).rejects.toThrow(
+      'ESPN API returned HTTP 503',
+    );
   });
 });
 

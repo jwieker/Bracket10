@@ -79,24 +79,24 @@
 
                             <div class="container pb-3" id="innercont">
                                 <label for="exampleInputEmail1">Email address</label>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                                    class="bi bi-info-circle" viewBox=" 0 0 16 16" data-bs-toggle="tooltip"
-                                    title="Your email is never shown publicly. We only use it to send your bracket edit link and for record keeping.">
-                                    <path d=" M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
-                                    <path
-                                        d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
-                                </svg>
+                                <%# A popover, not a tooltip: the copy holds a link, which a hover tooltip can't offer. %>
+                                <% const emailInfoHtml = 'We use your email to confirm your entry and help you access or change your picks. We won\'t send marketing emails. <a href="/privacy">Privacy Notice</a>. Using a Gmail address? Sign in with Google to view and manage all your entries in one place.'; %>
+                                <button type="button" id="emailInfoBtn" class="btn btn-link p-1 align-baseline"
+                                    aria-label="About your email" data-bs-toggle="popover" data-bs-html="true"
+                                    data-bs-placement="bottom" data-bs-content="<%= emailInfoHtml %>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                                        class="bi bi-info-circle" viewBox="0 0 16 16" aria-hidden="true">
+                                        <path d=" M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
+                                        <path
+                                            d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0" />
+                                    </svg>
+                                </button>
                                 <input type="email" class="form-control" name="email" data-clear-placeholder
-                                    id="exampleInputEmail1" aria-describedby="emailHelp"
+                                    id="exampleInputEmail1"
                                     placeholder="john.doe@gmail.com" required
                                     value="<%= typeof formValues !== 'undefined' ? formValues.email : '' %>">
                                 <div class="invalid-feedback">
                                     Please enter a valid email address.
-                                </div>
-                                <div id="emailHelp" class="form-text text-muted">
-                                    Once you submit, we'll email you a private link to edit this bracket.
-                                    Using a Gmail address? Sign in with Google to view and manage all your entries in
-                                    one place.
                                 </div>
                             </div>
 

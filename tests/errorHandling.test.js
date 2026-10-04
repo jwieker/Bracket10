@@ -25,17 +25,13 @@ describe('Error Handling Tests', () => {
     vi.clearAllMocks();
   });
 
+  // #780: the updateMultipleEntryPoints cases that used to live here (write
+  // failure, invalid id, negative and MAX_SAFE_INTEGER points) installed a
+  // fresh vi.fn() over the method and then asserted the mock behaved as
+  // configured — they reported coverage of the points write path they did not
+  // have. Real coverage of that method, against the implementation and a
+  // stubbed db, is in hierarchicalRepository.test.js.
   describe('Database Connection Errors', () => {
-    test('should propagate write failure from updateMultipleEntryPoints', async () => {
-      const error = new Error('Write operation failed');
-      entryRepo.updateMultipleEntryPoints = vi.fn().mockRejectedValue(error);
-      await expect(
-        entryRepo.updateMultipleEntryPoints([
-          { entryID: '123', points: 50, possPoints: 100 },
-        ]),
-      ).rejects.toThrow('Write operation failed');
-    });
-
     test('should propagate read failure from getMaxEntryId', async () => {
       const error = new Error('Read operation failed');
       entryRepo.getMaxEntryId = vi.fn().mockRejectedValue(error);
@@ -46,17 +42,6 @@ describe('Error Handling Tests', () => {
   });
 
   describe('Invalid Data Handling', () => {
-    test('should handle invalid entry ID', async () => {
-      entryRepo.updateMultipleEntryPoints = vi
-        .fn()
-        .mockRejectedValue(new Error('Invalid ID format'));
-      await expect(
-        entryRepo.updateMultipleEntryPoints([
-          { entryID: 'invalid', points: 50, possPoints: 100 },
-        ]),
-      ).rejects.toThrow('Invalid ID format');
-    });
-
     test('should return null for empty group name', async () => {
       viewRepo.findGroupByName = vi.fn().mockResolvedValue(null);
       const result = await viewRepo.findGroupByName('');
@@ -70,28 +55,6 @@ describe('Error Handling Tests', () => {
       await expect(gameRepo.updateWinner(1, 5, 'invalid-year')).rejects.toThrow(
         'Invalid year format',
       );
-    });
-  });
-
-  describe('Boundary Conditions', () => {
-    test('should handle negative points', async () => {
-      entryRepo.updateMultipleEntryPoints = vi.fn().mockResolvedValue();
-      await entryRepo.updateMultipleEntryPoints([
-        { entryID: '123', points: -10, possPoints: -5 },
-      ]);
-      expect(entryRepo.updateMultipleEntryPoints).toHaveBeenCalled();
-    });
-
-    test('should handle very large points values', async () => {
-      entryRepo.updateMultipleEntryPoints = vi.fn().mockResolvedValue();
-      await entryRepo.updateMultipleEntryPoints([
-        {
-          entryID: '123',
-          points: Number.MAX_SAFE_INTEGER,
-          possPoints: Number.MAX_SAFE_INTEGER,
-        },
-      ]);
-      expect(entryRepo.updateMultipleEntryPoints).toHaveBeenCalled();
     });
   });
 

@@ -37,7 +37,7 @@ Bootstrap 5.3 exposes its own CSS custom properties (`--bs-body-color`, `--bs-bo
 - Theme is toggled via `data-theme="dark"` on `<html>`. An inline script in `views/partials/header.ejs` reads `localStorage.theme` (or the system `prefers-color-scheme` fallback) before first paint; the navbar sun/moon button persists the user's choice.
 - Active states of the switcher buttons are styled in CSS using `[data-theme]` selectors to prevent render flicker on first paint.
 - Bootstrap CDN **must** load before our custom stylesheets (it does in `header.ejs`). Our tokens remap Bootstrap's internal vars (`--bs-body-color`, `--bs-secondary-color`, `--bs-border-color`, etc.) so built-in utilities stay theme-aware.
-- When changing any precached CSS, **bump `CACHE_NAME` in `public/service-worker.js`** (currently `bracket10-v17`) so clients fetch the new file.
+- When changing any precached CSS, **bump `CACHE_NAME` in `public/service-worker.js`** (currently `bracket10-v18`) so clients fetch the new file.
 - Typography utilities (`t-display`, `t-h1…t-h3`, `t-body`, `t-small`, `t-label`, `t-mono`) live in `style.css` and mirror `Design System.html`. Prefer these over ad-hoc `fs-*` + `fw-*` combinations.
 
 ## 1. Color Palette
@@ -241,7 +241,7 @@ Bootstrap 5.3.3 is loaded via CDN **before** our stylesheets so our tokens and u
 
 - Install banner (`.fixed-bottom`) on mobile plus an iOS share-sheet instructions modal (`#iosPwaModal`).
 - Service worker registered in `views/partials/header.ejs`.
-- `public/service-worker.js` caches `tokens.css`, `style.css`, `bracket.css`, `playground.css`, and `table-styles.css` at install. **Bump `CACHE_NAME` (currently `bracket10-v17`) whenever you change any cached static asset** so clients fetch the new CSS.
+- `public/service-worker.js` caches `tokens.css`, `style.css`, `bracket.css`, `playground.css`, and `table-styles.css` at install. **Bump `CACHE_NAME` (currently `bracket10-v18`) whenever you change any cached static asset** so clients fetch the new CSS.
 
 ## 9. Accessibility
 

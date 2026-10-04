@@ -11,6 +11,7 @@ export const tourneyRepository = new repos.TourneyRepository();
 export const teamRepository = new repos.TeamRepository();
 export const conferenceRepository = new repos.ConferenceRepository();
 export const sessionRepository = new repos.SessionRepository();
+export const rateLimitRepository = new repos.RateLimitRepository();
 
 // Export classes
 export const {
@@ -21,4 +22,5 @@ export const {
   TeamRepository,
   ConferenceRepository,
   SessionRepository,
+  RateLimitRepository,
 } = repos;

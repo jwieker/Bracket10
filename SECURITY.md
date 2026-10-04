@@ -47,7 +47,7 @@ The current security baseline is documented in [`docs/architecture/security.md`]
 
 - Google OAuth uses a session-backed `state` parameter and `audience`-validated ID tokens.
 - `/my-entry/*` re-reads stored entries before writes; server-owned fields (`email`, `groups`, payment metadata) ignore form input.
-- Production `DatabaseError` / `ServiceError` responses are generic; details only land in server logs.
+- Production `ServiceError` responses are generic; details only land in server logs.
 - Session cookies use `httpOnly`, `sameSite: 'lax'`, and `secure` in production.
 - Inline CSP and Referrer-Policy headers via `src/middleware/securityHeaders.js`.
 - Custom fixed-window rate limiting via `src/middleware/rateLimit.js`.

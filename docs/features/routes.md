@@ -1,6 +1,6 @@
 ---
 tags: [features, routes, api]
-updated: 2026-06-09
+updated: 2026-09-23
 ---
 
 # API Routes Overview
@@ -18,18 +18,24 @@ updated: 2026-06-09
 
 ### Entry Page Architecture
 
-The home page (`views/index.ejs`) is a single template with server-side conditionals. The controller (`src/controllers/indexController.js`) computes a `state` string:
+The home page (`views/index.ejs`) is a single template with server-side conditionals. The controller (`src/controllers/indexController.js`) computes a `state` string via `resolveHomeState()`:
 
 | `state` value | When set | What renders |
 |---|---|---|
 | `'comingsoon'` | Before bracket launch date | "Coming soon" message + view-previous-brackets form |
 | `'registration'` | Bracket live, tournament not started | "Create your bracket" form (POST `/newEntry`) |
 | `'tournament'` | Tournament underway | "View your bracket" form (POST `/gameView`) |
-| `'test'` | `NODE_ENV` is `test` or `development` | All three sections visible for manual testing |
+| `'test'` | `NODE_ENV` is `test` or `development` | Reads top to bottom and picks one layout via `?preview=` (defaults to `registration`); a dev banner renders. Production never reaches this branch. |
+
+`buildHomeViewModel()` turns `state` into the full view model: `layout` (always one of `comingsoon` / `registration` / `tournament`), the `error`/`createError` query flags, `archiveYears` (a fixed 5-year window — the page reads no Firestore), and `ladder` — the per-round scoring table derived from `TOURNAMENT_ROUNDS`, so the numbers on the page can't drift from what the points engine awards. `buildCompareModel()` derives the "one deep run beats N early ones" headline from that same ladder (by round number, not array position) rather than hardcoding the figures into copy.
 
 **Updating tournament dates:** `bracketLaunchDate` and `tourneyStartDate` are defined once in `src/config/app.js`. Do not hardcode these dates in controllers. Also exported: `isRegistrationOpen()` — returns `true` during the registration window (or always in `development`/`test`).
 
-**Participant sign-in entry point:** the home page also includes `views/partials/userSignIn.ejs` in every state, which renders a "Sign in with Google" button (→ `GET /auth/google/user/start`) — or a "My Brackets" link when `req.session.userEmail` is set (passed through by `indexController`). See § "My Brackets — Participant Sign-In" under View Routes.
+**Participant sign-in entry point:** the hero's action panel renders a "Sign in with Google" link (→ `GET /auth/google/user/start`) — or a "My Brackets" link when `req.session.userEmail` is set (passed through by `indexController`). See § "My Brackets — Participant Sign-In" under View Routes.
+
+**Styling.** Scoped `b2-` classes in a `<style>` block in the view (the same pattern as `views/scoring.ejs`), built from `tokens.css` variables only. Nothing in `public/*.css` changes, so `CACHE_NAME` in `public/service-worker.js` does not need a bump.
+
+This design ("optionB-2" in design review) won an evaluation against several alternate layouts; the losing variants (and their dedicated routes, view files, and images) have been removed rather than kept alongside `/`.
 
 ## Results Page Architecture & Mobile Layout
 
@@ -51,7 +57,7 @@ The results page (`views/results.ejs`) handles both a traditional desktop table 
 ## Admin Routes (`/src/routes/adminRoutes.js`)
 
 *   `GET /admin`: Redirects to `GET /admin/tournament`.
-*   `GET /admin/tournament`: Game results page. Landing page after login. Games render unresolved-first in `gameID` order, except unresolved First Four (round 0) games, which are pinned to the top; once a First Four game has a winner it sorts with the other completed games at the bottom.
+*   `GET /admin/tournament`: Game results page. Landing page after login. Games render unresolved-first in `gameID` order, except unresolved First Four (round 0) games, which are pinned to the top; once a First Four game has a winner it sorts with the other completed games at the bottom. Each team's logo + name is itself the winner button; clicking it posts `POST /updateWinner` immediately, with no confirm dialog. Once decided, the winner gets a green outline, the loser is greyed, and an Undo button appears. A toast offers Undo (`POST /undoGame`, using the stored winner id) and, after an undo, Redo; the page reloads about 8s after the last change. Desktop has a Show less/Show more toggle (persisted in `localStorage`) that hides the ID and Next Game columns and narrows the card.
 *   `GET /admin/entries`: Entry management (find, view, unpaid, bracket emails, new group).
 *   `GET /admin/teams`: Team management plus link to Conferences.
 *   `GET /admin/system`: System tools (recalculate points, clear cache, change year).
@@ -109,6 +115,11 @@ All routes guarded by `requireSiteAdmin`.
 *   `POST /tournamentGames` / `POST /editTournament`: Both render the edit-tournament page (`editTourneyGames.ejs`) via the same `viewTournament` controller — one is a legacy alias.
 *   `POST /tournamentGamesUpdate`: Applies bracket edits; school changes are propagated into entry picks via `updateEntrywithNewSchools`.
 *   `POST /deleteTournament`: Deletes a tournament year.
+*   `GET /admin/tournament/espn-setup`: Renders the ESPN-driven creation page (`espnTournamentSetup.ejs`), linked from the "Create from ESPN" button on `/admin/tournament`. Accepts `?year=`.
+*   `POST /admin/tournament/espn-plan`: Fetches ESPN's play-in and first-round games for the given dates and returns a JSON preview plus diagnostics. Never returns `gamesData`/`firstFourData`.
+*   `POST /createTournamentFromEspn`: Creates the bracket in one atomic batch. Requires `confirmPairings: true` and a `ready` plan. Re-fetches and re-assembles the plan server-side from the same inputs — a client-held copy of the previewed plan is never trusted.
+
+The two ESPN POSTs also carry `verifyCsrf` and a per-IP limiter (`espnPlanLimiter`, 30/min), mounted in that order after `requireSiteAdmin`.
 
 See `docs/architecture/request-flows.md` for the end-to-end creation/edit traces.
 

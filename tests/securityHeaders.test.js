@@ -162,26 +162,64 @@ describe('securityHeaders middleware', () => {
       expect(ro['script-src']).not.toContain("'unsafe-inline'");
     });
 
-    test('report-only policy points violations at the /csp-report sink', () => {
-      const { headers } = runMiddleware();
-      const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
-      expect(ro['report-uri']).toContain('/csp-report');
-      expect(ro['report-to']).toContain('csp-endpoint');
-      expect(headers['Reporting-Endpoints']).toContain('/csp-report');
-    });
-
-    test('report endpoint is an absolute URL when the request origin is known', () => {
-      const { headers } = runMiddleware({
-        protocol: 'https',
-        get: (h) => (h === 'host' ? 'bracket10.example' : undefined),
+    // The report destination is derived from APP_HOST only — never from the
+    // request. These save/restore it because it is unset in the test env. (#514)
+    describe('violation-report destination', () => {
+      const originalAppHost = process.env.APP_HOST;
+      afterEach(() => {
+        if (originalAppHost === undefined) delete process.env.APP_HOST;
+        else process.env.APP_HOST = originalAppHost;
       });
-      const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
-      expect(headers['Reporting-Endpoints']).toContain(
-        'https://bracket10.example/csp-report',
-      );
-      expect(ro['report-uri']).toContain(
-        'https://bracket10.example/csp-report',
-      );
+
+      test('report-only policy points violations at the /csp-report sink', () => {
+        delete process.env.APP_HOST;
+        const { headers } = runMiddleware();
+        const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
+        expect(ro['report-uri']).toContain('/csp-report');
+      });
+
+      test('report endpoint is an absolute URL built from APP_HOST', () => {
+        process.env.APP_HOST = 'bracket10.example';
+        const { headers } = runMiddleware();
+        const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
+        expect(headers['Reporting-Endpoints']).toContain(
+          'https://bracket10.example/csp-report',
+        );
+        expect(ro['report-uri']).toContain(
+          'https://bracket10.example/csp-report',
+        );
+        expect(ro['report-to']).toContain('csp-endpoint');
+      });
+
+      test('APP_HOST wins over the request Host header (no reflection, #514)', () => {
+        process.env.APP_HOST = 'bracket10.example';
+        const { headers } = runMiddleware({
+          protocol: 'https',
+          get: (h) => (h === 'host' ? 'attacker.example' : undefined),
+        });
+        const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
+        expect(headers['Reporting-Endpoints']).not.toContain(
+          'attacker.example',
+        );
+        expect(ro['report-uri']).not.toContain('attacker.example');
+      });
+
+      test('a hostile Host header cannot steer reports when APP_HOST is unset (#514)', () => {
+        delete process.env.APP_HOST;
+        const { headers } = runMiddleware({
+          protocol: 'https',
+          get: (h) => (h === 'host' ? 'attacker.example' : undefined),
+        });
+        const ro = parseCSP(headers['Content-Security-Policy-Report-Only']);
+
+        // Fails closed: the relative path is the only destination, and the
+        // Reporting API channel is omitted rather than aimed somewhere
+        // untrusted. report-to is dropped with it — naming a csp-endpoint group
+        // that was never declared would be a dangling reference.
+        expect(ro['report-uri']).toEqual(['/csp-report']);
+        expect(headers).not.toHaveProperty('Reporting-Endpoints');
+        expect(ro).not.toHaveProperty('report-to');
+      });
     });
 
     test("logCspReport strips newlines so log lines can't be forged (CWE-117, audit finding 3)", () => {

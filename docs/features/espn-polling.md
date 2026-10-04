@@ -1,6 +1,6 @@
 ---
 tags: [features, espn, polling, cloud-scheduler]
-updated: 2026-06-09
+updated: 2026-07-12
 ---
 
 # ESPN Game Score Auto-Polling

@@ -22,6 +22,19 @@ const pruneExpired = () => {
   }
 };
 
+// Eviction is otherwise lazy and write-driven: `cache.get` only drops the one
+// key it was asked for, and the full sweep in `cache.keys()` is reached only
+// via `invalidateCache` (repository mutations) or the admin debug middleware.
+// A web instance serving pure reads therefore never reaps — and the highest
+// cardinality key, `entriesByEmail_{email}_{year}`, is populated by read-only
+// requests (`/my-brackets`, signed-in results views), so it grows fastest when
+// traffic is heaviest and writes are rarest. A periodic sweep reaps expired
+// entries independently of write volume; same pattern and reasoning as the
+// rate limiter's `clients` map (`src/middleware/rateLimit.js`). `.unref()` is
+// required — without it the timer holds the event loop open and every test
+// file importing this module hangs on exit.
+setInterval(pruneExpired, DEFAULT_TTL_SECONDS * 1000).unref();
+
 const cache = {
   get(key) {
     const entry = entries.get(key);
@@ -98,7 +111,13 @@ export const cacheGet = (key) => {
   return value;
 };
 
-export const cacheSet = (key, value, ttl = 1800) => {
+// Defaults to the named constant rather than repeating the literal (#568).
+// `cacheSet` is the only exported way into `cache.set` and it always forwards an
+// explicit `ttl`, so `cache.set`'s own `DEFAULT_TTL_SECONDS` default is
+// unreachable through the public API — the two values could drift apart and only
+// this one would mean anything. Mutation-testing the expiry tests is what
+// surfaced it: changing the constant on line 3 killed zero tests.
+export const cacheSet = (key, value, ttl = DEFAULT_TTL_SECONDS) => {
   return cache.set(key, value, ttl);
 };
 

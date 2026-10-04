@@ -66,20 +66,28 @@ export function isCspReportOnlyEnabled() {
   return v !== 'off' && v !== 'false' && v !== '0';
 }
 
-// The Reporting API wants an absolute, potentially-trustworthy URL — a relative
-// path may be ignored by browsers that honor report-to over the legacy
-// report-uri, costing a fraction of reports. Prefer the configured canonical
-// host, fall back to the request's own origin, and finally to the bare path
-// (covers unit tests / callers without a real req).
-function reportEndpointUrl(req) {
-  if (process.env.APP_HOST) {
-    return `https://${process.env.APP_HOST}${CSP_REPORT_PATH}`;
-  }
-  const host = typeof req.get === 'function' ? req.get('host') : undefined;
-  if (host) {
-    return `${req.protocol || 'https'}://${host}${CSP_REPORT_PATH}`;
-  }
-  return CSP_REPORT_PATH;
+// The Reporting API wants an absolute, potentially-trustworthy URL, so this
+// returns one from the configured canonical host — or null when APP_HOST is
+// unset, which is the whole point of the function.
+//
+// It deliberately does NOT fall back to the request's own Host header. That
+// value is attacker-chosen, so reflecting it hands the caller a report-only
+// policy aiming its violation reports at an origin of their choosing. In
+// production the fallback was dead code (APP_HOST is set — it also drives the
+// www canonicalization in server.js and the OAuth redirect URI), but any
+// preview/tunnel/staging deployment that skips APP_HOST is a supported setup,
+// and "safe only because an unrelated env var happens to be set" is not an
+// invariant worth keeping. Fail closed instead. (#514)
+//
+// Losing the fallback costs nothing real: report-uri accepts a path-relative
+// URL, so the legacy channel still works host-less. Only report-to /
+// Reporting-Endpoints need an absolute URL, and those are omitted rather than
+// pointed somewhere untrusted — on every deployment that actually collects this
+// telemetry, APP_HOST is set and both channels are emitted as before.
+function reportEndpointUrl() {
+  return process.env.APP_HOST
+    ? `https://${process.env.APP_HOST}${CSP_REPORT_PATH}`
+    : null;
 }
 
 // Report-only now mirrors the enforcing policy and adds the violation-report
@@ -87,13 +95,20 @@ function reportEndpointUrl(req) {
 // channel: it surfaces (via /csp-report) anything the enforcing policy blocks,
 // which is useful for catching a regression — a future inline script/handler
 // added without a nonce — after the flip. Toggle off with CSP_REPORT_ONLY.
+// `reportUrl` is null when no canonical host is configured (see
+// reportEndpointUrl). report-uri still works then, because it accepts the
+// path-relative form; report-to is dropped, since naming a `csp-endpoint` group
+// we never declared in Reporting-Endpoints would just be a dangling reference.
 function buildReportOnlyHeader(nonce, reportUrl) {
-  return serializeDirectives({
+  const directives = {
     ...BASE_DIRECTIVES,
     'script-src': buildScriptSrc(nonce),
-    'report-uri': [reportUrl],
-    'report-to': ['csp-endpoint'],
-  });
+    'report-uri': [reportUrl ?? CSP_REPORT_PATH],
+  };
+  if (reportUrl) {
+    directives['report-to'] = ['csp-endpoint'];
+  }
+  return serializeDirectives(directives);
 }
 
 // Strip CR/LF + other control chars (U+0000–U+001F and DEL U+007F) and bound
@@ -138,8 +153,10 @@ export function securityHeaders(req, res, next) {
 
   res.setHeader('Content-Security-Policy', buildEnforcedHeader(nonce));
   if (isCspReportOnlyEnabled()) {
-    const reportUrl = reportEndpointUrl(req);
-    res.setHeader('Reporting-Endpoints', `csp-endpoint="${reportUrl}"`);
+    const reportUrl = reportEndpointUrl();
+    if (reportUrl) {
+      res.setHeader('Reporting-Endpoints', `csp-endpoint="${reportUrl}"`);
+    }
     res.setHeader(
       'Content-Security-Policy-Report-Only',
       buildReportOnlyHeader(nonce, reportUrl),

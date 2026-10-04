@@ -1,0 +1,16 @@
+<%# The team itself is the one-click winner button. Inputs: group (active game), n (1 | 2), layout ('cell' | 'card'). %>
+<%
+    const teamID = group['team' + n + 'ID'];
+    const teamName = group['team' + n + 'Name'];
+    const state = !group.winner ? '' : (String(group.winner) === String(teamID) ? ' is-winner' : ' is-loser');
+%>
+<button type="button" class="team-pick-btn team-pick-<%= layout %><%= state %>"
+    data-team-id="<%= teamID %>" data-team-name="<%= teamName %>" title="Set <%= teamName %> as the winner">
+    <% if (layout === 'card') { %>
+        <span class="badge bg-light text-dark border"><%= group['team' + n + 'Seed'] %></span>
+    <% } %>
+    <span class="team-pick-label">
+        <%- include('adminTeamLogo', { logoUrl: group['team' + n + 'LogoUrl'], name: teamName }) %>
+        <span class="team-pick-name"><%= teamName %></span>
+    </span>
+</button>

@@ -68,6 +68,25 @@ describe('viewConference', () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
+  // #512: the write paths validate the slug, so the read path must too. A slug
+  // containing '/' would otherwise reach `.doc(slug)`, where Firestore reads it
+  // as alternating collection/document path segments.
+  test.each([
+    ['x/y/z', 'path segments'],
+    ['ACC', 'uppercase'],
+    ['big 12', 'a space'],
+    ['big.12', 'a dot'],
+    ['a'.repeat(65), 'over the 64-char cap'],
+  ])(
+    'returns 400 for a slug with %s without querying the repository',
+    async (slug) => {
+      const res = mockRes();
+      await viewConference(mockReq({ query: { slug } }), res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(conferenceRepository.getConferenceBySlug).not.toHaveBeenCalled();
+    },
+  );
+
   test('renders editConference when found', async () => {
     const conf = { slug: 'acc', name: 'ACC' };
     conferenceRepository.getConferenceBySlug.mockResolvedValue(conf);

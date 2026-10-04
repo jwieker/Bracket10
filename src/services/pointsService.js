@@ -316,19 +316,10 @@ async function possibleRanking(
  * Calculates the minimum guaranteed points for an entry.
  */
 
-function findNextGameId(teamId, activeGamesOrMap) {
-  // Accepts either an array (legacy/test) or a Map (internal optimised path)
-  if (activeGamesOrMap instanceof Map) {
-    const game = activeGamesOrMap.get(teamId);
-    return game && game.winner === null ? game.gameID : -1;
-  }
-
-  const game = activeGamesOrMap.find(
-    (game) =>
-      (game.team1ID === teamId || game.team2ID === teamId) &&
-      game.winner === null,
-  );
-  return game ? game.gameID : -1;
+// activeGamesMap must be a Map (legacy array fallback removed)
+function findNextGameId(teamId, activeGamesMap) {
+  const game = activeGamesMap.get(teamId);
+  return game && game.winner === null ? game.gameID : -1;
 }
 
 // Bracket chains are bounded by tournament rounds (R1→Champ is 6 steps for the

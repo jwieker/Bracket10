@@ -99,6 +99,7 @@ vi.mock('../src/services/index.js', () => ({
   updateBracket: vi.fn(),
   updateEntrywithNewSchools: vi.fn(),
   deleteTournament: vi.fn(),
+  buildEspnBracketPlan: vi.fn(),
 }));
 
 import viewRoutes from '../src/routes/viewRoutes.js';

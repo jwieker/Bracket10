@@ -275,6 +275,56 @@ describe('viewEntry', () => {
     expect(gameRepository.getEntryById).not.toHaveBeenCalled();
   });
 
+  test('rejects a non-numeric year before querying (#491)', async () => {
+    const req = {
+      query: { entryId: '1', year: 'abc', fromAdmin: 'false' },
+      method: 'GET',
+      url: '/viewEntry',
+    };
+    const res = mockRes();
+    await viewEntry(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(gameRepository.getEntryById).not.toHaveBeenCalled();
+    expect(getGroupRegistrationData).not.toHaveBeenCalled();
+  });
+
+  test('parses year once and passes the same number to both reads (#491)', async () => {
+    gameRepository.getEntryById.mockResolvedValue({
+      id: 1,
+      picks: [],
+      groups: [],
+    });
+    const req = {
+      query: { entryId: '1', year: '2023', fromAdmin: 'false' },
+      method: 'GET',
+      url: '/viewEntry',
+    };
+    const res = mockRes();
+    await viewEntry(req, res);
+    // Previously the raw string went to getEntryById and Number(year) to
+    // getGroupRegistrationData — the two reads could disagree.
+    expect(gameRepository.getEntryById).toHaveBeenCalledWith('1', 2023);
+    expect(getGroupRegistrationData).toHaveBeenCalledWith('Family', 2023);
+  });
+
+  test('defaults an omitted year to thisYear rather than rendering it undefined (#491)', async () => {
+    gameRepository.getEntryById.mockResolvedValue({
+      id: 1,
+      picks: [],
+      groups: [],
+    });
+    const req = {
+      query: { entryId: '1', fromAdmin: 'false' },
+      method: 'GET',
+      url: '/viewEntry',
+    };
+    const res = mockRes();
+    await viewEntry(req, res);
+    // editEntry.ejs renders `year` into hidden inputs that post back to
+    // delete/restore/purge, so an undefined year used to produce a broken form.
+    expect(res.render.mock.calls[0][1].year).toBe(2024);
+  });
+
   test('renders with an empty availableGroups list instead of throwing when getAllGroups resolves null (#378)', async () => {
     viewRepository.getAllGroups.mockResolvedValue(null);
     gameRepository.getEntryById.mockResolvedValue({
@@ -431,6 +481,79 @@ describe('entryUpdate', () => {
     expect(calculateMaxPossiblePoints).toHaveBeenCalledWith([101, 202], 2024);
     expect(gameRepository.updateEntry).toHaveBeenCalledWith(
       expect.objectContaining({ possPoints: 177 }),
+    );
+  });
+
+  // #590: the written year must be the parsed one, not the raw body field.
+  // Both inputs below are what parseYearOrDefault exists to absorb, and both
+  // slip past the repository's NaN guard (Number('') === 0, undefined stays
+  // undefined), so the write would silently land on a nonexistent
+  // tournaments/0 or tournaments/undefined path.
+  test('writes the parsed year when the body year is empty (#590)', async () => {
+    gameRepository.updateEntry.mockResolvedValue();
+    const req = {
+      body: {
+        entryId: '1',
+        email: 'a@b.com',
+        year: '',
+        team: 'Dukes',
+        name: 'Alex',
+        teamSelect1: '101, Duke',
+        groups: ['Family'],
+        maxPoints: '0',
+      },
+      method: 'POST',
+      url: '/entryUpdate',
+    };
+    const res = mockRes();
+    await entryUpdate(req, res);
+    expect(gameRepository.updateEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ year: 2024 }),
+    );
+  });
+
+  test('writes the parsed year when the body year is absent (#590)', async () => {
+    gameRepository.updateEntry.mockResolvedValue();
+    const req = {
+      body: {
+        entryId: '1',
+        email: 'a@b.com',
+        team: 'Dukes',
+        name: 'Alex',
+        teamSelect1: '101, Duke',
+        groups: ['Family'],
+        maxPoints: '0',
+      },
+      method: 'POST',
+      url: '/entryUpdate',
+    };
+    const res = mockRes();
+    await entryUpdate(req, res);
+    expect(gameRepository.updateEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ year: 2024 }),
+    );
+  });
+
+  test('writes the parsed year as a number when the body year is a string (#590)', async () => {
+    gameRepository.updateEntry.mockResolvedValue();
+    const req = {
+      body: {
+        entryId: '1',
+        email: 'a@b.com',
+        year: '2023',
+        team: 'Dukes',
+        name: 'Alex',
+        teamSelect1: '101, Duke',
+        groups: ['Family'],
+        maxPoints: '0',
+      },
+      method: 'POST',
+      url: '/entryUpdate',
+    };
+    const res = mockRes();
+    await entryUpdate(req, res);
+    expect(gameRepository.updateEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ year: 2023 }),
     );
   });
 
@@ -733,6 +856,18 @@ describe('deleteEntry', () => {
     expect(entryRepository.deleteEntry).toHaveBeenCalledWith(5, 2024);
     expect(res.redirect).toHaveBeenCalledWith('/updates');
   });
+
+  test('rejects a non-numeric year without touching the repository (#491)', async () => {
+    const req = {
+      body: { entryId: '5', year: 'abc' },
+      method: 'POST',
+      url: '/deleteEntry',
+    };
+    const res = mockRes();
+    await deleteEntry(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(entryRepository.deleteEntry).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -922,6 +1057,27 @@ describe('getDeletedEntriesController', () => {
     await getDeletedEntriesController(req, res);
     expect(res.status).toHaveBeenCalledWith(400);
   });
+
+  // #477: "abc" is truthy, so it cleared the presence check and reached the
+  // repository as NaN — the endpoint answered 200 [] instead of 400, hiding the
+  // real year's deleted entries behind a misleading empty result.
+  test.each(['abc', '20x4', '1979', 'NaN'])(
+    'returns 400 for a non-numeric or out-of-range year (%s)',
+    async (year) => {
+      const req = {
+        query: { year },
+        method: 'GET',
+        url: '/admin/deleted-entries',
+      };
+      const res = mockRes();
+      await getDeletedEntriesController(req, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Validation Error', field: 'year' }),
+      );
+      expect(entryRepository.getDeletedEntries).not.toHaveBeenCalled();
+    },
+  );
 
   test('returns the repository result as JSON', async () => {
     const deleted = [

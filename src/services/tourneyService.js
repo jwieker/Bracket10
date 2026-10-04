@@ -370,8 +370,10 @@ function getR1RegionIDFromNextGame(nextGameID, regionArray) {
   return null;
 }
 
-async function createFirstFourGames(firstFourData, year, regionArray) {
-  // firstFourData: [{ team1ID, team2ID, seed, nextGameID, nextGameSpot }]
+// Shared by createFirstFourGames (adding First Four to an already-existing
+// bracket) and createNewBracket's atomic initial-creation path — both need
+// the identical gameID/r1RegionID computation, just committed differently.
+function buildFirstFourGamesAndRecords(firstFourData, regionArray) {
   const games = [];
   const schoolRecords = [];
 
@@ -407,6 +409,16 @@ async function createFirstFourGames(firstFourData, year, regionArray) {
     });
   });
 
+  return { games, schoolRecords };
+}
+
+async function createFirstFourGames(firstFourData, year, regionArray) {
+  // firstFourData: [{ team1ID, team2ID, seed, nextGameID, nextGameSpot }]
+  const { games, schoolRecords } = buildFirstFourGamesAndRecords(
+    firstFourData,
+    regionArray,
+  );
+
   // The games and their school records are two separate batch commits (a single
   // batch can't span them cleanly here). If the second commit fails the games
   // would otherwise be left without records — an inconsistent tournament needing
@@ -438,6 +450,19 @@ async function createNewBracket(
   regionArray,
   firstFourData = null,
 ) {
+  // Checked before doing any structure-building work: an occupied year
+  // should fail fast with a message pointing at the existing editor, not
+  // after computing the whole bracket. createBracketAtomic's batch.create()
+  // calls are the final race guard behind this — this is the friendly,
+  // earlier check (see the plan's "Create only into an unused year").
+  const occupancy = await tourneyRepository.getYearOccupancy(year);
+  if (occupancy.occupied) {
+    throw new ValidationError(
+      `A tournament for year ${year} already exists. Use the existing tournament's editor instead of creating a new one.`,
+      'year',
+    );
+  }
+
   const { gamesFormat, teamRecordFormat } = await createNewBracketStructure(
     gamesData,
     year,
@@ -451,23 +476,27 @@ async function createNewBracket(
     (game) => game[3] !== null || game[4] !== null,
   );
 
-  // Write the year's regions subcollection from the master regionID collection.
   // Also include the Final Four (5) and Championship (6) regions.
   const allRegionIDs = [...regionArray, 5, 6];
-  await tourneyRepository.insertRegionsForYear(year, allRegionIDs);
-  await tourneyRepository.insertMultipleGamesWithoutTeams(gamesWithoutTeams);
-  await tourneyRepository.insertMultipleGamesWithTeams(gamesWithTeams);
-  await tourneyRepository.insertMultipleSchoolRecords(teamRecordFormat);
 
-  if (firstFourData && firstFourData.length > 0) {
-    await createFirstFourGames(firstFourData, year, regionArray);
-    await tourneyRepository.upsertTournamentDoc(year, {
-      hasFirstFour: true,
-      firstFourGameCount: firstFourData.length,
-    });
-  } else {
-    await tourneyRepository.upsertTournamentDoc(year);
-  }
+  const hasFirstFour = Boolean(firstFourData && firstFourData.length > 0);
+  const { games: firstFourGames, schoolRecords: firstFourSchoolRecords } =
+    hasFirstFour
+      ? buildFirstFourGamesAndRecords(firstFourData, regionArray)
+      : { games: [], schoolRecords: [] };
+
+  await tourneyRepository.createBracketAtomic({
+    year,
+    regionIDs: allRegionIDs,
+    gamesWithoutTeams,
+    gamesWithTeams,
+    schoolRecords: teamRecordFormat,
+    firstFourGames,
+    firstFourSchoolRecords,
+    tournamentDocExtra: hasFirstFour
+      ? { hasFirstFour: true, firstFourGameCount: firstFourData.length }
+      : {},
+  });
 }
 
 async function getAllGames(year) {
@@ -486,7 +515,17 @@ async function updateBracket(gamesData, year, regionArray) {
   );
 
   //determine which schools have changed
-  const existingRecords = await tourneyRepository.getSchoolRecordsForYear(year);
+  const allExistingRecords =
+    await tourneyRepository.getSchoolRecordsForYear(year);
+  // First Four records (doc id `ff_{gameID}_{slot}`) are play-in participants,
+  // not R1 slot occupants — both an unresolved pair and a resolved winner's
+  // retained original ff_* record must be excluded here, or an unchanged
+  // submission with unresolved play-ins reads as N removals with 0 additions
+  // (the promoted winner's *canonical* `${regionID}_${seed}` record still
+  // participates normally below — only the ff_* doc itself is excluded).
+  const existingRecords = allExistingRecords.filter(
+    (rec) => !rec.docId.startsWith('ff_'),
+  );
 
   const existingSIDsSet = new Set(existingRecords.map((rec) => rec.sID));
   const newSIDsSet = new Set(teamRecordFormat.map((rec) => rec.sID));

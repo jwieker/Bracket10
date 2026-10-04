@@ -163,6 +163,19 @@ a:hover {
   font-size: 1.4rem !important;
 }
 
+/* Constrain navbar content to the page's content width, matching the landing page */
+.navbar > .container-fluid {
+  max-width: 1120px;
+  padding: 0 clamp(1.25rem, 4vw, 2.75rem);
+}
+
+/* Wide-grid pages (playground, full bracket grid) keep full-bleed content —
+   let the navbar span full width too instead of capping to the standard page width. */
+.b2-wide-page .navbar > .container-fluid {
+  max-width: none;
+  padding: 0 var(--bs-gutter-x, 0.75rem);
+}
+
 .nav-link {
   font-weight: 500;
   font-size: 1.1rem !important;

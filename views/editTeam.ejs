@@ -193,12 +193,19 @@
 
     <% if (!isNew) { %>
         <script nonce="<%= cspNonce %>">
-            // Conference options data for new rows
+            // Conference options data for new rows.
+            //
+            // Emitted through safeJson rather than interpolated one row at a time into
+            // JS string literals. The escaping output tag HTML-escapes its value, and a
+            // browser does not decode HTML entities inside a classic script element, so
+            // a shortName like "St. John's" reached this array as the literal characters
+            // "St. John&#39;s" and rendered that way in every dropdown buildConfSelect
+            // creates — the escaping that made the old form injection-safe is the same
+            // thing that corrupted the display text. safeJson emits real JSON and
+            // neutralizes the characters that are unsafe in markup. (#516)
             const CONF_OPTIONS = [
                 { slug: '', label: '—' },
-        <% conferences.forEach(conf => { %>
-                { slug: '<%= conf.slug %>', label: '<%= conf.shortName %>' },
-        <% }) %>
+                ...<%- safeJson(conferences.map(conf => ({ slug: conf.slug, label: conf.shortName }))) %>,
             ];
 
             function buildConfSelect(idx) {
