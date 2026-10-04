@@ -5,6 +5,7 @@ import {
   evaluatePublisherIdentity,
   extractTopLevelVersions,
   formatMaintainer,
+  githubOwner,
   isKnownMaintainer,
   repositoryUrl,
   sanitizeLogLine,
@@ -216,6 +217,23 @@ describe('repositoryUrl', () => {
   });
 });
 
+describe('githubOwner', () => {
+  test.each([
+    ['git+https://github.com/Eslint/js.git', 'eslint'],
+    ['git://github.com/a/b.git', 'a'],
+    ['git@github.com:a/b.git', 'a'],
+    ['https://github.com/a/b', 'a'],
+  ])('extracts the owner from %s', (url, owner) => {
+    expect(githubOwner(url)).toBe(owner);
+  });
+
+  test('returns null for non-GitHub or missing URLs', () => {
+    expect(githubOwner('https://gitlab.com/a/b.git')).toBeNull();
+    expect(githubOwner('https://evil.example/github.com-fake')).toBeNull();
+    expect(githubOwner(null)).toBeNull();
+  });
+});
+
 // checkPackage hits the registry through global fetch; stub it with canned
 // packuments so these stay network-free like the rest of this file.
 describe('checkPackage (stubbed registry)', () => {
@@ -274,6 +292,53 @@ describe('checkPackage (stubbed registry)', () => {
     expect(problems).toEqual([
       'repository URL changed from git+https://github.com/demo/pkg.git to git+https://github.com/evil/pkg.git between versions',
     ]);
+  });
+
+  test('downgrades a repository move within the same GitHub owner to a notice', async () => {
+    stubRegistry({
+      ...packument,
+      versions: {
+        ...packument.versions,
+        '1.1.0': {
+          _npmUser: npmUser,
+          repository: {
+            url: 'git+https://github.com/demo/monorepo.git',
+            directory: 'packages/pkg',
+          },
+        },
+      },
+    });
+    const { problems, notices } = await checkPackage({
+      name: 'demo-pkg',
+      baseVersion: '1.0.0',
+      headVersion: '1.1.0',
+    });
+    expect(problems).toEqual([]);
+    expect(notices).toEqual([
+      'repository URL changed from git+https://github.com/demo/pkg.git to git+https://github.com/demo/monorepo.git between versions (same GitHub owner "demo")',
+    ]);
+  });
+
+  test('still fails a same-owner repository move when the publisher is unknown', async () => {
+    stubRegistry({
+      ...packument,
+      versions: {
+        ...packument.versions,
+        '1.1.0': {
+          _npmUser: { name: 'intruder', email: 'x@evil.example' },
+          repository: { url: 'git+https://github.com/demo/monorepo.git' },
+        },
+      },
+    });
+    const { problems } = await checkPackage({
+      name: 'demo-pkg',
+      baseVersion: '1.0.0',
+      headVersion: '1.1.0',
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(
+      /"x@evil\.example".*not in the registered maintainer/,
+    );
   });
 
   test('passes a clean head version, skipping repo-continuity when the base version is gone from the packument', async () => {
