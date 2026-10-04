@@ -1,6 +1,6 @@
 ---
 tags: [development, npm, supply-chain, security]
-updated: 2026-07-26
+updated: 2026-10-04
 ---
 
 # Safe npm Update Procedure
@@ -43,7 +43,7 @@ Two traps to avoid here: `time.modified` is the packument-level last-modified da
 
 If a target version is fresher than 72h, wait. Compromised releases are usually yanked within a day or two; the cooldown is the cheapest defense against installing one. If the publisher is not the expected maintainer / org, stop and investigate.
 
-This check also runs automatically in CI: `.github/workflows/dependency-publisher-check.yml` diffs `package-lock.json` (root and `jobs/`) on every PR against `main` and runs `scripts/check-dependency-publishers.mjs`, which fails the check if any changed package — including transitive ones a top-level bump pulls in without ever appearing in `npm outdated` — is younger than 72h or was published by an identity absent from the package's registered maintainer list. Treat a red check the same as a manual cooldown failure: wait it out or investigate, don't override it. With dependabot gone this CI check is the last automated guard in the chain, but it still only runs *after* you've installed on your own machine — it is not a replacement for doing the cooldown check below before `npm update`, or for reading the diff before merging.
+This check also runs automatically in CI: `.github/workflows/dependency-publisher-check.yml` diffs `package-lock.json` (root and `jobs/`) on every PR against `main` and runs `scripts/check-dependency-publishers.mjs`, which fails the check if any changed package — including transitive ones a top-level bump pulls in without ever appearing in `npm outdated` — is younger than 72h or was published by an identity absent from the package's registered maintainer list, or whose repository URL moved to a different owner or host (a move within the same GitHub owner, such as into a monorepo, is only a note). Treat a red check the same as a manual cooldown failure: wait it out or investigate, don't override it. With dependabot gone this CI check is the last automated guard in the chain, but it still only runs *after* you've installed on your own machine — it is not a replacement for doing the cooldown check below before `npm update`, or for reading the diff before merging.
 
 **Run the same check locally before pushing**, rather than waiting on a CI round-trip. It reads
 lockfile contents via `git show <ref>:<path>`, so it needs both refs to already be commits —
